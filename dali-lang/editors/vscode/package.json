@@ -6,7 +6,7 @@
   "publisher": "aurivo-dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aurivo-dev/dali-lang.git"
+    "url": "https://github.com/Muhammed-Dali/dali-lang.git"
   },
   "license": "MIT",
   "main": "./extension.js",

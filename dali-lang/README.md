@@ -9,7 +9,7 @@ Workflow note: changes limited to `dali-lang/**` should not trigger the main Lin
 You can use `dali-lang` independently from the main app via npm:
 
 ```bash
-npm install aurivo-dali-lang
+npm install dali-lang
 ```
 
 CLI usage after install:
@@ -262,7 +262,7 @@ npm run -s build:runtime:linux
 
 This single command executes:
 - DALI lint + strict compile + security tests
-- native addon rebuild (`aurivo_audio.node`)
+- native addon rebuild (`dali_audio.node`)
 - projectM visualizer CMake build and copy to `native-dist/linux`
 - runtime library copy/check + Linux artifact verification
 - syntax checks for `main.js`, `preload.js`, `renderer.js`
@@ -276,7 +276,7 @@ const handle = await preset.buildGraphSafe(audioContext, sourceNode, audioContex
 
 `buildGraphSafe` is always async-safe and works for both `webaudio` and `audioworklet` backends.
 
-Aurivo web engine integration (current):
+DaliNira web engine integration (current):
 - Web 32-band effect state is initialized from `.dl` source file: `dali-lang/examples/web-eq32-reference.dl`.
 - Renderer parses `preamp` + `peaking` bands from that file and applies them to WebAudio.
 - Secure web mode whitelist: only `input web;`, `output speakers;`, and chain effects `preamp`, `peaking`, `limiter` are accepted.

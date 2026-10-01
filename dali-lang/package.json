@@ -1,5 +1,5 @@
 {
-  "name": "aurivo-dali-lang",
+  "name": "dali-lang",
   "version": "0.1.4",
   "description": "DALI audio DSL parser/compiler for web and Electron audio pipelines.",
   "license": "MIT",
@@ -29,11 +29,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/muhammed-aurivo-dev/dali-lang.git"
+    "url": "https://github.com/Muhammed-Dali/dali-lang.git"
   },
-  "homepage": "https://github.com/muhammed-aurivo-dev/dali-lang",
+  "homepage": "https://github.com/Muhammed-Dali/dali-lang",
   "bugs": {
-    "url": "https://github.com/muhammed-aurivo-dev/dali-lang/issues"
+    "url": "https://github.com/Muhammed-Dali/dali-lang/issues"
   },
   "scripts": {
     "check": "node --check src/index.js && node --check src/cli.js",
