@@ -12,6 +12,7 @@
 #include <QString>
 #include <QTimer>
 #include <QVector>
+#include "i18n/i18n.h"
 
 struct SongResult {
   enum class Source {
@@ -41,12 +42,12 @@ struct SongResult {
     const QString a = artist.trimmed();
     if (t.isEmpty()) return false;
     // Reject generic or placeholder titles
-    if (t.compare(QStringLiteral("Yeni Sekme"), Qt::CaseInsensitive) == 0 ||
+    if (I18n::isTranslationOf(QStringLiteral("newtab.title"), t, Qt::CaseInsensitive) ||
         t.compare(QStringLiteral("New Tab"), Qt::CaseInsensitive) == 0 ||
         t.compare(QStringLiteral("YouTube"), Qt::CaseInsensitive) == 0 ||
         t.compare(QStringLiteral("Google"), Qt::CaseInsensitive) == 0 ||
         t.compare(QStringLiteral("DaliNiraBrowser"), Qt::CaseInsensitive) == 0 ||
-        t.compare(QStringLiteral("Bilinmeyen Parça"), Qt::CaseInsensitive) == 0) {
+        I18n::isTranslationOf(QStringLiteral("pulse.unknown_track"), t, Qt::CaseInsensitive)) {
       return false;
     }
     return !a.isEmpty() || !trackKey.isEmpty();
@@ -60,8 +61,8 @@ struct SongResult {
   QString sourceDisplayName() const {
     switch (source) {
       case Source::Shazam: return QStringLiteral("Shazam");
-      case Source::WebMetadata: return QStringLiteral("Web Medya");
-      default: return QStringLiteral("Bilinmeyen");
+      case Source::WebMetadata: return I18n::text(QStringLiteral("pulse.source_web_media"));
+      default: return I18n::text(QStringLiteral("pulse.source_unknown"));
     }
   }
 };

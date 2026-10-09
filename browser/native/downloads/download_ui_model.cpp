@@ -10,6 +10,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include "i18n/i18n.h"
 
 namespace {
 QString keyFor(char prefix, const QUuid &id) {
@@ -166,12 +167,17 @@ void DownloadUiModel::refresh() {
       DownloadUiItem item;
       item.key = QStringLiteral("n:%1").arg(QString::number(qHash(path)));
       item.title = entry.fileName;
-      item.subtitle = QStringLiteral("Tarayıcı indirmesi");
+      item.subtitle = I18n::text(QStringLiteral("downloads.browser_download"));
       item.localPath = path;
       item.source = DownloadUiSource::NativeFallback;
-      item.state = entry.state == QLatin1String("Tamamlandı") ? DownloadUiState::Completed
-          : entry.state == QLatin1String("İptal edildi") ? DownloadUiState::Cancelled
-          : entry.state == QLatin1String("Kesintiye uğradı") ? DownloadUiState::Failed
+      // The native fallback records a display string; match it in every UI
+      // language so a live language switch never misclassifies a download.
+      item.state = I18n::isTranslationOf(QStringLiteral("downloads.state_completed"), entry.state)
+          ? DownloadUiState::Completed
+          : I18n::isTranslationOf(QStringLiteral("downloads.state_cancelled"), entry.state)
+          ? DownloadUiState::Cancelled
+          : I18n::isTranslationOf(QStringLiteral("downloads.state_interrupted"), entry.state)
+          ? DownloadUiState::Failed
           : DownloadUiState::Downloading;
       next.append(item);
     }

@@ -17,7 +17,7 @@ class TabThrobber final : public QObject {
   using TabId = QUuid;
 
   struct ViewState {
-    QPointer<const QWebEngineView> view;
+    QPointer<const QObject> view;
     QPointer<QObject> ownerWindow;
     QIcon cachedFavicon;
     bool isLoading = false;
@@ -30,15 +30,15 @@ class TabThrobber final : public QObject {
   explicit TabThrobber(QObject *parent = nullptr);
   ~TabThrobber() override = default;
 
-  void startLoading(const QWebEngineView *view, QObject *ownerWindow, qint64 currentTimeMs = 0);
-  void finishLoading(const QWebEngineView *view, bool success);
-  void cacheFavicon(const QWebEngineView *view, const QIcon &icon);
-  void updateOwner(const QWebEngineView *view, QObject *newOwner);
-  void removeView(const QWebEngineView *view);
+  void startLoading(const QObject *view, QObject *ownerWindow, qint64 currentTimeMs = 0);
+  void finishLoading(const QObject *view, bool success);
+  void cacheFavicon(const QObject *view, const QIcon &icon);
+  void updateOwner(const QObject *view, QObject *newOwner);
+  void removeView(const QObject *view);
 
-  bool isLoading(const QWebEngineView *view) const;
-  bool isThrobberVisible(const QWebEngineView *view) const;
-  QIcon cachedFavicon(const QWebEngineView *view) const;
+  bool isLoading(const QObject *view) const;
+  bool isThrobberVisible(const QObject *view) const;
+  QIcon cachedFavicon(const QObject *view) const;
 
   int loadingCount() const { return states_.size(); }
   bool isTimerActive() const { return animationTimer_.isActive(); }
@@ -54,11 +54,11 @@ class TabThrobber final : public QObject {
   void onViewDestroyed(QObject *obj);
 
  private:
-  ViewState *findState(const QWebEngineView *view);
-  const ViewState *findState(const QWebEngineView *view) const;
+  ViewState *findState(const QObject *view);
+  const ViewState *findState(const QObject *view) const;
   void updateTimerState();
 
-  QHash<const QWebEngineView *, ViewState> states_;
+  QHash<const QObject *, ViewState> states_;
   QTimer animationTimer_;
   int frameStep_ = 0;
 };

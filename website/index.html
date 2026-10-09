@@ -3,73 +3,67 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
-  <!-- Security-First Content Security Policy -->
+
+  <!-- Security-first Content Security Policy (GitHub Pages ignores _headers) -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; worker-src 'none'; manifest-src 'self';">
   <meta name="referrer" content="no-referrer">
-  
-  <title>DaliNira Browser — Privacy. Speed. Control. | Native Qt 6 Desktop Web Browser</title>
-  <meta name="description" content="DaliNira Browser is a privacy-focused, high-performance Qt 6 and C++20 desktop web browser featuring an adaptive parallel download engine and an integrated audiophile DSP sound system.">
-  
-  <!-- Canonical & Multilingual Alternates -->
+
+  <title>DaliNira Browser 8.0 — Two engines. One private browser.</title>
+  <meta name="description" content="DaliNira Browser is a native Linux desktop browser with Chromium and WebKitGTK engines, built-in ad and tracker blocking, page translation and tab sleeping.">
+
   <link rel="canonical" href="https://muhammed-dali.github.io/DaliNira-Browser/">
   <link rel="alternate" hreflang="en" href="https://muhammed-dali.github.io/DaliNira-Browser/">
   <link rel="alternate" hreflang="tr" href="https://muhammed-dali.github.io/DaliNira-Browser/tr/">
   <link rel="alternate" hreflang="ar" href="https://muhammed-dali.github.io/DaliNira-Browser/ar/">
   <link rel="alternate" hreflang="x-default" href="https://muhammed-dali.github.io/DaliNira-Browser/">
-  
-  <!-- Open Graph / Facebook -->
+
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://muhammed-dali.github.io/DaliNira-Browser/">
-  <meta property="og:title" content="DaliNira Browser — Privacy. Speed. Control.">
-  <meta property="og:description" content="A native Qt 6 & C++20 desktop browser with built-in ad blocking, adaptive multi-stream downloads, and an integrated audiophile equalizer.">
+  <meta property="og:title" content="DaliNira Browser 8.0 — Two engines. One private browser.">
+  <meta property="og:description" content="A native Qt 6 desktop browser for Linux with Chromium and WebKitGTK engines and built-in ad and tracker blocking.">
   <meta property="og:image" content="https://muhammed-dali.github.io/DaliNira-Browser/assets/images/hero-browser.png">
   <meta property="og:site_name" content="DaliNira Browser">
-  
-  <!-- Twitter Cards -->
+
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:url" content="https://muhammed-dali.github.io/DaliNira-Browser/">
-  <meta name="twitter:title" content="DaliNira Browser — Privacy. Speed. Control.">
-  <meta name="twitter:description" content="A native Qt 6 & C++20 desktop browser with built-in ad blocking, adaptive multi-stream downloads, and zero cloud tracking.">
+  <meta name="twitter:title" content="DaliNira Browser 8.0 — Two engines. One private browser.">
+  <meta name="twitter:description" content="A native Qt 6 desktop browser for Linux with Chromium and WebKitGTK engines and built-in ad and tracker blocking.">
   <meta name="twitter:image" content="https://muhammed-dali.github.io/DaliNira-Browser/assets/images/hero-browser.png">
 
-  <!-- Icons -->
   <link rel="icon" type="image/png" sizes="128x128" href="assets/images/dalinira-logo-128.png">
   <link rel="apple-touch-icon" href="assets/images/dalinira-logo-128.png">
 
-  <!-- Local Stylesheet (Zero external CDNs or Google Fonts) -->
+  <!-- Local stylesheet only: no external CDNs or web fonts -->
   <link rel="stylesheet" href="assets/css/main.css">
 </head>
 <body>
-  <!-- Accessibility Skip Link -->
   <a href="#main-content" class="skip-link">Skip to main content</a>
 
-  <!-- Header & Navigation -->
   <header class="site-header">
     <div class="container nav-wrapper">
-      <a href="./" class="brand-link" aria-label="DaliNira Browser Home">
-        <img src="assets/images/dalinira-logo-128.png" alt="DaliNira Browser Logo" class="brand-logo" width="38" height="38">
+      <a href="./" class="brand-link" aria-label="DaliNira Browser home">
+        <img src="assets/images/dalinira-logo-128.png" alt="DaliNira Browser logo" class="brand-logo" width="38" height="38">
         <span>DaliNira</span>
-        <span class="brand-badge">v7.2.1</span>
+        <span class="brand-badge">v8.0.0</span>
       </a>
 
-      <nav class="site-nav" aria-label="Main Navigation">
+      <nav class="site-nav" aria-label="Main navigation">
         <ul class="nav-links">
           <li><a href="#features">Features</a></li>
-          <li><a href="#showcase">Showcase</a></li>
+          <li><a href="#engines">Engines</a></li>
+          <li><a href="#screenshots">Screenshots</a></li>
           <li><a href="#privacy">Privacy</a></li>
-          <li><a href="#open-source">Open Source</a></li>
           <li><a href="#download">Download</a></li>
         </ul>
 
         <div class="nav-actions">
-          <div class="lang-selector" role="navigation" aria-label="Language Selector">
-            <a href="./" class="lang-btn active" aria-current="page" title="English">EN</a>
-            <a href="tr/" class="lang-btn" title="Türkçe">TR</a>
-            <a href="ar/" class="lang-btn" title="العربية">AR</a>
+          <div class="lang-selector" role="navigation" aria-label="Language">
+            <a href="./" class="lang-btn active" aria-current="page" lang="en" title="English">EN</a>
+            <a href="tr/" class="lang-btn" lang="tr" title="Türkçe">TR</a>
+            <a href="ar/" class="lang-btn" lang="ar" title="العربية">AR</a>
           </div>
 
-          <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-secondary" target="_blank" rel="noopener noreferrer" aria-label="View Source on GitHub">
+          <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-secondary" target="_blank" rel="noopener noreferrer" aria-label="View source on GitHub">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
             <span>GitHub</span>
           </a>
@@ -86,25 +80,21 @@
     </div>
   </header>
 
-  <!-- Main Content Container -->
   <main id="main-content">
-    
-    <!-- Hero Section -->
+
     <section class="hero">
       <div class="container">
         <div class="hero-pill">
           <span class="hero-pill-dot"></span>
-          <span>Qt 6 & C++20 • Privacy by Design • GPL-3.0 License</span>
+          <span>Version 8.0.0 · Chromium + WebKitGTK · GPL-3.0</span>
         </div>
 
         <h1 class="hero-title">
-          Privacy. Speed. Control.<br>
-          <span class="gradient-text">The Native Desktop Web Browser</span>
+          Two engines.<br>
+          <span class="gradient-text">One private browser.</span>
         </h1>
 
-        <p class="hero-tagline">
-          DaliNira Browser unites modern web standards, rigorous personal privacy, high-throughput parallel downloading, and an integrated audiophile sound engine. Engineered natively with zero electron bloat and zero cloud tracking.
-        </p>
+        <p class="hero-tagline">DaliNira is a native Linux desktop browser written in C++20 and Qt 6. Run it on Chromium or on WebKitGTK — the interface, ad and tracker blocking, translation and tab sleeping work the same on both.</p>
 
         <div class="hero-cta">
           <a href="#download" class="btn btn-primary btn-lg">
@@ -120,483 +110,419 @@
         <div class="hero-platforms">
           <span class="platform-item">
             <img src="assets/icons/linux.svg" alt="" aria-hidden="true" width="16" height="16">
-            Linux (Arch AUR, Pacman, Standalone)
-          </span>
-          <span class="platform-item">
-            <img src="assets/icons/windows.svg" alt="" aria-hidden="true" width="16" height="16">
-            Windows
+            Linux x86_64 · .deb · .rpm · Arch · portable archive
           </span>
         </div>
 
-        <!-- Browser Mockup -->
         <div class="browser-mockup">
-          <div class="mockup-toolbar">
-            <div class="mockup-controls">
-              <span class="mockup-dot close"></span>
-              <span class="mockup-dot minimize"></span>
-              <span class="mockup-dot maximize"></span>
-            </div>
-            <div class="mockup-address-bar">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-              <span>dalinira://newtab</span>
-            </div>
-          </div>
-          <img src="assets/images/hero-browser.png" alt="DaliNira Browser Native User Interface" class="mockup-image" width="1342" height="821" fetchpriority="high">
+          <img src="assets/images/hero-browser.png" alt="DaliNira main window with the New Tab page, bookmarks bar, Quick Access shortcuts and clock" class="mockup-image" width="1209" height="865" fetchpriority="high">
         </div>
       </div>
     </section>
 
-    <!-- Core Features Section -->
     <section id="features" class="section">
       <div class="container">
         <div class="section-header">
-          <span class="section-subtitle">Engineered for Control</span>
-          <h2 class="section-title">Built-In Power, Zero Extension Bloat</h2>
-          <p class="section-desc">
-            Everything in DaliNira Browser is integrated directly into the native C++ runtime. You get unmatched responsiveness without needing dozens of third-party browser add-ons.
-          </p>
+          <span class="section-subtitle">Built in, not bolted on</span>
+          <h2 class="section-title">Everything you need in one browser</h2>
+          <p class="section-desc">DaliNira includes the tools many people install as separate extensions, integrated into a native desktop application.</p>
         </div>
 
         <div class="features-grid">
-          <!-- Feature 1: Ad & Tracker Blocker -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3 8-8 10-5-2-8-5-8-10V6Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
             </div>
-            <h3 class="feature-title">DaliNira Blocker & Privacy Shield</h3>
-            <p class="feature-text">
-              Three customizable defense tiers (Basic 35%, Ideal 65%, Comprehensive 95%) with local filter lists, cosmetic ad hiding, scriptlet injection, and automatic tracking parameter stripping.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">Network Interception</span>
-              <span class="feature-tag">Query Param Sanitizer</span>
-            </div>
+            <h3 class="feature-title">Chromium and WebKitGTK</h3>
+            <p class="feature-text">Choose the engine during setup or later in Settings. Each engine keeps its own tabs and session; bookmarks and settings are shared.</p>
+            <div class="feature-tags"><span class="feature-tag">Dual engine</span><span class="feature-tag">Parity tested</span></div>
           </article>
-
-          <!-- Feature 2: Parallel Download Engine -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3 8-8 10-5-2-8-5-8-10V6Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
             </div>
-            <h3 class="feature-title">Adaptive Parallel Download Engine</h3>
-            <p class="feature-text">
-              GeneralDownloadManager automatically scales connection segments from 1 → 2 → 4 → 8 concurrent streams, featuring dynamic work-stealing, chunk retries, and instant byte-level resume.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">Multi-Stream</span>
-              <span class="feature-tag">Chunk Retries</span>
-            </div>
+            <h3 class="feature-title">Ad and tracker blocking</h3>
+            <p class="feature-text">A native filter engine with EasyList, EasyPrivacy and regional lists, cosmetic filtering, tracking-parameter removal and link debouncing.</p>
+            <div class="feature-tags"><span class="feature-tag">Both engines</span><span class="feature-tag">Local filtering</span></div>
           </article>
-
-          <!-- Feature 3: Encrypted Password Vault -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             </div>
-            <h3 class="feature-title">Zero-Cloud Encrypted Vault</h3>
-            <p class="feature-text">
-              Safeguard credentials locally with AES-256-GCM encryption and PBKDF2-HMAC-SHA256 key derivation. Zero cloud transmission, zero telemetry, with secure in-page autofill.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">AES-256-GCM</span>
-              <span class="feature-tag">100% Offline Vault</span>
-            </div>
+            <h3 class="feature-title">Privacy defaults</h3>
+            <p class="feature-text">HTTPS by default, Global Privacy Control, fingerprinting noise and third-party cookie blocking.</p>
+            <div class="feature-tags"><span class="feature-tag">GPC</span><span class="feature-tag">HTTPS first</span></div>
           </article>
-
-          <!-- Feature 4: Granular Site Permissions -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 6 6m-7 0 6-6 2-3M2 5h12M7 2h1m14 20-5-10-5 10m2-4h6"/></svg>
             </div>
-            <h3 class="feature-title">Granular Origin Controls</h3>
-            <p class="feature-text">
-              Monitor and toggle hardware access per website in real time: Camera, Microphone, Geolocation, Notifications, Popups, and JavaScript optimization policies.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">Per-Site Bubble</span>
-              <span class="feature-tag">Auto-Hygiene</span>
-            </div>
+            <h3 class="feature-title">Page translation</h3>
+            <p class="feature-text">Translate pages in place with Google, Google Cloud, DeepL or LibreTranslate. The popup never blocks the page.</p>
+            <div class="feature-tags"><span class="feature-tag">4 providers</span><span class="feature-tag">In-page</span></div>
           </article>
-
-          <!-- Feature 5: Smart Omnibox & Tab Strip -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
             </div>
-            <h3 class="feature-title">Smart Omnibox & Tab Strip</h3>
-            <p class="feature-text">
-              Intelligent composite ranking engine combining history, bookmarks, and search suggestions. Features GPU-rendered tab throbbers, hover memory cards, and crash-resistant session restore.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">Instant Suggestions</span>
-              <span class="feature-tag">Session Recovery</span>
-            </div>
+            <h3 class="feature-title">Tab sleeping</h3>
+            <p class="feature-text">Inactive tabs sleep in two stages to free memory. Tabs with unsaved form input are not released automatically.</p>
+            <div class="feature-tags"><span class="feature-tag">Two stages</span><span class="feature-tag">Wake on demand</span></div>
           </article>
-
-          <!-- Feature 6: Centralized i18n & Translation -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 8 6 6m-7 0 6-6 2-3M2 5h12M7 2h1m14 20-5-10-5 10m2-4h6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M9 9h12"/></svg>
             </div>
-            <h3 class="feature-title">Multilingual & Translation</h3>
-            <p class="feature-text">
-              Seamlessly switch application languages from settings with zero restart. In-page fast translation supports instant conversion between dozens of world languages.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">13+ UI Languages</span>
-              <span class="feature-tag">In-Page Translation</span>
-            </div>
+            <h3 class="feature-title">Languages and layouts</h3>
+            <p class="feature-text">English, Turkish, Arabic and French without restarting. Classic tabs, vertical tabs or a floating sidebar.</p>
+            <div class="feature-tags"><span class="feature-tag">4 languages</span><span class="feature-tag">4 layouts</span></div>
           </article>
-
-          <!-- Feature 7: 32-Band Studio Equalizer -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v20M17 5v14M7 9v6M22 8v8M2 11v2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
             </div>
-            <h3 class="feature-title">32-Band Studio DSP & AutoEQ</h3>
-            <p class="feature-text">
-              Integrated audiophile sound architecture featuring a 32-band peaking equalizer, BASS FX Reverb, Dynamic Compressor, Brickwall Limiter, and 1,757 calibrated headphone correction profiles.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">1,757 AutoEQ Curves</span>
-              <span class="feature-tag">DSP Suite</span>
-            </div>
+            <h3 class="feature-title">Downloads and passwords</h3>
+            <p class="feature-text">Segmented parallel downloads with resume, and a password vault encrypted locally with AES-256-GCM.</p>
+            <div class="feature-tags"><span class="feature-tag">Resume</span><span class="feature-tag">Local vault</span></div>
           </article>
-
-          <!-- Feature 8: DaliNira Pulse -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M17 5v14M7 9v6M22 8v8M2 11v2"/></svg>
             </div>
-            <h3 class="feature-title">DaliNira Pulse (Song Recognition)</h3>
-            <p class="feature-text">
-              Real-time acoustic analyzer that identifies music playing in any tab or system application directly through your audio pipeline without querying third-party tracking services.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">System Audio Tap</span>
-              <span class="feature-tag">Local History</span>
-            </div>
+            <h3 class="feature-title">Audio effects and Pulse</h3>
+            <p class="feature-text">A 32-band equalizer with 1,757 AutoEQ headphone presets for web media, and Pulse song recognition.</p>
+            <div class="feature-tags"><span class="feature-tag">32 bands</span><span class="feature-tag">AutoEQ</span></div>
           </article>
         </div>
       </div>
     </section>
 
-    <!-- Visual Showcase / Screenshots Section -->
-    <section id="showcase" class="section">
+    <section id="engines" class="section">
       <div class="container">
         <div class="section-header">
-          <span class="section-subtitle">Interactive Walkthrough</span>
-          <h2 class="section-title">Designed for Modern Desktop Workflows</h2>
-          <p class="section-desc">
-            Explore the authentic interfaces of DaliNira Browser running on native Linux and Windows platforms.
-          </p>
+          <span class="section-subtitle">Dual engine</span>
+          <h2 class="section-title">Choose your engine. Keep your browser.</h2>
+          <p class="section-desc">DaliNira 8.0 runs on Chromium through Qt WebEngine or on WebKitGTK. Both use the same DaliNira interface.</p>
         </div>
 
         <div class="spotlight-wrapper">
-          <!-- Spotlight 1: Blocker -->
           <div class="spotlight-row">
             <div class="spotlight-content">
-              <span class="spotlight-pill">Ad & Tracker Shield</span>
-              <h3 class="spotlight-title">Clean Web Without Intrusions</h3>
-              <p class="spotlight-desc">
-                DaliNira Blocker inspects web traffic locally against trusted filter sets including EasyList, EasyPrivacy, and Peter Lowe. It collapses empty ad placeholders and prevents intrusive modal popups.
-              </p>
+              <span class="spotlight-pill">Settings → System</span>
+              <h3 class="spotlight-title">Switch engines from Settings</h3>
+              <p class="spotlight-desc">Switching engines restarts DaliNira and opens that engine&#x27;s own tabs. Automated parity tests run the same scenarios against both engines and compare the results.</p>
               <ul class="spotlight-bullets">
                 <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Three granular protection modes: Basic, Ideal, and Comprehensive.</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Shared interface: toolbar, menus, find bar, translation, blocker, permissions and downloads.</span>
                 </li>
                 <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Strips tracking query parameters (fbclid, gclid, utm_*) before requests leave your machine.</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Separate workspaces: tabs, session and Quick Access are kept per engine.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Chromium runs natively on Wayland; WebKitGTK runs through XWayland.</span>
                 </li>
               </ul>
             </div>
             <div class="spotlight-preview">
-              <img src="assets/images/dalinira-blocker.png" alt="DaliNira Blocker Interface" width="1425" height="941" loading="lazy">
-            </div>
-          </div>
-
-          <!-- Spotlight 2: Parallel Download Engine -->
-          <div class="spotlight-row reverse">
-            <div class="spotlight-content">
-              <span class="spotlight-pill">GeneralDownloadManager</span>
-              <h3 class="spotlight-title">Multi-Stream Adaptive Acceleration</h3>
-              <p class="spotlight-desc">
-                Never lose download progress again. DaliNira's adaptive downloader leverages HTTP Range headers to partition large downloads into concurrent chunk streams, automatically adapting to server throughput.
-              </p>
-              <ul class="spotlight-bullets">
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Dynamic stream expansion from 1 up to 8 parallel connections.</span>
-                </li>
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Automatic HTTP 429 backoff throttling and individual chunk-level retry logic.</span>
-                </li>
-              </ul>
-            </div>
-            <div class="spotlight-preview">
-              <img src="assets/images/downloads.png" alt="DaliNira Download Center" width="1425" height="940" loading="lazy">
-            </div>
-          </div>
-
-          <!-- Spotlight 3: Password Vault -->
-          <div class="spotlight-row">
-            <div class="spotlight-content">
-              <span class="spotlight-pill">Local Security</span>
-              <h3 class="spotlight-title">AES-256-GCM Encrypted Vault</h3>
-              <p class="spotlight-desc">
-                Your credentials never leave your physical storage. DaliNira safeguards logins with PBKDF2 key derivation and AES-256-GCM cryptography.
-              </p>
-              <ul class="spotlight-bullets">
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Zero cloud synchronizations: data stays entirely on your local storage.</span>
-                </li>
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Protected master password prompt with instant one-click autofill.</span>
-                </li>
-              </ul>
-            </div>
-            <div class="spotlight-preview">
-              <img src="assets/images/password-manager.png" alt="DaliNira Password Manager" width="1600" height="900" loading="lazy">
-            </div>
-          </div>
-
-          <!-- Spotlight 4: Equalizer & Sound Studio -->
-          <div class="spotlight-row reverse">
-            <div class="spotlight-content">
-              <span class="spotlight-pill">Audiophile Web Audio</span>
-              <h3 class="spotlight-title">32-Band Studio Equalizer & DSP</h3>
-              <p class="spotlight-desc">
-                Experience web audio with studio precision. DaliNira routes media through 32 peaking filters alongside calibrated AutoEQ headphone curves for over 1,750 high-fidelity models.
-              </p>
-              <ul class="spotlight-bullets">
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Pre-calibrated correction curves for Sony, Sennheiser, Beyerdynamic, AKG, and Apple.</span>
-                </li>
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Real-time BASS FX reverb, brickwall limiter, and stereo field widener.</span>
-                </li>
-              </ul>
-            </div>
-            <div class="spotlight-preview">
-              <img src="assets/images/audio-effects.png" alt="DaliNira Audio Studio" width="1425" height="944" loading="lazy">
+              <img src="assets/images/settings.png" alt="DaliNira Settings with the category sidebar; the browser engine is chosen under System" width="1212" height="916" loading="lazy">
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Privacy by Design Section -->
+    <section id="screenshots" class="section">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-subtitle">Screenshots</span>
+          <h2 class="section-title">The real DaliNira interface</h2>
+          <p class="section-desc">All screenshots were taken from DaliNira 8.0.0 running on Linux.</p>
+        </div>
+
+        <div class="spotlight-wrapper">
+          <div class="spotlight-row">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Ad and tracker shield</span>
+              <h3 class="spotlight-title">Cleaner pages without extensions</h3>
+              <p class="spotlight-desc">The DaliNira blocker applies filter lists locally, hides empty ad containers and removes tracking parameters such as utm_*, fbclid and gclid.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Protection levels, list selection and per-site exceptions.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>The same filtering engine for Chromium and WebKitGTK.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="assets/images/dalinira-blocker.png" alt="DaliNira Blocker page with the Basic, Optimal and Complete filtering modes" width="1208" height="862" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row reverse">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Downloads</span>
+              <h3 class="spotlight-title">All downloads in one place</h3>
+              <p class="spotlight-desc">Segmented parallel downloads with resume and retries, plus media analysis for supported sites.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Paste a link and analyze it, or download the media on the current page.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Active downloads and history on dalinira://downloads.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="assets/images/downloads.png" alt="Downloads page with the link box, active downloads and download history" width="1207" height="839" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Password vault</span>
+              <h3 class="spotlight-title">Passwords stay on this device</h3>
+              <p class="spotlight-desc">An optional, experimental vault encrypts the logins you approve with AES-256-GCM and a PBKDF2-HMAC-SHA256 key.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Never synchronized to a server, with no developer back door.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Turned on only after you read the notice and agree.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="assets/images/password-manager.png" alt="Password Manager opt-in screen with the local vault notice" width="1208" height="859" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row reverse">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Audio</span>
+              <h3 class="spotlight-title">Studio tools for web media</h3>
+              <p class="spotlight-desc">Route web audio through a 32-band equalizer, compressor, limiter and stereo widener, with 1,757 AutoEQ headphone presets.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Presets for Sony, Sennheiser, Beyerdynamic, AKG, Apple and more.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>One switch turns sound effects on or off for web media.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="assets/images/audio-effects.png" alt="Audio Effects page with the 32-band equalizer" width="1207" height="869" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Pulse</span>
+              <h3 class="spotlight-title">Name the song that is playing</h3>
+              <p class="spotlight-desc">Pulse identifies the song playing on your computer. It builds an audio fingerprint locally and sends only that fingerprint to Shazam&#x27;s recognition service.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>System audio, the microphone, or both as the source.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>A list of the songs Pulse has found.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="assets/images/dalinira-pulse.png" alt="DaliNira Pulse ready to listen, with the audio source selector" width="1210" height="863" loading="lazy">
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="privacy" class="section privacy-section">
       <div class="container">
         <div class="privacy-card">
           <div class="section-header">
-            <span class="section-subtitle">Architectural Guarantee</span>
-            <h2 class="section-title">Privacy by Design, Not an Afterthought</h2>
-            <p class="section-desc">
-              We engineer our software with a strictly minimal attack surface. We make verifiable technical commitments rather than unverifiable marketing claims.
-            </p>
+            <span class="section-subtitle">Privacy principles</span>
+            <h2 class="section-title">Your data stays on your computer</h2>
+            <p class="section-desc">Concrete design decisions instead of marketing claims.</p>
           </div>
 
           <div class="privacy-grid">
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Zero Website Telemetry</h3>
-                <p>This promotional website loads no Google Analytics, no third-party trackers, no cookies, and no visitor fingerprinting scripts.</p>
+                <h3>Local first</h3>
+                <p>History, bookmarks, passwords, settings and presets are stored in your user profile on your computer.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>No External CDNs</h3>
-                <p>All stylesheets, scripts, icons, and assets are hosted directly on this static domain. No remote tracking fonts or external library injections.</p>
+                <h3>No account, no telemetry</h3>
+                <p>DaliNira needs no sign-in and has no built-in usage telemetry.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>No Account Mandatory</h3>
-                <p>DaliNira does not require signing in to browse, save bookmarks, manage passwords, or utilize the parallel download manager.</p>
+                <h3>Network only when needed</h3>
+                <p>Search suggestions, translation, Pulse recognition and filter-list updates contact only the service that feature needs.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Local-First Architecture</h3>
-                <p>Passwords, history, permissions, and audio presets reside on your local machine using standard XDG directories and secure OS APIs.</p>
+                <h3>Encrypted password vault</h3>
+                <p>Credentials are encrypted locally with AES-256-GCM and a PBKDF2-HMAC-SHA256 key, and are never synchronized.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Strict Content Security Policy</h3>
-                <p>Protected by rigorous HTTP headers, Permissions-Policy restrictions, and no-referrer privacy directives.</p>
+                <h3>A website without trackers</h3>
+                <p>This site loads no analytics, no cookies and no external fonts or scripts, and uses a strict Content Security Policy.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Auditable Open Source</h3>
-                <p>Every single line of DaliNira Browser source code is public and inspectable under the GNU General Public License v3.0.</p>
+                <h3>Open source</h3>
+                <p>The complete source code is public under the GNU General Public License v3.0.</p>
               </div>
             </div>
           </div>
 
           <div class="privacy-badge-note">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            <span>Notice: We do not use claims like "100% unhackable". True security is achieved through minimal attack surfaces, rigorous peer review, and transparent local code execution.</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span>Pulse sends a locally computed audio fingerprint, not a recording, to Shazam&#x27;s recognition service.</span>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Open Source Section -->
     <section id="open-source" class="section">
       <div class="container">
         <div class="open-source-card">
           <div class="open-source-content">
             <span class="license-pill">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
               <span>GNU General Public License v3.0</span>
             </span>
-            <h2>Proudly Free & Open Source</h2>
-            <p>
-              DaliNira Browser is developed transparently on GitHub. You are free to inspect the architecture, compile it natively with your preferred compiler flags, and contribute features back to the community.
-            </p>
+            <h2>Free and open source</h2>
+            <p>DaliNira Browser is developed in the open on GitHub. Inspect the code, build it yourself, report issues or contribute.</p>
             <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-primary btn-lg" target="_blank" rel="noopener noreferrer">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-              <span>View Source on GitHub</span>
+              <span>View source on GitHub</span>
             </a>
           </div>
 
           <div class="open-source-stats">
             <div class="stat-row">
-              <span class="stat-label">Core Language</span>
-              <span class="stat-value">C++20</span>
+              <span class="stat-label">Engines</span>
+              <span class="stat-value" dir="ltr">Chromium · WebKitGTK</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label">UI Framework</span>
-              <span class="stat-value">Qt 6.4+ (Native)</span>
+              <span class="stat-label">Interface</span>
+              <span class="stat-value" dir="ltr">Qt 6</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label">Engine Foundation</span>
-              <span class="stat-value">Chromium / QtWebEngine</span>
+              <span class="stat-label">Language</span>
+              <span class="stat-value" dir="ltr">C++20</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label">Audio Subsystem</span>
-              <span class="stat-value">DALI Web Audio + BASS</span>
+              <span class="stat-label">Interface languages</span>
+              <span class="stat-value" dir="ltr">EN · TR · AR · FR</span>
             </div>
             <div class="stat-row">
               <span class="stat-label">License</span>
-              <span class="stat-value">GPL-3.0-only</span>
+              <span class="stat-value" dir="ltr">GPL-3.0-only</span>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Download Section -->
     <section id="download" class="section">
       <div class="container">
         <div class="section-header">
-          <span class="section-subtitle">Get Started</span>
-          <h2 class="section-title">Install DaliNira Browser</h2>
-          <p class="section-desc">
-            Choose your desktop operating system below. We provide fast package manager integration and standalone release bundles on GitHub.
-          </p>
+          <span class="section-subtitle">Get started</span>
+          <h2 class="section-title">Install DaliNira 8.0.0</h2>
+          <p class="section-desc">DaliNira supports Linux x86_64. Every release includes packages for Debian, Ubuntu and Fedora and a portable archive.</p>
         </div>
 
         <div class="download-grid">
-          <!-- Linux Card -->
           <div class="download-card">
             <div class="download-card-header">
               <div class="platform-icon">
-                <img src="assets/icons/linux.svg" alt="Linux" width="24" height="24">
+                <img src="assets/icons/linux.svg" alt="" aria-hidden="true" width="24" height="24">
               </div>
               <div>
-                <h3 class="download-card-title">Linux</h3>
-                <span class="download-card-subtitle">Arch Linux, Manjaro, Debian & Standalone</span>
+                <h3 class="download-card-title">Debian, Ubuntu, Fedora</h3>
+                <span class="download-card-subtitle">Packages from GitHub Releases</span>
+              </div>
+            </div>
+
+            <ul class="spotlight-bullets download-list">
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Debian 12 — .deb</span></li>
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Ubuntu 24.04 — .deb</span></li>
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Fedora — .rpm</span></li>
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Any distribution — portable .tar.zst</span></li>
+            </ul>
+
+            <div class="download-card-cta">
+              <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases/latest" class="btn btn-primary btn-block" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
+                <span>Download from GitHub Releases</span>
+              </a>
+              <p class="download-note">WebKitGTK media playback needs GStreamer plugins; the packages install them as dependencies.</p>
+            </div>
+          </div>
+
+          <div class="download-card">
+            <div class="download-card-header">
+              <div class="platform-icon">
+                <img src="assets/icons/linux.svg" alt="" aria-hidden="true" width="24" height="24">
+              </div>
+              <div>
+                <h3 class="download-card-title">Arch Linux</h3>
+                <span class="download-card-subtitle">AUR or the signed DaliNira repository</span>
               </div>
             </div>
 
             <div class="install-methods">
               <div class="install-method">
-                <span class="install-method-label">Official Pacman Repository (Recommended)</span>
-                <div class="code-box">
-                  <code id="cmd-pacman">curl -fsSL https://muhammed-dali.github.io/DaliNira-Browser/dalinira.repo | sudo tee -a /etc/pacman.conf &gt;/dev/null &amp;&amp; sudo pacman -Syu dalinira</code>
-                  <button type="button" class="copy-btn" data-target="cmd-pacman" data-copied="Copied!">Copy</button>
-                </div>
-              </div>
-
-              <div class="install-method">
-                <span class="install-method-label">AUR Package</span>
-                <div class="code-box">
+                <span class="install-method-label">AUR package</span>
+                <div class="code-box" dir="ltr">
                   <code id="cmd-aur">yay -S dalinira-bin</code>
                   <button type="button" class="copy-btn" data-target="cmd-aur" data-copied="Copied!">Copy</button>
                 </div>
               </div>
-            </div>
 
-            <div class="download-card-cta">
-              <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" class="btn btn-primary" style="width: 100%;" target="_blank" rel="noopener noreferrer">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
-                <span>Download Standalone (.tar.zst)</span>
-              </a>
-              <p class="download-note">Releases hosted securely on GitHub Releases</p>
-            </div>
-          </div>
-
-          <!-- Windows Card -->
-          <div class="download-card">
-            <div class="download-card-header">
-              <div class="platform-icon">
-                <img src="assets/icons/windows.svg" alt="Windows" width="24" height="24">
-              </div>
-              <div>
-                <h3 class="download-card-title">Windows</h3>
-                <span class="download-card-subtitle">Windows 10 / 11 (64-bit)</span>
-              </div>
-            </div>
-
-            <div class="install-methods">
               <div class="install-method">
-                <span class="install-method-label">Standalone Release Package</span>
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                  A Windows package is not included in v7.2.1 yet. Follow GitHub Releases for future Windows builds.
-                </p>
+                <span class="install-method-label">Signed pacman repository</span>
+                <div class="code-box" dir="ltr">
+                  <code id="cmd-pacman">curl -sL https://github.com/Muhammed-Dali/DaliNira-Browser/releases/download/pacman-repo/dalinira.gpg | sudo pacman-key --add - &amp;&amp; sudo pacman-key --lsign-key BC741FD0AC804351B0DDBB86FDFEC60C11202588 &amp;&amp; curl -fsSL https://muhammed-dali.github.io/DaliNira-Browser/dalinira.repo | sudo tee -a /etc/pacman.conf &gt;/dev/null &amp;&amp; sudo pacman -Syu dalinira</code>
+                  <button type="button" class="copy-btn" data-target="cmd-pacman" data-copied="Copied!">Copy</button>
+                </div>
               </div>
-            </div>
-
-            <div class="download-card-cta">
-              <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" class="btn btn-primary" style="width: 100%;" target="_blank" rel="noopener noreferrer">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
-                <span>View Releases on GitHub</span>
-              </a>
-              <p class="download-note">Releases hosted securely on GitHub Releases</p>
             </div>
           </div>
         </div>
@@ -605,46 +531,44 @@
 
   </main>
 
-  <!-- Site Footer -->
   <footer class="site-footer">
     <div class="container">
       <div class="footer-top">
         <div class="footer-brand">
           <a href="./" class="brand-link">
-            <img src="assets/images/dalinira-logo-128.png" alt="DaliNira Logo" width="30" height="30">
+            <img src="assets/images/dalinira-logo-128.png" alt="" width="30" height="30">
             <span>DaliNira Browser</span>
           </a>
-          <p class="footer-desc">
-            Independent, privacy-focused desktop browser engineered with Qt 6 & C++20 for speed, freedom, and acoustic precision.
-          </p>
+          <p class="footer-desc">An independent desktop browser for Linux with Chromium and WebKitGTK engines.</p>
         </div>
 
         <div class="footer-column">
           <h4>Navigation</h4>
           <ul>
             <li><a href="#features">Features</a></li>
-            <li><a href="#showcase">Showcase</a></li>
+            <li><a href="#engines">Engines</a></li>
+            <li><a href="#screenshots">Screenshots</a></li>
             <li><a href="#privacy">Privacy</a></li>
             <li><a href="#download">Download</a></li>
           </ul>
         </div>
 
         <div class="footer-column">
-          <h4>Open Source</h4>
+          <h4>Open source</h4>
           <ul>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser" target="_blank" rel="noopener noreferrer">GitHub Repository</a></li>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" target="_blank" rel="noopener noreferrer">Releases & Changelog</a></li>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">GPL-3.0 License</a></li>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/issues" target="_blank" rel="noopener noreferrer">Issue Tracker</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser" target="_blank" rel="noopener noreferrer">GitHub repository</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" target="_blank" rel="noopener noreferrer">Releases</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">Changelog</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/issues/new/choose" target="_blank" rel="noopener noreferrer">Report a bug</a></li>
           </ul>
         </div>
 
         <div class="footer-column">
           <h4>Languages</h4>
           <ul>
-            <li><a href="./">English (Default)</a></li>
-            <li><a href="tr/">Türkçe</a></li>
-            <li><a href="ar/">العربية (RTL)</a></li>
+            <li><a href="./" lang="en">English</a></li>
+            <li><a href="tr/" lang="tr">Türkçe</a></li>
+            <li><a href="ar/" lang="ar">العربية</a></li>
           </ul>
         </div>
       </div>
@@ -654,16 +578,15 @@
           <span>© 2026 DaliNira Browser Project. Released under the GNU General Public License v3.0.</span>
         </div>
         <div>
-          <button type="button" class="back-to-top" aria-label="Scroll back to top">
-            <span>Back to Top</span>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+          <button type="button" class="back-to-top">
+            <span>Back to top</span>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
           </button>
         </div>
       </div>
     </div>
   </footer>
 
-  <!-- Minimal Vanilla JavaScript -->
   <script src="assets/js/main.js"></script>
 </body>
 </html>

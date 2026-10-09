@@ -1,5 +1,6 @@
 #include "search_suggestion_service.h"
 #include "search_engine_definition.h"
+#include "address_input_resolver.h"
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -34,12 +35,21 @@ bool SearchSuggestionService::safeQuery(const QString &query) {
   static const QRegularExpression unsafe(QStringLiteral("[\\x00-\\x1f\\x7f]|^[a-zA-Z][a-zA-Z0-9+.-]*:|[/\\\\@]|^(localhost|127\\.|192\\.168\\.|10\\.)"));
   return !unsafe.match(query.trimmed()).hasMatch();
 }
+bool SearchSuggestionService::looksLikeUrl(const QString &query) {
+  // Reuse the omnibox classifier so typed domains, IPs and URLs never leave the browser.
+  using dalinira::core::AddressInputClassification;
+  const auto classification = dalinira::core::AddressInputResolver::resolve(query).classification;
+  return classification == AddressInputClassification::DirectUrl ||
+         classification == AddressInputClassification::Localhost ||
+         classification == AddressInputClassification::IpAddress ||
+         classification == AddressInputClassification::Domain;
+}
 QUrl SearchSuggestionService::endpoint(const QString &engine, const QString &query) {
   const auto &definition = dalinira::core::searchEngineDefinition(engine);
   const bool isLegacyFallback = (engine.compare(QLatin1String("Brave Search"), Qt::CaseInsensitive) == 0 ||
                                  engine.compare(QLatin1String("Brave"), Qt::CaseInsensitive) == 0 ||
                                  engine.compare(QLatin1String("Bing"), Qt::CaseInsensitive) == 0);
-  if ((engine != QString::fromLatin1(definition.id) && !isLegacyFallback) || !safeQuery(query)) return {};
+  if ((engine != QString::fromLatin1(definition.id) && !isLegacyFallback) || !safeQuery(query) || looksLikeUrl(query)) return {};
   if (!definition.suggestUrl || !definition.suggestUrl[0]) return {};
   QUrl url(QString::fromLatin1(definition.suggestUrl));
   QUrlQuery params(url);

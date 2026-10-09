@@ -1,6 +1,7 @@
 #include "browser_icons.h"
 #include "search_engine_definition.h"
 
+#include <QFile>
 #include <QGuiApplication>
 #include <QPainter>
 #include <QPainterPath>
@@ -75,6 +76,8 @@ QString BrowserIcons::resourcePath(BrowserIcon id) {
     case BrowserIcon::Image: return QStringLiteral(":/browser-icons/image.svg");
     case BrowserIcon::Popup: return QStringLiteral(":/browser-icons/popup.svg");
     case BrowserIcon::ChevronRight: return QStringLiteral(":/browser-icons/chevron-right.svg");
+    case BrowserIcon::ChevronUp: return QStringLiteral(":/browser-icons/chevron-up.svg");
+    case BrowserIcon::FindInPage: return QStringLiteral(":/browser-icons/find-in-page.svg");
     case BrowserIcon::ChevronDown: return QStringLiteral(":/browser-icons/chevron-down.svg");
     case BrowserIcon::Fonts: return QStringLiteral(":/browser-icons/fonts.svg");
     case BrowserIcon::Mouse: return QStringLiteral(":/browser-icons/mouse.svg");
@@ -96,6 +99,7 @@ QString BrowserIcons::resourcePath(BrowserIcon id) {
     case BrowserIcon::JsOptimize: return QStringLiteral(":/browser-icons/js-optimize.svg");
     case BrowserIcon::Fullscreen: return QStringLiteral(":/browser-icons/fullscreen.svg");
     case BrowserIcon::Tune: return QStringLiteral(":/browser-icons/tune.svg");
+    case BrowserIcon::Mail: return QStringLiteral(":/browser-icons/mail.svg");
   }
   return {};
 }
@@ -297,6 +301,19 @@ QIcon BrowserIcons::icon(BrowserIcon id) {
   return result;
 }
 
+QIcon BrowserIcons::tintedIcon(BrowserIcon id, const QColor &normal, const QColor &active,
+                               const QColor &disabled) {
+  QIcon result;
+  const QString path = resourcePath(id);
+  for (const int size : {16, 18, 20, 24, 32, 48}) {
+    result.addPixmap(renderTinted(path, size, normal), QIcon::Normal, QIcon::Off);
+    result.addPixmap(renderTinted(path, size, active), QIcon::Active, QIcon::Off);
+    result.addPixmap(renderTinted(path, size, active), QIcon::Selected, QIcon::Off);
+    result.addPixmap(renderTinted(path, size, disabled), QIcon::Disabled, QIcon::Off);
+  }
+  return result;
+}
+
 QIcon BrowserIcons::appIcon() {
   const QIcon windowIcon = QGuiApplication::windowIcon();
   if (!windowIcon.isNull()) return windowIcon;
@@ -410,4 +427,56 @@ QIcon BrowserIcons::combinedMediaCaptureIcon() {
     result.addPixmap(px);
   }
   return result;
+}
+
+QIcon BrowserIcons::chromiumIcon() {
+  static const QStringList candidates = {
+      QStringLiteral(":/browser-icons/chromium.svg"),
+      QStringLiteral("browser/assets/browser-icons/chromium.svg")
+  };
+  for (const auto &path : candidates) {
+    if (QFile::exists(path)) {
+      QSvgRenderer renderer(path);
+      if (renderer.isValid()) {
+        QIcon icon;
+        for (const int size : {16, 18, 20, 24, 32, 48, 64}) {
+          QPixmap pm(size, size);
+          pm.fill(Qt::transparent);
+          QPainter p(&pm);
+          p.setRenderHint(QPainter::Antialiasing);
+          p.setRenderHint(QPainter::SmoothPixmapTransform);
+          renderer.render(&p);
+          icon.addPixmap(pm);
+        }
+        return icon;
+      }
+    }
+  }
+  return icon(BrowserIcon::Startup);
+}
+
+QIcon BrowserIcons::webkitIcon() {
+  static const QStringList candidates = {
+      QStringLiteral(":/browser-icons/webkit.svg"),
+      QStringLiteral("browser/assets/browser-icons/webkit.svg")
+  };
+  for (const auto &path : candidates) {
+    if (QFile::exists(path)) {
+      QSvgRenderer renderer(path);
+      if (renderer.isValid()) {
+        QIcon icon;
+        for (const int size : {16, 18, 20, 24, 32, 48, 64}) {
+          QPixmap pm(size, size);
+          pm.fill(Qt::transparent);
+          QPainter p(&pm);
+          p.setRenderHint(QPainter::Antialiasing);
+          p.setRenderHint(QPainter::SmoothPixmapTransform);
+          renderer.render(&p);
+          icon.addPixmap(pm);
+        }
+        return icon;
+      }
+    }
+  }
+  return icon(BrowserIcon::Startup);
 }

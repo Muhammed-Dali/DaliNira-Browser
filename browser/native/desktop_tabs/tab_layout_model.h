@@ -21,6 +21,7 @@ struct TabModelItem {
   bool isPinned = false;
   bool isAudible = false;
   bool isLoading = false;
+  bool isSleeping = false;
   QVariant userData;
 };
 

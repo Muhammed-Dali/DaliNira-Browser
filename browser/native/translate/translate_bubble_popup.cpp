@@ -1,6 +1,10 @@
 #include "translate_bubble_popup.h"
 #include "language_detector.h"
 #include "translate_service.h"
+#include "i18n/i18n.h"
+
+#include <QSet>
+#include "i18n/language_manager.h"
 
 #include <QHBoxLayout>
 #include <QGuiApplication>
@@ -9,12 +13,32 @@
 #include <QPainter>
 #include <QPainterPath>
 
+namespace {
+QString localizedLanguageName(const QString &code) {
+  const QString normalized = LanguageDetector::normalizeLanguageCode(code);
+  if (normalized.isEmpty()) return {};
+  return LanguageDetector::languageDisplayName(normalized);
+}
+}
+
 TranslateBubblePopup::TranslateBubblePopup(QWidget *parent)
-    : QFrame(parent, Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint) {
+    : QFrame(parent, Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint
+                         | Qt::WindowDoesNotAcceptFocus) {
   setAttribute(Qt::WA_TranslucentBackground, true);
   setAttribute(Qt::WA_StyledBackground, false);
+  // Qt::Popup installs a native popup grab: wheel and pointer events outside
+  // its rectangle are redirected to the popup until it closes. Translation is
+  // a persistent browser overlay, not a modal menu, so keep it as a transient
+  // non-activating tool window that only receives input inside its own bounds.
+  setAttribute(Qt::WA_ShowWithoutActivating, true);
+#if defined(Q_OS_UNIX)
+  setAttribute(Qt::WA_X11DoNotAcceptFocus, true);
+#endif
+  setWindowModality(Qt::NonModal);
+  setFocusPolicy(Qt::NoFocus);
   setObjectName(QStringLiteral("translate-bubble-popup"));
   setFixedWidth(290);
+  setLayoutDirection(Qt::LeftToRight);
 
   setStyleSheet(QStringLiteral(
       "QFrame#translate-bubble-popup {"
@@ -99,11 +123,11 @@ TranslateBubblePopup::TranslateBubblePopup(QWidget *parent)
   tabsLayout->setSpacing(4);
   tabsLayout->setContentsMargins(0, 0, 0, 0);
 
-  sourceLangBtn_ = new QPushButton(QStringLiteral("İngilizce"), this);
+  sourceLangBtn_ = new QPushButton(I18n::text(QStringLiteral("language.name.en")), this);
   sourceLangBtn_->setObjectName(QStringLiteral("source-lang-btn"));
   sourceLangBtn_->setCursor(Qt::PointingHandCursor);
 
-  targetLangBtn_ = new QPushButton(QStringLiteral("Türkçe"), this);
+  targetLangBtn_ = new QPushButton(I18n::text(QStringLiteral("language.name.tr")), this);
   targetLangBtn_->setObjectName(QStringLiteral("target-lang-btn"));
   targetLangBtn_->setCursor(Qt::PointingHandCursor);
 
@@ -127,7 +151,7 @@ TranslateBubblePopup::TranslateBubblePopup(QWidget *parent)
   mainLayout->addLayout(tabsLayout);
 
   // Middle Action / Error Row (e.g. Ayarları Aç)
-  openSettingsBtn_ = new QPushButton(QStringLiteral("⚙ Çeviri Ayarlarını Aç"), this);
+  openSettingsBtn_ = new QPushButton(I18n::text(QStringLiteral("translate.open_settings")), this);
   openSettingsBtn_->setObjectName(QStringLiteral("settings-btn"));
   openSettingsBtn_->setCursor(Qt::PointingHandCursor);
   openSettingsBtn_->hide();
@@ -140,7 +164,7 @@ TranslateBubblePopup::TranslateBubblePopup(QWidget *parent)
   // Bottom Status / Brand Row
   auto *bottomLayout = new QHBoxLayout;
   bottomLayout->setContentsMargins(0, 0, 0, 0);
-  brandLabel_ = new QLabel(QStringLiteral("DaliNira Çeviri"), this);
+  brandLabel_ = new QLabel(I18n::text(QStringLiteral("translate.brand")), this);
   brandLabel_->setObjectName(QStringLiteral("brand-label"));
   statusLabel_ = new QLabel(this);
   statusLabel_->setObjectName(QStringLiteral("status-label"));
@@ -164,6 +188,11 @@ TranslateBubblePopup::TranslateBubblePopup(QWidget *parent)
   });
 
   setupMoreMenu();
+  connect(&dalinira::i18n::LanguageManager::instance(),
+          &dalinira::i18n::LanguageManager::languageChanged, this, [this] {
+    setupMoreMenu();
+    updateUi();
+  });
 }
 
 void TranslateBubblePopup::paintEvent(QPaintEvent *event) {
@@ -186,25 +215,19 @@ void TranslateBubblePopup::paintEvent(QPaintEvent *event) {
 }
 
 void TranslateBubblePopup::setupMoreMenu() {
+  if (moreMenu_) delete moreMenu_;
   moreMenu_ = new QMenu(this);
 
-  auto *chooseLangMenu = moreMenu_->addMenu(QStringLiteral("Başka bir dil seç..."));
-  static const QList<QPair<QString, QString>> kLanguages = {
-      {QStringLiteral("Almanca"), QStringLiteral("de")},
-      {QStringLiteral("Fransızca"), QStringLiteral("fr")},
-      {QStringLiteral("İspanyolca"), QStringLiteral("es")},
-      {QStringLiteral("İtalyanca"), QStringLiteral("it")},
-      {QStringLiteral("Rusça"), QStringLiteral("ru")},
-      {QStringLiteral("Arapça"), QStringLiteral("ar")},
-      {QStringLiteral("Japonca"), QStringLiteral("ja")},
-      {QStringLiteral("Çince"), QStringLiteral("zh")},
-      {QStringLiteral("Türkçe"), QStringLiteral("tr")},
-      {QStringLiteral("İngilizce"), QStringLiteral("en")},
-  };
+  auto *chooseLangMenu = moreMenu_->addMenu(I18n::text(QStringLiteral("translate.choose_language")));
+  // Names are resolved per build of the menu, in the active UI language.
+  static const QStringList kLanguageCodes{
+      QStringLiteral("de"), QStringLiteral("fr"), QStringLiteral("es"), QStringLiteral("it"),
+      QStringLiteral("ru"), QStringLiteral("ar"), QStringLiteral("ja"), QStringLiteral("zh"),
+      QStringLiteral("tr"), QStringLiteral("en")};
 
-  for (const auto &lang : kLanguages) {
-    auto *act = chooseLangMenu->addAction(lang.first);
-    connect(act, &QAction::triggered, this, [this, code = lang.second] {
+  for (const QString &languageCode : kLanguageCodes) {
+    auto *act = chooseLangMenu->addAction(localizedLanguageName(languageCode));
+    connect(act, &QAction::triggered, this, [this, code = languageCode] {
       if (translator_) {
         translator_->translatePage(code);
       }
@@ -212,11 +235,11 @@ void TranslateBubblePopup::setupMoreMenu() {
   }
 
   moreMenu_->addSeparator();
-  auto *alwaysTranslateAct = moreMenu_->addAction(QStringLiteral("Bu dili her zaman çevir"));
+  auto *alwaysTranslateAct = moreMenu_->addAction(I18n::text(QStringLiteral("translate.always_language")));
   alwaysTranslateAct->setCheckable(true);
 
-  auto *neverSiteAct = moreMenu_->addAction(QStringLiteral("Bu siteyi hiçbir zaman çevirme"));
-  auto *neverLangAct = moreMenu_->addAction(QStringLiteral("Bu dili hiçbir zaman çevirme"));
+  auto *neverSiteAct = moreMenu_->addAction(I18n::text(QStringLiteral("translate.never_site")));
+  auto *neverLangAct = moreMenu_->addAction(I18n::text(QStringLiteral("translate.never_language")));
 
   connect(moreMenu_, &QMenu::aboutToShow, this, [this, alwaysTranslateAct] {
     if (translator_ && translator_->service() && !translator_->sourceLanguage().isEmpty()) {
@@ -243,7 +266,7 @@ void TranslateBubblePopup::setupMoreMenu() {
   });
 
   moreMenu_->addSeparator();
-  auto *settingsAct = moreMenu_->addAction(QStringLiteral("Çeviri Ayarları..."));
+  auto *settingsAct = moreMenu_->addAction(I18n::text(QStringLiteral("translate.settings")));
   connect(settingsAct, &QAction::triggered, this, [this] {
     emit openSettingsRequested();
     close();
@@ -274,21 +297,25 @@ void TranslateBubblePopup::setTranslator(PageTranslator *translator) {
 }
 
 void TranslateBubblePopup::updateUi() {
+  setLayoutDirection(Qt::LeftToRight);
+  openSettingsBtn_->setText(I18n::text(QStringLiteral("translate.open_settings")));
+  closeBtn_->setToolTip(I18n::text(QStringLiteral("common.close")));
+  moreBtn_->setToolTip(I18n::text(QStringLiteral("translate.options")));
   QString srcCode = translator_ ? translator_->sourceLanguage() : QString();
   QString targetCode = translator_ ? translator_->targetLanguage() : QStringLiteral("tr");
 
-  QString srcLangName = LanguageDetector::languageDisplayName(srcCode);
+  QString srcLangName = localizedLanguageName(srcCode);
   if (srcLangName.isEmpty() || srcLangName == srcCode) {
     if (srcCode.isEmpty()) {
-      srcLangName = QStringLiteral("Orijinal");
+      srcLangName = I18n::text(QStringLiteral("translate.original"));
     } else {
       srcLangName = srcCode.toUpper();
     }
   }
 
-  QString targetLangName = LanguageDetector::languageDisplayName(targetCode);
+  QString targetLangName = localizedLanguageName(targetCode);
   if (targetLangName.isEmpty()) {
-    targetLangName = QStringLiteral("Türkçe");
+    targetLangName = I18n::text(QStringLiteral("language.name.tr"));
   }
 
   sourceLangBtn_->setText(srcLangName);
@@ -303,10 +330,10 @@ void TranslateBubblePopup::updateUi() {
     } else if (pid == QLatin1String("deepl")) {
       brandLabel_->setText(QStringLiteral("DeepL"));
     } else {
-      brandLabel_->setText(QStringLiteral("DaliNira Çeviri"));
+      brandLabel_->setText(I18n::text(QStringLiteral("translate.brand")));
     }
   } else {
-    brandLabel_->setText(QStringLiteral("DaliNira Çeviri"));
+    brandLabel_->setText(I18n::text(QStringLiteral("translate.brand")));
   }
 
   const QString kActiveTabStyle = QStringLiteral(
@@ -364,7 +391,7 @@ void TranslateBubblePopup::updateUi() {
     case PageTranslator::State::Translating:
       sourceLangBtn_->setStyleSheet(kInactiveTabStyle);
       targetLangBtn_->setStyleSheet(kActiveTabStyle);
-      statusLabel_->setText(QStringLiteral("Çevriliyor..."));
+      statusLabel_->setText(I18n::text(QStringLiteral("translate.translating")));
       statusLabel_->setStyleSheet(QStringLiteral("color: #8ab4f8; font-size: 11px;"));
       sourceLangBtn_->setEnabled(false);
       targetLangBtn_->setEnabled(false);
@@ -374,7 +401,7 @@ void TranslateBubblePopup::updateUi() {
     case PageTranslator::State::Translated:
       sourceLangBtn_->setStyleSheet(kInactiveTabStyle);
       targetLangBtn_->setStyleSheet(kActiveTabStyle);
-      statusLabel_->setText(QStringLiteral("✓ Çevrildi"));
+      statusLabel_->setText(I18n::text(QStringLiteral("translate.translated")));
       statusLabel_->setStyleSheet(QStringLiteral("color: #81c995; font-size: 11px;"));
       sourceLangBtn_->setEnabled(true);
       targetLangBtn_->setEnabled(true);
@@ -385,11 +412,16 @@ void TranslateBubblePopup::updateUi() {
       sourceLangBtn_->setStyleSheet(kActiveTabStyle);
       targetLangBtn_->setStyleSheet(kInactiveTabStyle);
       const QString err = translator_->lastError();
-      if (err.contains(QStringLiteral("yapılandırılmamış"), Qt::CaseInsensitive) ||
-          err.contains(QStringLiteral("seçilmedi"), Qt::CaseInsensitive)) {
-        statusLabel_->setText(QStringLiteral("⚠ Sağlayıcı seçilmedi"));
+      static const QSet<QString> notConfiguredKeys{
+          QStringLiteral("translate.provider_not_configured_error"),
+          QStringLiteral("translate.provider_incomplete"),
+          QStringLiteral("translate.libretranslate_not_configured"),
+          QStringLiteral("translate.deepl_key_missing"),
+          QStringLiteral("translate.gcp_key_missing")};
+      if (notConfiguredKeys.contains(dalinira::i18n::LanguageManager::instance().keyForText(err))) {
+        statusLabel_->setText(I18n::text(QStringLiteral("translate.no_provider_selected")));
       } else {
-        statusLabel_->setText(QStringLiteral("⚠ Hata"));
+        statusLabel_->setText(I18n::text(QStringLiteral("translate.error_short")));
       }
       statusLabel_->setStyleSheet(QStringLiteral("color: #f28b82; font-size: 11px;"));
       openSettingsBtn_->show();
@@ -415,5 +447,4 @@ void TranslateBubblePopup::showAtAnchor(const QPoint &globalPos) {
   move(pos);
   show();
   raise();
-  activateWindow();
 }

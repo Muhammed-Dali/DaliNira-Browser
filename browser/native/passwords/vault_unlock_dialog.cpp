@@ -17,6 +17,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QtConcurrent>
+#include "i18n/i18n.h"
 
 namespace {
 
@@ -46,10 +47,12 @@ QIcon passwordVisibilityIcon(bool visible) {
 VaultUnlockDialog::VaultUnlockDialog(CredentialVaultManager *vaultManager,
                                      const QString &canonicalOrigin,
                                      QWidget *parent,
-                                     Purpose purpose)
+                                     Purpose purpose,
+                                     const QString &vaultId)
     : QDialog(parent, Qt::Dialog | Qt::FramelessWindowHint),
       vaultManager_(vaultManager),
       canonicalOrigin_(canonicalOrigin),
+      vaultId_(vaultId),
       purpose_(purpose) {
   setAttribute(Qt::WA_TranslucentBackground, true);
   setAttribute(Qt::WA_DeleteOnClose, false);
@@ -200,8 +203,8 @@ void VaultUnlockDialog::initializeUi() {
 
   titleLabel_ = new QLabel(
       purpose_ == Purpose::ReauthenticateForAutofill
-          ? QStringLiteral("Şifre Yöneticisini Doğrula")
-          : QStringLiteral("Şifre Yöneticisinin Kilidini Aç"),
+          ? I18n::text(QStringLiteral("passwords.verify_title"))
+          : I18n::text(QStringLiteral("passwords.unlock_title")),
       card_);
   titleLabel_->setObjectName(QStringLiteral("vault-unlock-title"));
   headerLayout->addWidget(titleLabel_, 1);
@@ -210,7 +213,7 @@ void VaultUnlockDialog::initializeUi() {
   closeButton_->setObjectName(QStringLiteral("vault-unlock-close"));
   closeButton_->setText(QStringLiteral("✕"));
   closeButton_->setCursor(Qt::PointingHandCursor);
-  closeButton_->setToolTip(QStringLiteral("Kapat"));
+  closeButton_->setToolTip(I18n::text(QStringLiteral("common.close")));
   connect(closeButton_, &QToolButton::clicked, this, &VaultUnlockDialog::reject);
   headerLayout->addWidget(closeButton_);
 
@@ -225,8 +228,8 @@ void VaultUnlockDialog::initializeUi() {
   // Description
   descLabel_ = new QLabel(
       purpose_ == Purpose::ReauthenticateForAutofill
-          ? QStringLiteral("Kayıtlı giriş bilgisini doldurmak üzere kimliğinizi doğrulayın.")
-          : QStringLiteral("Kasanın kilidini açmak için ana parolanızı girin."),
+          ? I18n::text(QStringLiteral("passwords.verify_desc"))
+          : I18n::text(QStringLiteral("passwords.unlock_desc")),
       card_);
   descLabel_->setObjectName(QStringLiteral("vault-unlock-desc"));
   descLabel_->setWordWrap(true);
@@ -235,7 +238,7 @@ void VaultUnlockDialog::initializeUi() {
   cardLayout->addSpacing(4);
 
   // Field label
-  auto *fieldLabel = new QLabel(QStringLiteral("Ana parola"), card_);
+  auto *fieldLabel = new QLabel(I18n::text(QStringLiteral("passwords.master_password")), card_);
   fieldLabel->setObjectName(QStringLiteral("vault-unlock-field-label"));
   cardLayout->addWidget(fieldLabel);
 
@@ -244,23 +247,23 @@ void VaultUnlockDialog::initializeUi() {
   passwordInput_->setObjectName(QStringLiteral("vault-unlock-password"));
   passwordInput_->setEchoMode(QLineEdit::Password);
   passwordInput_->setMaxLength(256);
-  passwordInput_->setPlaceholderText(QStringLiteral("Ana parolanızı girin"));
-  passwordInput_->setAccessibleName(QStringLiteral("Ana parola"));
+  passwordInput_->setPlaceholderText(I18n::text(QStringLiteral("passwords.enter_master")));
+  passwordInput_->setAccessibleName(I18n::text(QStringLiteral("passwords.master_password")));
 
   auto *toggleEye = passwordInput_->addAction(passwordVisibilityIcon(false), QLineEdit::TrailingPosition);
   toggleEyeAction_ = toggleEye;
-  toggleEye->setToolTip(QStringLiteral("Parolayı göster"));
+  toggleEye->setToolTip(I18n::text(QStringLiteral("passwords.show_password")));
   connect(toggleEye, &QAction::triggered, this, [this, toggleEye] {
     const bool makeVisible = passwordInput_->echoMode() != QLineEdit::Normal;
     passwordInput_->setEchoMode(makeVisible ? QLineEdit::Normal : QLineEdit::Password);
     toggleEye->setIcon(passwordVisibilityIcon(makeVisible));
-    toggleEye->setToolTip(makeVisible ? QStringLiteral("Parolayı gizle") : QStringLiteral("Parolayı göster"));
+    toggleEye->setToolTip(makeVisible ? I18n::text(QStringLiteral("passwords.hide_password")) : I18n::text(QStringLiteral("passwords.show_password")));
     if (makeVisible) {
       QTimer::singleShot(15000, passwordInput_, [this, toggleEye] {
         if (passwordInput_->echoMode() == QLineEdit::Normal) {
           passwordInput_->setEchoMode(QLineEdit::Password);
           toggleEye->setIcon(passwordVisibilityIcon(false));
-          toggleEye->setToolTip(QStringLiteral("Parolayı göster"));
+          toggleEye->setToolTip(I18n::text(QStringLiteral("passwords.show_password")));
         }
       });
     }
@@ -283,7 +286,7 @@ void VaultUnlockDialog::initializeUi() {
   auto *btnLayout = new QHBoxLayout();
   btnLayout->setSpacing(8);
 
-  cancelButton_ = new QPushButton(QStringLiteral("İptal"), card_);
+  cancelButton_ = new QPushButton(I18n::text(QStringLiteral("common.cancel")), card_);
   cancelButton_->setObjectName(QStringLiteral("vault-unlock-cancel"));
   cancelButton_->setCursor(Qt::PointingHandCursor);
   connect(cancelButton_, &QPushButton::clicked, this, &VaultUnlockDialog::reject);
@@ -292,8 +295,8 @@ void VaultUnlockDialog::initializeUi() {
   btnLayout->addStretch(1);
 
   unlockButton_ = new QPushButton(
-      purpose_ == Purpose::ReauthenticateForAutofill ? QStringLiteral("Doğrula")
-                                                      : QStringLiteral("Kilidi Aç"),
+      purpose_ == Purpose::ReauthenticateForAutofill ? I18n::text(QStringLiteral("passwords.verify_btn"))
+                                                      : I18n::text(QStringLiteral("passwords.unlock_btn")),
       card_);
   unlockButton_->setObjectName(QStringLiteral("vault-unlock-submit"));
   unlockButton_->setCursor(Qt::PointingHandCursor);
@@ -317,7 +320,7 @@ void VaultUnlockDialog::setCanonicalOrigin(const QString &origin) {
     // Extract host for clean badge display (e.g. www.facebook.com)
     QUrl url(canonicalOrigin_);
     const QString displayHost = url.isValid() && !url.host().isEmpty() ? url.host() : canonicalOrigin_;
-    originBadge_->setText(QStringLiteral("🔒 %1 için kayıtlı giriş").arg(displayHost));
+    originBadge_->setText(I18n::text(QStringLiteral("passwords.saved_login_badge")).arg(displayHost));
     originBadge_->setVisible(true);
   }
 }
@@ -351,7 +354,8 @@ void VaultUnlockDialog::startCooldown(int seconds) {
     cooldownTimer_->setInterval(1000);
     connect(cooldownTimer_, &QTimer::timeout, this, [this] {
       if (!vaultManager_) return;
-      const int rem = vaultManager_->remainingUnlockCooldownSeconds();
+      const int rem = vaultId_.isEmpty() ? vaultManager_->remainingUnlockCooldownSeconds()
+                                         : vaultManager_->remainingVaultUnlockCooldownSeconds(vaultId_);
       if (rem <= 0) {
         stopCooldown();
       } else {
@@ -371,8 +375,8 @@ void VaultUnlockDialog::startCooldown(int seconds) {
   if (unlockButton_) {
     unlockButton_->setEnabled(false);
     unlockButton_->setText(purpose_ == Purpose::ReauthenticateForAutofill
-                               ? QStringLiteral("Doğrula")
-                               : QStringLiteral("Kilidi Aç"));
+                               ? I18n::text(QStringLiteral("passwords.verify_btn"))
+                               : I18n::text(QStringLiteral("passwords.unlock_btn")));
   }
   if (cancelButton_) {
     cancelButton_->setEnabled(true);
@@ -403,8 +407,8 @@ void VaultUnlockDialog::stopCooldown() {
   if (unlockButton_) {
     unlockButton_->setEnabled(true);
     unlockButton_->setText(purpose_ == Purpose::ReauthenticateForAutofill
-                               ? QStringLiteral("Doğrula")
-                               : QStringLiteral("Kilidi Aç"));
+                               ? I18n::text(QStringLiteral("passwords.verify_btn"))
+                               : I18n::text(QStringLiteral("passwords.unlock_btn")));
   }
   clearError();
 }
@@ -412,17 +416,18 @@ void VaultUnlockDialog::stopCooldown() {
 void VaultUnlockDialog::updateCooldownUi(int seconds) {
   if (!errorLabel_) return;
   const QString formatted = formatCooldownTime(seconds);
-  errorLabel_->setText(QStringLiteral("Çok fazla başarısız deneme.\nTekrar deneyebilmek için %1 bekleyin.").arg(formatted));
+  errorLabel_->setText(I18n::text(QStringLiteral("passwords.too_many_attempts")).arg(formatted));
   errorLabel_->setVisible(true);
-  errorLabel_->setAccessibleDescription(QStringLiteral("Tekrar denemeye %1 saniye kaldı").arg(seconds));
+  errorLabel_->setAccessibleDescription(I18n::text(QStringLiteral("passwords.retry_seconds_left")).arg(seconds));
   if (passwordInput_) {
-    passwordInput_->setAccessibleDescription(QStringLiteral("Tekrar denemeye %1 saniye kaldı").arg(seconds));
+    passwordInput_->setAccessibleDescription(I18n::text(QStringLiteral("passwords.retry_seconds_left")).arg(seconds));
   }
 }
 
 void VaultUnlockDialog::checkExistingCooldown() {
   if (!vaultManager_) return;
-  const int remaining = vaultManager_->remainingUnlockCooldownSeconds();
+  const int remaining = vaultId_.isEmpty() ? vaultManager_->remainingUnlockCooldownSeconds()
+                                           : vaultManager_->remainingVaultUnlockCooldownSeconds(vaultId_);
   if (remaining > 0) {
     startCooldown(remaining);
   } else if (isCooldownActive()) {
@@ -438,7 +443,8 @@ void VaultUnlockDialog::showEvent(QShowEvent *event) {
 void VaultUnlockDialog::attemptUnlock() {
   if (isChecking_ || isCooldownActive() || !vaultManager_) return;
 
-  const int preCooldown = vaultManager_->remainingUnlockCooldownSeconds();
+  const int preCooldown = vaultId_.isEmpty() ? vaultManager_->remainingUnlockCooldownSeconds()
+                                             : vaultManager_->remainingVaultUnlockCooldownSeconds(vaultId_);
   if (preCooldown > 0) {
     startCooldown(preCooldown);
     return;
@@ -446,7 +452,7 @@ void VaultUnlockDialog::attemptUnlock() {
 
   const QString masterPassword = passwordInput_->text();
   if (masterPassword.isEmpty()) {
-    setError(QStringLiteral("Lütfen ana parolanızı girin."));
+    setError(I18n::text(QStringLiteral("passwords.enter_master_please")));
     passwordInput_->setFocus();
     return;
   }
@@ -454,7 +460,7 @@ void VaultUnlockDialog::attemptUnlock() {
   isChecking_ = true;
   clearError();
   unlockButton_->setEnabled(false);
-  unlockButton_->setText(QStringLiteral("Doğrulanıyor…"));
+  unlockButton_->setText(I18n::text(QStringLiteral("common.verifying")));
   cancelButton_->setEnabled(false);
 
   auto *watcher = new QFutureWatcher<bool>(this);
@@ -470,7 +476,8 @@ void VaultUnlockDialog::attemptUnlock() {
       return;
     }
 
-    const int cooldown = vaultManager_->remainingUnlockCooldownSeconds();
+    const int cooldown = vaultId_.isEmpty() ? vaultManager_->remainingUnlockCooldownSeconds()
+                                            : vaultManager_->remainingVaultUnlockCooldownSeconds(vaultId_);
     if (cooldown > 0) {
       startCooldown(cooldown);
       return;
@@ -479,20 +486,21 @@ void VaultUnlockDialog::attemptUnlock() {
     // Normal failure (attempts 1-4)
     unlockButton_->setEnabled(true);
     unlockButton_->setText(purpose_ == Purpose::ReauthenticateForAutofill
-                               ? QStringLiteral("Doğrula")
-                               : QStringLiteral("Kilidi Aç"));
+                               ? I18n::text(QStringLiteral("passwords.verify_btn"))
+                               : I18n::text(QStringLiteral("passwords.unlock_btn")));
     cancelButton_->setEnabled(true);
     if (passwordInput_) {
       passwordInput_->clear();
       passwordInput_->setFocus();
     }
     setError(purpose_ == Purpose::ReauthenticateForAutofill
-                 ? QStringLiteral("Ana şifre doğrulanamadı.")
-                 : QStringLiteral("Ana parola yanlış. Tekrar deneyin."));
+                 ? I18n::text(QStringLiteral("passwords.master_unverified"))
+                 : I18n::text(QStringLiteral("passwords.master_wrong")));
   });
 
-  watcher->setFuture(QtConcurrent::run([vaultManager = vaultManager_, masterPassword] {
-    return vaultManager->unlock(masterPassword);
+  watcher->setFuture(QtConcurrent::run([vaultManager = vaultManager_, masterPassword, vaultId = vaultId_] {
+    return vaultId.isEmpty() ? vaultManager->unlock(masterPassword)
+                             : vaultManager->unlockVault(vaultId, masterPassword);
   }));
 }
 

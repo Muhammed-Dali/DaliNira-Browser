@@ -17,6 +17,8 @@ inline constexpr bool ProtectionEnabled = true;
 inline constexpr bool AutoReload = true;
 inline constexpr bool ShowCount = true;
 inline constexpr bool StrictBlock = true;
+inline constexpr bool HttpsByDefault = true;
+inline constexpr bool FingerprintProtection = true;
 inline constexpr bool PopupBlock = true;
 inline constexpr bool DeveloperMode = false;
 inline constexpr bool AutoUpdateRulesets = false;
@@ -45,6 +47,18 @@ class DaliNiraBlockerSettings final : public QObject {
 
   bool strictBlock() const;
   void setStrictBlock(bool enable);
+
+  // Top-level http:// navigations go to https:// first (falling back to
+  // http:// for a site whose HTTPS fails), as Brave's HTTPS by default.
+  bool httpsByDefault() const;
+  void setHttpsByDefault(bool enable);
+
+  // Standard fingerprinting protection on every site: canvas, audio, WebGL,
+  // WebGPU, locale/language, hardware, font, display/media-query and screen
+  // surfaces are reduced or varied per site and session.
+  // (A site's blockFingerprinting policy is the strict form.)
+  bool fingerprintProtection() const;
+  void setFingerprintProtection(bool enable);
 
   bool popupBlock() const;
   void setPopupBlock(bool enable);
@@ -100,6 +114,8 @@ class DaliNiraBlockerSettings final : public QObject {
   bool autoReload_ = DaliNiraBlockerDefaults::AutoReload;
   bool showCount_ = DaliNiraBlockerDefaults::ShowCount;
   bool strictBlock_ = DaliNiraBlockerDefaults::StrictBlock;
+  bool httpsByDefault_ = DaliNiraBlockerDefaults::HttpsByDefault;
+  bool fingerprintProtection_ = DaliNiraBlockerDefaults::FingerprintProtection;
   bool popupBlock_ = DaliNiraBlockerDefaults::PopupBlock;
   bool developerMode_ = DaliNiraBlockerDefaults::DeveloperMode;
   bool autoUpdateRulesets_ = DaliNiraBlockerDefaults::AutoUpdateRulesets;

@@ -7,12 +7,25 @@
 #include <QString>
 #include <QTimer>
 #include <QUrl>
+#include <QStringList>
 #include <QVector>
+#include <functional>
 
 class QWebEngineView;
 
+namespace dalinira::engine {
+class EngineView;
+struct DocumentScript;
+}
+
 #include "../desktop_tabs/tab_performance_manager.h"
 
+// DaliNira's one Web Audio effects engine (EQ, tone, reverb, compressor,
+// limiter, bass enhancer, auto gain) for web media, shared by both browser
+// engines. The DSP runs in each page as a Web Audio graph built from the DALI
+// modules compiled from browser/dali/*.dl. Engines only differ in how a script
+// reaches the page: Chromium tabs register their QWebEngineView, other engines
+// (WebKit) their EngineView; everything else is common.
 class WebAudioEffectsController final : public QObject {
   Q_OBJECT
 
@@ -23,7 +36,30 @@ class WebAudioEffectsController final : public QObject {
     int attachedMediaCount = 0;
     QVector<int> sampleRates;
     QString detail;
+    // The DSP graph cannot run (module missing, graph/runtime error). Kept as
+    // state so the UI never has to parse the localized `detail` text.
+    bool hardFailure = false;
+    // Catalog key + arguments behind `detail`, so the UI can re-render it in
+    // the current language after a live switch.
+    QString detailKey;
+    QStringList detailArgs;
   };
+
+  // Lightweight counters (tests; DALINIRA_FEATURE_DIAGNOSTICS logging).
+  struct Diagnostics {
+    quint64 scriptsSent = 0;        // scripts run in, or installed into, pages
+    quint64 scriptBytesSent = 0;
+    quint64 bootstrapsSent = 0;     // full DALI runtime deliveries
+    quint64 injectionBuilds = 0;    // full runtime script (re)builds
+    quint64 moduleLoads = 0;        // DALI module files read (once each)
+    quint64 moduleRejects = 0;      // DALI module files that failed validation
+  };
+
+  // A compiled DALI module (build/dali/*.generated.js, from a .dl preset).
+  // Rejects empty, oversized, non-UTF-8, binary, foreign, truncated or
+  // unsupported-version files; `error` names the reason.
+  static bool validateDaliModule(const QByteArray &bytes, QString *error = nullptr);
+  static constexpr qint64 kMaxDaliModuleBytes = 512 * 1024;
 
   explicit WebAudioEffectsController(QObject *parent = nullptr, bool persistenceEnabled = true);
   ~WebAudioEffectsController() override;
@@ -84,10 +120,21 @@ class WebAudioEffectsController final : public QObject {
   bool isPanelVisible() const { return panelVisible_; }
   QString activeSubpanelId() const { return activeSubpanelId_; }
   Status status() const { return status_; }
+  Diagnostics diagnostics() const { return diagnostics_; }
+  void resetDiagnostics() { diagnostics_ = {}; }
 
+  // Chromium tabs.
   void registerWebView(QWebEngineView *view, const QUrl &initialUrl = QUrl());
   void unregisterWebView(QWebEngineView *view);
   void applyToView(QWebEngineView *view);
+  // Tabs of other engines (WebKit), through the engine-neutral EngineView.
+  void registerEngineView(dalinira::engine::EngineView *view, const QUrl &initialUrl = QUrl());
+  void unregisterEngineView(dalinira::engine::EngineView *view);
+  void applyToEngineView(dalinira::engine::EngineView *view);
+  // The runtime for engines that install document scripts at each navigation
+  // (WebKit): nothing while effects are off or for a page they never touch.
+  QList<dalinira::engine::DocumentScript> documentScriptsFor(const QObject *view, const QUrl &url) const;
+  int registeredPageCount() const;
   int audioEnabledWebViewCount() const;
   int activeGraphViewCount() const;
 
@@ -163,16 +210,40 @@ class WebAudioEffectsController final : public QObject {
   void limiterReductionChanged(double reductionDb, bool available);
 
  private:
-  QString daliModuleSource() const;
-  QString daliEqModuleSource() const;
-  QString daliCompressorModuleSource() const;
-  QString daliLimiterModuleSource() const;
-  QString daliBassEnhancerModuleSource() const;
-  QString daliAutoGainModuleSource() const;
-  void applyEqualizerBandToView(QWebEngineView *view, int index);
-  void bootstrapView(QWebEngineView *view);
-  void installDocumentBootstrap(QWebEngineView *view, const QUrl &url);
-  void updateAudioPolicyForView(QWebEngineView *view, const QUrl &url);
+  // A registered tab page, whichever engine renders it.
+  struct Page {
+    QPointer<QObject> object;
+    QPointer<QWebEngineView> web;                   // Chromium
+    QPointer<dalinira::engine::EngineView> engine;  // other engines
+  };
+  struct DaliModule {
+    const char *relativePath = nullptr;
+    bool loaded = false;
+    QString source;  // empty when missing or invalid
+  };
+  enum ModuleIndex { OutputModule, EqModule, CompressorModule, LimiterModule, BassEnhancerModule, AutoGainModule, ModuleCount };
+
+  QString moduleSource(ModuleIndex index) const;
+  QString daliModuleSource() const { return moduleSource(OutputModule); }
+  QString daliEqModuleSource() const { return moduleSource(EqModule); }
+  QString daliCompressorModuleSource() const { return moduleSource(CompressorModule); }
+  QString daliLimiterModuleSource() const { return moduleSource(LimiterModule); }
+  QString daliBassEnhancerModuleSource() const { return moduleSource(BassEnhancerModule); }
+  QString daliAutoGainModuleSource() const { return moduleSource(AutoGainModule); }
+  QString buildInjectionScript() const;
+
+  void registerPage(const Page &page, const QUrl &initialUrl);
+  void unregisterPage(const QObject *object);
+  const Page *findPage(const QObject *object) const;
+  void prunePages();
+  static QUrl pageUrl(const Page &page);
+  static bool pageAlive(const Page &page);
+  void runInPage(const Page &page, const QString &script, std::function<void(const QVariant &)> callback = {});
+  void applyToPage(const Page &page);
+  void applyEqualizerBandToPage(const Page &page, int index);
+  void bootstrapPage(const Page &page);
+  void installDocumentBootstrap(const Page &page, const QUrl &url);
+  void updateAudioPolicyForPage(const Page &page, const QUrl &url);
   void updateStatusFromResult(const QVariant &result);
   void persist();
   void schedulePersist();
@@ -183,8 +254,8 @@ class WebAudioEffectsController final : public QObject {
   void scheduleBassEnhancerStateChange(bool clearDeep);
   void scheduleAutoGainStateChange();
 
-  QVector<QPointer<QWebEngineView>> views_;
-  QSet<QWebEngineView *> bootstrapViews_;
+  QVector<Page> pages_;
+  QSet<const QObject *> bootstrapPages_;
   QSet<int> pendingEqualizerBands_;
   quint64 masterEnableGeneration_ = 0;
   bool forceFullReapply_ = false;
@@ -234,12 +305,12 @@ class WebAudioEffectsController final : public QObject {
   bool panelVisible_ = false;
   QString activeSubpanelId_;
   Status status_;
-  mutable QString daliModuleSource_;
-  mutable QString daliEqModuleSource_;
-  mutable QString daliCompressorModuleSource_;
-  mutable QString daliLimiterModuleSource_;
-  mutable QString daliBassEnhancerModuleSource_;
-  mutable QString daliAutoGainModuleSource_;
+  mutable Diagnostics diagnostics_;
+  mutable DaliModule modules_[ModuleCount];
+  // The full runtime is ~50 KB plus the modules; it is rebuilt only when the
+  // configuration it embeds changed (keyed by the parameter script).
+  mutable QString injectionScriptCache_;
+  mutable QString injectionScriptKey_;
   QTimer persistTimer_;
   QTimer applyTimer_;
   bool persistenceEnabled_ = true;

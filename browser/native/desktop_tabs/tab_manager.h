@@ -9,11 +9,14 @@
 #include <QWebEngineView>
 #include <memory>
 
+#include "desktop_tabs/tab_resource_model.h"
+
 class QWebEnginePage;
 class QWidget;
 
 namespace dalinira {
 class TabPerformanceManager;
+class TabLifecycleAdapter;
 }
 
 class TabManager final : public QObject {
@@ -37,6 +40,8 @@ class TabManager final : public QObject {
     QPointer<QWidget> content;
     QPointer<QWebEngineView> view;
     QPointer<QWebEnginePage> page;
+    // The page's lifecycle, independent of its engine (memory saver / sleeping).
+    QPointer<dalinira::TabLifecycleAdapter> lifecycle;
     QPointer<QObject> ownerWindow;
     QString title;
     QString internalId;
@@ -57,6 +62,7 @@ class TabManager final : public QObject {
   ~TabManager() override;
 
   TabId registerTab(QWebEngineView *view, QObject *ownerWindow, bool detached, const QString &title);
+  TabId registerEngineTab(QWidget *content, QObject *ownerWindow, bool detached, const QString &title, const QUrl &url = {});
   TabId registerInternalTab(QWidget *content, QObject *ownerWindow, const QString &title,
                             const QString &internalId, TabCapabilities capabilities);
   bool transfer(TabId id, QObject *ownerWindow, bool detached);
@@ -76,10 +82,15 @@ class TabManager final : public QObject {
   TabId activeFor(QObject *ownerWindow) const;
   const TabRecord *record(TabId id) const;
   QVector<TabRecord> recordsFor(QObject *ownerWindow) const;
+  // Every tab of every window.
+  QVector<TabId> allIds() const { return records_.keys().toVector(); }
   int recordCount() const { return records_.size(); }
   bool validate(QString *reason = nullptr) const;
 
   dalinira::TabPerformanceManager *performanceManager() const;
+  // The shared resource model (lifecycle, memory, CPU) of one tab, for either
+  // engine; see desktop_tabs/tab_resource_model.h.
+  dalinira::TabResourceSnapshot resourceSnapshot(TabId id);
 
  signals:
   void tabRegistered(TabManager::TabId id, TabManager::TabKind kind);
@@ -95,4 +106,5 @@ class TabManager final : public QObject {
   QHash<const QWidget *, TabId> contentIndex_;
   quint64 activationSerial_ = 0;
   std::unique_ptr<dalinira::TabPerformanceManager> performanceManager_;
+  std::unique_ptr<dalinira::TabResourceModel> resourceModel_;
 };

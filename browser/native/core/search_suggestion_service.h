@@ -23,6 +23,8 @@ class SearchSuggestionService final : public QObject {
   static QStringList parseResponse(const QByteArray &bytes);
   static QUrl endpoint(const QString &engine, const QString &query);
   static bool safeQuery(const QString &query);
+  // True for input the omnibox would open as an address rather than search.
+  static bool looksLikeUrl(const QString &query);
   static constexpr int MaxResponseBytes = 64 * 1024;
   static constexpr int MaxSuggestions = 8;
  private:

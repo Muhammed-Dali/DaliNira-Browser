@@ -7,6 +7,7 @@
 #include <QNetworkRequest>
 #include <QTimer>
 #include <QUrlQuery>
+#include "i18n/i18n.h"
 
 namespace {
 constexpr int kDefaultTimeoutMs = 12000;
@@ -25,7 +26,7 @@ void GoogleGtxProvider::translateBatch(
 ) {
   if (!nam_) {
     if (callback) {
-      callback({false, {}, TranslationError::ProviderUnavailable, QStringLiteral("Ağ yöneticisi kullanılamıyor.")});
+      callback({false, {}, TranslationError::ProviderUnavailable, I18n::text(QStringLiteral("translate.network_manager_unavailable"))});
     }
     return;
   }
@@ -107,7 +108,7 @@ void GoogleGtxProvider::translateBatch(
 
     if (parseError.error != QJsonParseError::NoError || !doc.isArray() || doc.array().isEmpty()) {
       if (callback) {
-        callback({false, {}, TranslationError::InvalidResponse, QStringLiteral("Google GTX çeviri yanıtı ayrıştırılamadı.")});
+        callback({false, {}, TranslationError::InvalidResponse, I18n::text(QStringLiteral("translate.gtx_parse_failed"))});
       }
       return;
     }
@@ -194,7 +195,7 @@ void GoogleGtxProvider::translateBatch(
 
     if (translatedList.size() != expectedCount) {
       if (callback) {
-        callback({false, {}, TranslationError::InvalidResponse, QStringLiteral("Çeviri sonucu beklenen metin sayısıyla eşleşmedi.")});
+        callback({false, {}, TranslationError::InvalidResponse, I18n::text(QStringLiteral("translate.count_mismatch"))});
       }
       return;
     }

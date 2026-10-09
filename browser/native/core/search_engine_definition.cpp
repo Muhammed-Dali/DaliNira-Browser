@@ -1,15 +1,15 @@
 #include "search_engine_definition.h"
 
-#include <QCoreApplication>
+#include "i18n/i18n.h"
 
 namespace dalinira::core {
 
 const std::array<SearchEngineDefinition, 4> &searchEngineDefinitions() {
   static const std::array<SearchEngineDefinition, 4> definitions{{
-      {"Google", "google.ico", "Google'da arayın veya URL'yi yazın", "https://www.google.com/search", "https://suggestqueries.google.com/complete/search?client=firefox&oe=utf-8", "q"},
-      {"DuckDuckGo", "duckduckgo.ico", "DuckDuckGo'da arayın veya URL'yi yazın", "https://duckduckgo.com/", "https://duckduckgo.com/ac/?type=list", "q"},
-      {"Startpage", "startpage.ico", "Startpage'de arayın veya URL'yi yazın", "https://www.startpage.com/sp/search", "https://www.startpage.com/osuggestions", "query"},
-      {"Mojeek", "mojeek.ico", "Mojeek'te arayın veya URL'yi yazın", "https://www.mojeek.com/search", "", "q"},
+      {"Google", "google.ico", "https://www.google.com/search", "https://suggestqueries.google.com/complete/search?client=firefox&oe=utf-8", "q"},
+      {"DuckDuckGo", "duckduckgo.ico", "https://duckduckgo.com/", "https://duckduckgo.com/ac/?type=list", "q"},
+      {"Startpage", "startpage.ico", "https://www.startpage.com/sp/search", "https://www.startpage.com/osuggestions", "query"},
+      {"Mojeek", "mojeek.ico", "https://www.mojeek.com/search", "", "q"},
   }};
   return definitions;
 }
@@ -37,7 +37,18 @@ QString searchEngineResourcePath(const QString &engineName) {
 }
 
 QString searchEnginePlaceholderText(const QString &engineName) {
-  return QCoreApplication::translate("SearchPlaceholder", searchEngineDefinition(engineName).placeholder);
+  // Built-in engines (and legacy aliases that resolve to one) show the engine
+  // they actually use; a custom engine shows its own name.
+  const QString trimmed = engineName.trimmed();
+  const QString lower = trimmed.toLower();
+  static const char *const kBuiltInHints[] = {"google", "duck", "startpage", "mojeek", "brave", "bing"};
+  bool builtIn = trimmed.isEmpty();
+  for (const char *hint : kBuiltInHints) builtIn = builtIn || lower.contains(QLatin1String(hint));
+  if (!builtIn) return I18n::text(QStringLiteral("newtab.search_placeholder")).arg(trimmed);
+  // Per-engine keys keep natural grammar (e.g. Turkish vowel harmony:
+  // "Google'da", "Startpage'de", "Mojeek'te").
+  const QString id = QString::fromLatin1(searchEngineDefinition(engineName).id).toLower();
+  return I18n::text(QStringLiteral("newtab.search_placeholder_") + id);
 }
 
 }  // namespace dalinira::core

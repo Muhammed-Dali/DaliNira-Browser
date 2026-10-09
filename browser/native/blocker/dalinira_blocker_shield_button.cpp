@@ -1,5 +1,7 @@
 #include "dalinira_blocker_shield_button.h"
 
+#include <QDateTime>
+
 #include <QCheckBox>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -14,6 +16,7 @@
 
 #include "dalinira_blocker_service.h"
 #include "glow_toggle_switch.h"
+#include "i18n/i18n.h"
 
 // ---------------- DaliNiraBlockerQuickPopup ----------------
 
@@ -54,7 +57,7 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
   hostMetaBox->setSpacing(2);
   hostLabel_ = new QLabel(QStringLiteral("—"), this);
   hostLabel_->setStyleSheet(QStringLiteral("font-size: 14px; font-weight: 700; color: #ffffff;"));
-  statusSubtitleLabel_ = new QLabel(QStringLiteral("DaliNira Koruma açık"), this);
+  statusSubtitleLabel_ = new QLabel(I18n::text(QStringLiteral("shield.protection_on")), this);
   statusSubtitleLabel_->setStyleSheet(QStringLiteral("font-size: 11px; color: #8c9ba8;"));
   hostMetaBox->addWidget(hostLabel_);
   hostMetaBox->addWidget(statusSubtitleLabel_);
@@ -62,7 +65,7 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
 
   masterCheck_ = new GlowToggleSwitch(this);
   masterCheck_->setObjectName(QStringLiteral("adblock-master-toggle"));
-  masterCheck_->setToolTip(QStringLiteral("Bu sitede korumayı aç veya kapat"));
+  masterCheck_->setToolTip(I18n::text(QStringLiteral("shield.toggle_site_protection")));
   masterCheck_->setFixedSize(54, 28);
   headerRow->addWidget(masterCheck_, 0, Qt::AlignVCenter);
   auto *reset = new QToolButton(this);
@@ -70,7 +73,7 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
   reset->setIcon(QIcon(QStringLiteral(":/browser-icons/reset.svg")));
   reset->setIconSize(QSize(17, 17));
   reset->setFixedSize(28, 28);
-  reset->setToolTip(QStringLiteral("Bu site için koruma ayarlarını varsayılana döndür"));
+  reset->setToolTip(I18n::text(QStringLiteral("shield.reset_site")));
   reset->setAccessibleName(reset->toolTip());
   headerRow->addWidget(reset);
   connect(reset, &QToolButton::clicked, this, [this] {
@@ -115,7 +118,7 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
   countLabel_ = new QLabel(QStringLiteral("0"), summaryCard);
   countLabel_->setObjectName(QStringLiteral("adblock-popup-blocked-count"));
   countLabel_->setStyleSheet(QStringLiteral("font-size: 25px; font-weight: 800; color: #ffffff;"));
-  countTextLabel_ = new QLabel(QStringLiteral("izleyici, reklam ve daha fazlası engellendi"), summaryCard);
+  countTextLabel_ = new QLabel(I18n::text(QStringLiteral("shield.blocked_many")), summaryCard);
   countTextLabel_->setStyleSheet(QStringLiteral("font-size: 12px; color: #a0b2c6; line-height: 1.3;"));
   countTextLabel_->setWordWrap(true);
 
@@ -131,10 +134,10 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
   layout->addWidget(noticeLabel_);
 
   // Basic Toggles
-  siteProtectionCheck_ = new GlowToggleSwitch(QStringLiteral("Bu sitede koruma"), this);
+  siteProtectionCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("shield.site_protection")), this);
   siteProtectionCheck_->setObjectName(QStringLiteral("adblock-site-protection-toggle"));
-  adsCheck_ = new GlowToggleSwitch(QStringLiteral("Reklamları engelle"), this);
-  trackersCheck_ = new GlowToggleSwitch(QStringLiteral("İzleyicileri engelle"), this);
+  adsCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("shield.block_ads")), this);
+  trackersCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("shield.block_trackers")), this);
 
   layout->addWidget(siteProtectionCheck_);
   layout->addWidget(adsCheck_);
@@ -180,7 +183,7 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
   gearIcon->setFixedSize(18, 18);
   gearIcon->setPixmap(QIcon(QStringLiteral(":/browser-icons/settings.svg")).pixmap(QSize(16, 16)));
   gearIcon->setAlignment(Qt::AlignCenter);
-  auto *advTitle = new QLabel(QStringLiteral("Gelişmiş seçenekler"), advHeader);
+  auto *advTitle = new QLabel(I18n::text(QStringLiteral("media.advanced_options")), advHeader);
   advTitle->setStyleSheet(QStringLiteral("font-size: 12px; font-weight: 600; color: #d0dbe8;"));
   advancedChevron_ = new QLabel(advHeader);
   advancedChevron_->setFixedSize(18, 18);
@@ -242,9 +245,9 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
 
   // Row A: İzleyicileri & reklamları engelle
   addIcon(0, QStringLiteral(":/browser-icons/privacy.svg"));
-  addLabel(0, QStringLiteral("İzleyicileri & reklamları engelle"));
+  addLabel(0, I18n::text(QStringLiteral("shield.block_trackers_ads")));
   adsModeCombo_ = new QComboBox(advancedContainer_);
-  adsModeCombo_->addItems({QStringLiteral("Standart"), QStringLiteral("Agresif"), QStringLiteral("Kapalı")});
+  adsModeCombo_->addItems({I18n::text(QStringLiteral("common.standard")), I18n::text(QStringLiteral("shield.aggressive")), I18n::text(QStringLiteral("common.off"))});
   adsModeCombo_->setFixedWidth(124);
   advancedGrid->addWidget(adsModeCombo_, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
 
@@ -271,10 +274,10 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
 
   // Row B: Bağlantıları HTTPS'e yükselt
   addIcon(1, QStringLiteral(":/browser-icons/password.svg"));
-  addLabel(1, QStringLiteral("Bağlantıları HTTPS'e yükselt"));
+  addLabel(1, I18n::text(QStringLiteral("shield.upgrade_https")));
   httpsCheck_ = new GlowToggleSwitch(advancedContainer_);
   httpsCheck_->setObjectName(QStringLiteral("adblock-httpsCheck"));
-  prepareToggle(1, httpsCheck_, QStringLiteral("Bağlantıları HTTPS'e yükselt"));
+  prepareToggle(1, httpsCheck_, I18n::text(QStringLiteral("shield.upgrade_https")));
 
   connect(httpsCheck_, &QCheckBox::toggled, this, [this](bool checked) {
     if (!service_ || currentHost_.isEmpty()) return;
@@ -286,10 +289,10 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
 
   // Row C: Script'leri engelle
   addIcon(2, QStringLiteral(":/browser-icons/javascript-slash.svg"));
-  addLabel(2, QStringLiteral("Script'leri engelle"));
+  addLabel(2, I18n::text(QStringLiteral("shield.block_scripts")));
   scriptsCheck_ = new GlowToggleSwitch(advancedContainer_);
   scriptsCheck_->setObjectName(QStringLiteral("adblock-scriptsCheck"));
-  prepareToggle(2, scriptsCheck_, QStringLiteral("Script'leri engelle"));
+  prepareToggle(2, scriptsCheck_, I18n::text(QStringLiteral("shield.block_scripts")));
 
   connect(scriptsCheck_, &QCheckBox::toggled, this, [this](bool checked) {
     if (!service_ || currentHost_.isEmpty()) return;
@@ -301,11 +304,11 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
 
   // Row D: Parmak izi kontrolünü engelle
   addIcon(3, QStringLiteral(":/browser-icons/protected-content.svg"));
-  addLabel(3, QStringLiteral("Parmak izi kontrolünü engelle"));
+  addLabel(3, I18n::text(QStringLiteral("shield.block_fingerprinting")));
   fingerprintCheck_ = new GlowToggleSwitch(advancedContainer_);
   fingerprintCheck_->setObjectName(QStringLiteral("adblock-fingerprintCheck"));
-  fingerprintCheck_->setToolTip(QStringLiteral("Canvas piksel okumasını engeller ve WebGL cihaz bilgisini sınırlar."));
-  prepareToggle(3, fingerprintCheck_, QStringLiteral("Parmak izi kontrolünü engelle"));
+  fingerprintCheck_->setToolTip(I18n::text(QStringLiteral("shield.block_fingerprinting_desc")));
+  prepareToggle(3, fingerprintCheck_, I18n::text(QStringLiteral("shield.block_fingerprinting")));
 
   connect(fingerprintCheck_, &QCheckBox::toggled, this, [this](bool checked) {
     if (!service_ || currentHost_.isEmpty()) return;
@@ -317,9 +320,9 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
 
   // Row E: Üçüncü taraf çerezlerini engelle
   addIcon(4, QStringLiteral(":/browser-icons/cookie.svg"));
-  addLabel(4, QStringLiteral("Üçüncü taraf çerezleri"));
+  addLabel(4, I18n::text(QStringLiteral("settings.site.third_party_cookies")));
   cookieCombo_ = new QComboBox(advancedContainer_);
-  cookieCombo_->addItems({QStringLiteral("Engellendi"), QStringLiteral("Tümüne izin ver"), QStringLiteral("Tümünü engelle")});
+  cookieCombo_->addItems({I18n::text(QStringLiteral("shield.cookies_blocked")), I18n::text(QStringLiteral("shield.cookies_allow_all")), I18n::text(QStringLiteral("shield.cookies_block_all"))});
   cookieCombo_->setFixedWidth(124);
   advancedGrid->addWidget(cookieCombo_, 4, 2, Qt::AlignRight | Qt::AlignVCenter);
 
@@ -335,11 +338,11 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
 
   // Row F: Bu siteyi kapattığımda beni unut
   addIcon(5, QStringLiteral(":/browser-icons/trash.svg"));
-  addLabel(5, QStringLiteral("Bu siteyi kapattığımda beni unut"));
+  addLabel(5, I18n::text(QStringLiteral("shield.forget_me")));
   forgetOnCloseCheck_ = new GlowToggleSwitch(advancedContainer_);
   forgetOnCloseCheck_->setObjectName(QStringLiteral("adblock-forgetOnCloseCheck"));
-  forgetOnCloseCheck_->setToolTip(QStringLiteral("Son site sekmesi kapanınca çerezleri ve bu sayfanın yerel depolamasını temizler."));
-  prepareToggle(5, forgetOnCloseCheck_, QStringLiteral("Bu siteyi kapattığımda beni unut"));
+  forgetOnCloseCheck_->setToolTip(I18n::text(QStringLiteral("shield.forget_me_desc")));
+  prepareToggle(5, forgetOnCloseCheck_, I18n::text(QStringLiteral("shield.forget_me")));
 
   connect(forgetOnCloseCheck_, &QCheckBox::toggled, this, [this](bool checked) {
     if (!service_ || currentHost_.isEmpty()) return;
@@ -350,11 +353,23 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
 
   layout->addWidget(advancedContainer_);
 
+  // The element picker for the current page (disabled where the blocker
+  // is off for the site, or on internal pages).
+  pickElementBtn_ = new QPushButton(I18n::text(QStringLiteral("shield.block_element")), this);
+  pickElementBtn_->setObjectName(QStringLiteral("btn-pick-element"));
+  pickElementBtn_->setMinimumHeight(30);
+  pickElementBtn_->setToolTip(I18n::text(QStringLiteral("shield.block_element_desc")));
+  connect(pickElementBtn_, &QPushButton::clicked, this, [this] {
+    emit pickElementRequested();
+    hide();
+  });
+  layout->addWidget(pickElementBtn_);
+
   // Bottom Buttons: "Listeleri filtrele" & "Genel Ayarlar"
   auto *btnRow = new QHBoxLayout;
   btnRow->setSpacing(8);
 
-  auto *filterListsBtn = new QPushButton(QStringLiteral("Listeleri filtrele"), this);
+  auto *filterListsBtn = new QPushButton(I18n::text(QStringLiteral("blocker.tab_filter_lists")), this);
   filterListsBtn->setObjectName(QStringLiteral("btn-filter-lists"));
   filterListsBtn->setMinimumHeight(30);
   connect(filterListsBtn, &QPushButton::clicked, this, [this] {
@@ -362,7 +377,7 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
     hide();
   });
 
-  auto *settingsBtn = new QPushButton(QStringLiteral("Genel Ayarlar"), this);
+  auto *settingsBtn = new QPushButton(I18n::text(QStringLiteral("shield.global_settings")), this);
   settingsBtn->setObjectName(QStringLiteral("btn-general-settings"));
   settingsBtn->setMinimumHeight(30);
   connect(settingsBtn, &QPushButton::clicked, this, [this] {
@@ -376,7 +391,7 @@ DaliNiraBlockerQuickPopup::DaliNiraBlockerQuickPopup(DaliNiraBlockerService *ser
 
   // Footer Note
   auto *footerNote = new QLabel(
-      QStringLiteral("Bu site bozuk görünüyorsa DaliNira Koruma’yı geçici olarak kapatmayı deneyin."),
+      I18n::text(QStringLiteral("shield.broken_site_hint")),
       this);
   footerNote->setStyleSheet(QStringLiteral("font-size: 10px; color: #718399; margin-top: 3px; margin-bottom: 1px;"));
   footerNote->setAlignment(Qt::AlignCenter);
@@ -402,15 +417,25 @@ void DaliNiraBlockerQuickPopup::updateForHost(const QString &host, quint64 block
                           currentHost_ == QLatin1String("adblock") ||
                           currentHost_ == QLatin1String("blocker");
 
-  hostLabel_->setText(isInternal ? QStringLiteral("Dahili / Boş Sekme") : currentHost_);
+  hostLabel_->setText(isInternal ? I18n::text(QStringLiteral("shield.internal_or_empty_tab")) : currentHost_);
   countLabel_->setText(QString::number(blockedCount_));
   if (blockedBadge_) blockedBadge_->setText(QString::number(blockedCount_));
   if (countTextLabel_) {
-    countTextLabel_->setText(blockedCount_ == 1 ? QStringLiteral("izleyici veya reklam engellendi")
-                                               : QStringLiteral("izleyici, reklam ve daha fazlası engellendi"));
+    countTextLabel_->setText(blockedCount_ == 1 ? I18n::text(QStringLiteral("shield.blocked_one"))
+                                               : I18n::text(QStringLiteral("shield.blocked_many")));
   }
 
   const bool protectionEnabled = service_ && service_->settings()->protectionEnabled();
+
+  if (pickElementBtn_) {
+    const SitePolicy site = service_ && !isInternal ? service_->settings()->sitePolicy(currentHost_) : SitePolicy{};
+    const bool pickable = !isInternal && protectionEnabled && !site.whitelisted && site.adBlocking &&
+                          site.temporaryDisabledUntil <= QDateTime::currentMSecsSinceEpoch();
+    pickElementBtn_->setEnabled(pickable);
+    pickElementBtn_->setToolTip(pickable ? I18n::text(QStringLiteral("shield.block_element_desc"))
+                                : isInternal ? I18n::text(QStringLiteral("blocker.picker_unavailable_page"))
+                                             : I18n::text(QStringLiteral("blocker.picker_unavailable_off")));
+  }
 
   if (isInternal) {
     masterCheck_->setEnabled(false);
@@ -418,8 +443,8 @@ void DaliNiraBlockerQuickPopup::updateForHost(const QString &host, quint64 block
     adsCheck_->setEnabled(false);
     trackersCheck_->setEnabled(false);
     if (advancedContainer_) advancedContainer_->setEnabled(false);
-    statusSubtitleLabel_->setText(QStringLiteral("Dahili tarayıcı sayfası"));
-    noticeLabel_->setText(QStringLiteral("Dahili tarayıcı sayfalarında reklam engelleme devre dışıdır."));
+    statusSubtitleLabel_->setText(I18n::text(QStringLiteral("shield.internal_page")));
+    noticeLabel_->setText(I18n::text(QStringLiteral("shield.internal_page_desc")));
     noticeLabel_->show();
     return;
   }
@@ -428,8 +453,8 @@ void DaliNiraBlockerQuickPopup::updateForHost(const QString &host, quint64 block
     const SitePolicy p = service_->settings()->sitePolicy(currentHost_);
     const bool activeOnSite = protectionEnabled && !p.whitelisted;
 
-    statusSubtitleLabel_->setText(activeOnSite ? QStringLiteral("DaliNira Koruma açık")
-                                               : QStringLiteral("DaliNira Koruma kapalı"));
+    statusSubtitleLabel_->setText(activeOnSite ? I18n::text(QStringLiteral("shield.protection_on"))
+                                               : I18n::text(QStringLiteral("shield.protection_off")));
 
     const QSignalBlocker blocker_masterCheck_(masterCheck_);
     const QSignalBlocker blocker_siteProtectionCheck_(siteProtectionCheck_);
@@ -478,10 +503,10 @@ void DaliNiraBlockerQuickPopup::updateForHost(const QString &host, quint64 block
 
     noticeLabel_->setVisible(!protectionEnabled || p.whitelisted);
     if (!protectionEnabled) {
-      noticeLabel_->setText(QStringLiteral("Reklam engelleyici genel anahtardan kapalı."));
+      noticeLabel_->setText(I18n::text(QStringLiteral("shield.globally_off")));
     } else if (p.whitelisted) {
       noticeLabel_->setText(
-          QStringLiteral("Bu sitede koruma kapalı. Site reklam sunarsa reklamlar gösterilir."));
+          I18n::text(QStringLiteral("shield.site_off")));
     }
 
 
@@ -517,8 +542,8 @@ DaliNiraBlockerShieldButton::DaliNiraBlockerShieldButton(DaliNiraBlockerService 
   setIconSize(QSize(20, 20));
   setFixedSize(30, 30);
   setCursor(Qt::PointingHandCursor);
-  setToolTip(QStringLiteral("DaliNira Koruma (Reklam Engelleyici)"));
-  setAccessibleName(QStringLiteral("Reklam engelleyici kalkanı"));
+  setToolTip(I18n::text(QStringLiteral("toolbar.adblock")));
+  setAccessibleName(I18n::text(QStringLiteral("shield.accessible")));
 
   setStyleSheet(QStringLiteral(
       "QToolButton#adblock-shield-button { background: transparent; border: 0; border-radius: 15px; padding: 2px; }"
@@ -565,6 +590,7 @@ void DaliNiraBlockerShieldButton::showQuickPopup() {
     connect(popup_, &DaliNiraBlockerQuickPopup::openRulesetsRequested, this, &DaliNiraBlockerShieldButton::openRulesetsRequested);
     connect(popup_, &DaliNiraBlockerQuickPopup::openLoggerRequested, this, &DaliNiraBlockerShieldButton::openLoggerRequested);
     connect(popup_, &DaliNiraBlockerQuickPopup::reloadRequested, this, &DaliNiraBlockerShieldButton::reloadRequested);
+    connect(popup_, &DaliNiraBlockerQuickPopup::pickElementRequested, this, &DaliNiraBlockerShieldButton::pickElementRequested);
   }
   popup_->updateForHost(currentHost_, blockedCount_);
   const QPoint pos = mapToGlobal(QPoint(width() - popup_->width(), height() + 4));

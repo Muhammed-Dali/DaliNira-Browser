@@ -22,6 +22,8 @@ class DaliNiraBlockerQuickPopup final : public QFrame {
   void openRulesetsRequested();
   void openLoggerRequested();
   void reloadRequested();
+  // "Block an element" on the current page (the element picker).
+  void pickElementRequested();
 
  protected:
   void showEvent(QShowEvent *event) override;
@@ -42,6 +44,7 @@ class DaliNiraBlockerQuickPopup final : public QFrame {
   QCheckBox *adsCheck_ = nullptr;
   QCheckBox *trackersCheck_ = nullptr;
   QLabel *noticeLabel_ = nullptr;
+  QPushButton *pickElementBtn_ = nullptr;
 
   // Advanced collapsible options
   QWidget *advancedContainer_ = nullptr;
@@ -77,6 +80,7 @@ class DaliNiraBlockerShieldButton final : public QToolButton {
   void openRulesetsRequested();
   void openLoggerRequested();
   void reloadRequested();
+  void pickElementRequested();
 
  protected:
   void paintEvent(QPaintEvent *event) override;

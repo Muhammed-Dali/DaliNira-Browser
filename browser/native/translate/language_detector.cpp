@@ -4,6 +4,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QStringList>
+#include "i18n/language_manager.h"
 
 namespace {
 
@@ -109,10 +110,12 @@ QString detectFromSample(const QString &sample) {
   // Turkish specific characters test
   static const QRegularExpression trSpecial(QStringLiteral("[çğıöşüÇĞİÖŞÜ]"));
   if (trSpecial.match(clean).hasMatch()) {
-    // Has Turkish specific characters
     const QString lower = clean.toLower();
     const QStringList tokens = lower.split(QRegularExpression(QStringLiteral("[\\s\\p{P}\\d]+")), Qt::SkipEmptyParts);
-    if (countMatches(tokens, trWords) > 0 || clean.contains(QStringLiteral("ş")) || clean.contains(QStringLiteral("ğ")) || clean.contains(QStringLiteral("ı"))) {
+    // ç/ö/ü also occur in French/German. Only the genuinely distinctive
+    // Turkish letters are decisive; otherwise require multiple stopwords.
+    static const QRegularExpression trDistinctive(QStringLiteral("[ğışĞİŞ]"));
+    if (trDistinctive.match(clean).hasMatch() || countMatches(tokens, trWords) >= 2) {
       return QStringLiteral("tr");
     }
   }
@@ -160,51 +163,48 @@ QString LanguageDetector::normalizeLanguageCode(QString lang) {
 }
 
 QString LanguageDetector::detectLanguage(const QString &htmlLang, const QString &contentLanguage, const QString &textSample) {
+  const QString sampleLang = detectFromSample(textSample);
+  if (!hasReliableTextSample(textSample)) return {};
+  // Substantial visible text is a stronger signal than frequently stale or
+  // templated metadata. Metadata remains the fallback for shorter documents.
+  if (hasReliableTextSample(textSample) && !sampleLang.isEmpty()) return sampleLang;
+
   const QString normalizedHtml = normalizeLanguageCode(htmlLang);
   if (isValidLanguageCode(normalizedHtml)) return normalizedHtml;
 
   const QString normalizedContent = normalizeLanguageCode(contentLanguage);
   if (isValidLanguageCode(normalizedContent)) return normalizedContent;
 
-  const QString sampleLang = detectFromSample(textSample);
   if (!sampleLang.isEmpty()) return sampleLang;
 
   return {};
 }
 
-QString LanguageDetector::languageDisplayName(const QString &langCode) {
-  const QString normalized = normalizeLanguageCode(langCode);
-  static const QHash<QString, QString> names{
-      {QStringLiteral("tr"), QStringLiteral("Türkçe")},
-      {QStringLiteral("en"), QStringLiteral("İngilizce")},
-      {QStringLiteral("de"), QStringLiteral("Almanca")},
-      {QStringLiteral("fr"), QStringLiteral("Fransızca")},
-      {QStringLiteral("es"), QStringLiteral("İspanyolca")},
-      {QStringLiteral("it"), QStringLiteral("İtalyanca")},
-      {QStringLiteral("ru"), QStringLiteral("Rusça")},
-      {QStringLiteral("ja"), QStringLiteral("Japonca")},
-      {QStringLiteral("zh"), QStringLiteral("Çince")},
-      {QStringLiteral("ar"), QStringLiteral("Arapça")},
-      {QStringLiteral("pt"), QStringLiteral("Portekizce")},
-      {QStringLiteral("nl"), QStringLiteral("Felemenkçe")},
-      {QStringLiteral("pl"), QStringLiteral("Lehçe")},
-      {QStringLiteral("uk"), QStringLiteral("Ukraynaca")},
-      {QStringLiteral("ko"), QStringLiteral("Korece")},
-      {QStringLiteral("az"), QStringLiteral("Azerice")},
-      {QStringLiteral("el"), QStringLiteral("Yunanca")},
-      {QStringLiteral("hi"), QStringLiteral("Hintçe")},
-      {QStringLiteral("sv"), QStringLiteral("İsveççe")},
-      {QStringLiteral("no"), QStringLiteral("Norveççe")},
-      {QStringLiteral("da"), QStringLiteral("Danca")},
-      {QStringLiteral("fi"), QStringLiteral("Fince")},
-      {QStringLiteral("cs"), QStringLiteral("Çekçe")},
-      {QStringLiteral("ro"), QStringLiteral("Rumence")},
-      {QStringLiteral("hu"), QStringLiteral("Macarca")},
-      {QStringLiteral("id"), QStringLiteral("Endonezce")},
-      {QStringLiteral("vi"), QStringLiteral("Vietnamca")}
-  };
+QString LanguageDetector::detectTextLanguage(const QString &textSample) {
+  return detectFromSample(textSample);
+}
 
-  return names.value(normalized, normalized.toUpper());
+bool LanguageDetector::hasReliableTextSample(const QString &textSample) {
+  const QStringList words = textSample.trimmed().split(
+      QRegularExpression(QStringLiteral("[\\s\\p{P}\\d]+")), Qt::SkipEmptyParts);
+  return words.size() >= 8 && textSample.trimmed().size() >= 48;
+}
+
+QString LanguageDetector::languageDisplayName(const QString &langCode) {
+  // Language names follow the application language (catalog keys
+  // language.name.<code>[_<region>]); a regional name wins when catalogued.
+  auto &languages = dalinira::i18n::LanguageManager::instance();
+  QString regional = langCode.trimmed().toLower();
+  regional.replace(QLatin1Char('-'), QLatin1Char('_'));
+  const QStringList candidates{regional, normalizeLanguageCode(langCode)};
+  for (const QString &code : candidates) {
+    if (code.isEmpty()) continue;
+    const QString key = QStringLiteral("language.name.") + code;
+    const QString name = languages.translate(key);
+    if (name != key) return name;
+  }
+  const QString normalized = normalizeLanguageCode(langCode);
+  return normalized.toUpper();
 }
 
 bool LanguageDetector::isTranslatable(const QString &detectedLang, const QString &targetLang) {

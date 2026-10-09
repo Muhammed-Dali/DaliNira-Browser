@@ -90,6 +90,8 @@ class CredentialVault final : public QObject {
   QString storageId() const;
   QByteArray deviceSecret() const;
   bool importDeviceSecret(const QByteArray &secret);
+  bool exportDeviceSecret(QByteArray *secret);
+  QString canonicalKeyringId();
 
   bool isUnlockRateLimited() const;
   int remainingUnlockCooldownSeconds() const;
@@ -104,7 +106,10 @@ class CredentialVault final : public QObject {
  private:
   struct Record { QString id; qint64 createdAt = 0; qint64 updatedAt = 0; QByteArray encrypted; QByteArray nonce; QByteArray tag; };
   bool loadEnvelope();
+  bool loadEnvelopeFromPath(const QString &candidate);
   bool persist();
+  QByteArray collectionAuthenticator() const;
+  bool validateDecryptedCollection() const;
   bool decryptRecord(const Record &record, CredentialSecret *secret) const;
   bool encryptRecord(Record *record, const CredentialSecret &secret);
   bool setError(const QString &error) const;
@@ -117,13 +122,15 @@ class CredentialVault final : public QObject {
   void recordFailedUnlockAttempt();
   qint64 nowEpochMs() const;
 
-  static QString originHash(const QString &canonicalOrigin);
+  QString originToken(const QString &canonicalOrigin) const;
   void loadOriginIndex();
   void persistOriginIndex();
   void clearPersistedOriginIndex();
 
   QString vaultKeyringId() const;
+  QString legacyNosaltKeyringId() const;
   bool obtainDeviceSecret(QByteArray *outSecret) const;
+  bool recoverLegacyDeviceSecret(const QString &masterPassword, QByteArray *outSecret);
 
   QString directory_;
   QString storageId_;
@@ -138,6 +145,7 @@ class CredentialVault final : public QObject {
   QByteArray wrappedKey_;
   QByteArray wrappedNonce_;
   QByteArray wrappedTag_;
+  QByteArray collectionTag_;
   mutable QByteArray dataKey_;
   QVector<Record> records_;
   mutable QSet<QString> storedOriginHashes_;

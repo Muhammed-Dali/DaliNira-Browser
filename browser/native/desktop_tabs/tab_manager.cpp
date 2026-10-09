@@ -1,5 +1,7 @@
 #include "tab_manager.h"
 #include "tab_performance_manager.h"
+#include "tab_lifecycle_adapter.h"
+#include "engine/engine_view.h"
 
 #include <QSet>
 #include <QWebEnginePage>
@@ -9,7 +11,12 @@
 #include <algorithm>
 
 TabManager::TabManager(QObject *parent)
-    : QObject(parent), performanceManager_(std::make_unique<dalinira::TabPerformanceManager>(this, nullptr)) {}
+    : QObject(parent),
+      performanceManager_(std::make_unique<dalinira::TabPerformanceManager>(this, nullptr)),
+      resourceModel_(std::make_unique<dalinira::TabResourceModel>()) {
+  connect(performanceManager_.get(), &dalinira::TabPerformanceManager::tabAboutToSleep, this,
+          [this](TabId id) { resourceModel_->noteAboutToSleep(id, dalinira::TabResourceModel::inputs(*this)); });
+}
 
 TabManager::~TabManager() = default;
 
@@ -27,6 +34,7 @@ TabManager::TabId TabManager::registerTab(QWebEngineView *view, QObject *ownerWi
   record.content = view;
   record.view = view;
   record.page = view->page();
+  record.lifecycle = dalinira::createWebEnginePageLifecycleAdapter(view->page(), this);
   record.ownerWindow = ownerWindow;
   record.title = title;
   record.url = view->url();
@@ -37,6 +45,33 @@ TabManager::TabId TabManager::registerTab(QWebEngineView *view, QObject *ownerWi
   viewIndex_.insert(view, record.id);
   contentIndex_.insert(view, record.id);
   connect(view, &QObject::destroyed, this, [this, id = record.id] { remove(id); });
+  emit tabRegistered(record.id, TabKind::Web);
+  return record.id;
+}
+
+TabManager::TabId TabManager::registerEngineTab(QWidget *content, QObject *ownerWindow, bool detached,
+                                                const QString &title, const QUrl &url) {
+  if (!content || !ownerWindow) return {};
+  if (const TabId known = idForContent(content); !known.isNull()) return known;
+
+  int nextOrder = 0;
+  for (const TabRecord &record : records_) {
+    if (record.ownerWindow == ownerWindow) nextOrder = std::max(nextOrder, record.order + 1);
+  }
+  TabRecord record;
+  record.id = QUuid::createUuid();
+  record.kind = TabKind::Web;
+  record.content = content;
+  record.lifecycle = dalinira::createEngineViewLifecycleAdapter(qobject_cast<dalinira::engine::EngineView *>(content), this);
+  record.ownerWindow = ownerWindow;
+  record.title = title;
+  record.url = url;
+  record.detached = detached;
+  record.capabilities = {true, true, true, true};
+  record.order = nextOrder;
+  records_.insert(record.id, record);
+  contentIndex_.insert(content, record.id);
+  connect(content, &QObject::destroyed, this, [this, id = record.id] { remove(id); });
   emit tabRegistered(record.id, TabKind::Web);
   return record.id;
 }
@@ -70,7 +105,9 @@ TabManager::TabId TabManager::registerInternalTab(QWidget *content, QObject *own
 
 bool TabManager::transfer(TabId id, QObject *ownerWindow, bool detached) {
   auto it = records_.find(id);
-  if (it == records_.end() || !ownerWindow || !it->view || !it->page) return false;
+  // Any registered tab moves: Chromium pages, engine (WebKit) pages and
+  // internal pages alike.
+  if (it == records_.end() || !ownerWindow || !it->content) return false;
   if (detached && !it->capabilities.detachable) return false;
   for (auto other = records_.begin(); other != records_.end(); ++other) {
     if (other->ownerWindow == ownerWindow) other->active = false;
@@ -106,8 +143,10 @@ bool TabManager::remove(TabId id) {
   const TabId removedId = id;
   viewIndex_.remove(it->view);
   contentIndex_.remove(it->content);
+  QPointer<dalinira::TabLifecycleAdapter> lifecycle = it->lifecycle;
   records_.erase(it);
   emit tabRemoved(removedId);
+  delete lifecycle.data();
   return true;
 }
 
@@ -226,7 +265,14 @@ bool TabManager::validate(QString *reason) const {
       return false;
     }
     contents.insert(record.content);
-    if (record.kind == TabKind::Web && (!record.view || !record.page || record.view != record.content)) {
+    // Chromium tabs carry their QWebEngineView/QWebEnginePage; other engines'
+    // tabs are the engine view itself and have only a lifecycle adapter.
+    const bool engineTab = record.kind == TabKind::Web && !record.view && !record.page;
+    if (engineTab && !record.lifecycle) {
+      if (reason) *reason = "engine tab has no lifecycle";
+      return false;
+    }
+    if (record.kind == TabKind::Web && !engineTab && (!record.view || !record.page || record.view != record.content)) {
       if (reason) *reason = "web tab has missing or mismatched view/page";
       return false;
     }
@@ -234,7 +280,7 @@ bool TabManager::validate(QString *reason) const {
       if (reason) *reason = "internal tab has web state or missing identity";
       return false;
     }
-    if (record.kind == TabKind::Web && record.view->page() != record.page) {
+    if (record.kind == TabKind::Web && !engineTab && record.view->page() != record.page) {
       if (reason) *reason = "tab record page does not match the live view page";
       return false;
     }
@@ -252,6 +298,10 @@ bool TabManager::validate(QString *reason) const {
     }
   }
   return true;
+}
+
+dalinira::TabResourceSnapshot TabManager::resourceSnapshot(TabId id) {
+  return resourceModel_->snapshot(id, dalinira::TabResourceModel::inputs(*this));
 }
 
 dalinira::TabPerformanceManager *TabManager::performanceManager() const {

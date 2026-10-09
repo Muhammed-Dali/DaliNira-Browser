@@ -4,6 +4,7 @@
 #include <QPair>
 #include <QString>
 #include <QVector>
+#include "i18n/i18n.h"
 
 enum class AudioDeviceType {
   Monitor,
@@ -28,13 +29,13 @@ struct AudioDeviceInfo {
   QString displayTitle() const {
     QString title = label.isEmpty() ? id : label;
     if (isDefaultMonitor) {
-      return QStringLiteral("%1 [Sistem Sesi / Monitör]").arg(title);
+      return I18n::text(QStringLiteral("audio.device_system_monitor")).arg(title);
     }
     if (isMonitor) {
-      return QStringLiteral("%1 [Monitör]").arg(title);
+      return I18n::text(QStringLiteral("audio.device_monitor")).arg(title);
     }
     if (isDefault) {
-      return QStringLiteral("%1 [Varsayılan Mikrofon]").arg(title);
+      return I18n::text(QStringLiteral("audio.device_default_mic")).arg(title);
     }
     return title;
   }
@@ -53,19 +54,19 @@ struct AutoRouteInfo {
   QString summaryDescription() const {
     if (hasSystemMonitor && hasMicrophone) {
       if (!cardName.isEmpty()) {
-        return QStringLiteral("Aktif: %1 (Sistem sesi + mikrofon)").arg(cardName);
+        return I18n::text(QStringLiteral("audio.device_active_both")).arg(cardName);
       }
-      return QStringLiteral("Aktif: %1 + %2").arg(
-          systemMonitorLabel.isEmpty() ? QStringLiteral("Sistem Sesi") : systemMonitorLabel,
-          microphoneLabel.isEmpty() ? QStringLiteral("Mikrofon") : microphoneLabel);
+      return I18n::text(QStringLiteral("audio.device_active_pair")).arg(
+          systemMonitorLabel.isEmpty() ? I18n::text(QStringLiteral("audio.system_audio_label")) : systemMonitorLabel,
+          microphoneLabel.isEmpty() ? I18n::text(QStringLiteral("settings.site.microphone")) : microphoneLabel);
     }
     if (hasSystemMonitor) {
-      return QStringLiteral("Aktif: %1 (Sistem sesi)").arg(systemMonitorLabel);
+      return I18n::text(QStringLiteral("audio.device_active_system")).arg(systemMonitorLabel);
     }
     if (hasMicrophone) {
-      return QStringLiteral("Aktif: %1 (Mikrofon)").arg(microphoneLabel);
+      return I18n::text(QStringLiteral("audio.device_active_mic")).arg(microphoneLabel);
     }
-    return QStringLiteral("Aktif: Varsayılan ses cihazı");
+    return I18n::text(QStringLiteral("audio.device_active_default"));
   }
 };
 

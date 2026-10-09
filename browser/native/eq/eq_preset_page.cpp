@@ -17,16 +17,21 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QSet>
 #include <QStyledItemDelegate>
 #include <QStyleOptionViewItem>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include "i18n/i18n.h"
 
 namespace {
 QString groupName(const QString &id) {
-  static const QHash<QString, QString> names{{"all", "Tümü"}, {"bass", "Bas"}, {"treble", "Tiz"}, {"vocal", "Vokal"}, {"jazz", "Caz"}, {"classical", "Klasik"}, {"electronic", "Elektronik"}, {"pop", "Pop"}, {"rock", "Rock"}, {"vshape", "V-Shape"}, {"flat", "Düz"}, {"other", "Diğer"}};
-  return names.value(id, id);
+  static const QSet<QString> known{QStringLiteral("all"), QStringLiteral("bass"), QStringLiteral("treble"),
+                                   QStringLiteral("vocal"), QStringLiteral("jazz"), QStringLiteral("classical"),
+                                   QStringLiteral("electronic"), QStringLiteral("pop"), QStringLiteral("rock"),
+                                   QStringLiteral("vshape"), QStringLiteral("flat"), QStringLiteral("other")};
+  return known.contains(id) ? I18n::text(QStringLiteral("eq.group_") + id) : id;
 }
 
 QPainterPath smoothPath(const QVector<QPointF> &points) {
@@ -127,8 +132,8 @@ class PresetDelegate final : public QStyledItemDelegate {
       return true;
     }
     QMenu menu;
-    QAction *copyName = menu.addAction(QStringLiteral("Preset adını kopyala"));
-    QAction *copyId = menu.addAction(QStringLiteral("Dosya kimliğini kopyala"));
+    QAction *copyName = menu.addAction(I18n::text(QStringLiteral("eq.copy_preset_name")));
+    QAction *copyId = menu.addAction(I18n::text(QStringLiteral("eq.copy_file_id")));
     QAction *chosen = menu.exec(mouse->globalPosition().toPoint());
     if (chosen == copyName) QApplication::clipboard()->setText(preset.name);
     if (chosen == copyId) QApplication::clipboard()->setText(preset.id);
@@ -150,10 +155,10 @@ EqPresetPage::EqPresetPage(WebAudioEffectsController *controller, QWidget *paren
     selectedId_ = QStringLiteral("__flat__");
   }
   auto *layout = new QVBoxLayout(this); layout->setContentsMargins(14, 16, 14, 12); layout->setSpacing(10);
-  auto *title = new QLabel(QStringLiteral("Hazır Ayarlar"), this); title->setObjectName(QStringLiteral("eq-preset-title")); layout->addWidget(title);
+  auto *title = new QLabel(I18n::text(QStringLiteral("audio.presets")), this); title->setObjectName(QStringLiteral("eq-preset-title")); layout->addWidget(title);
   auto *rule = new QFrame(this); rule->setObjectName(QStringLiteral("eq-preset-rule")); rule->setFixedHeight(1); layout->addWidget(rule);
-  search_ = new QLineEdit(this); search_->setObjectName(QStringLiteral("eq-preset-search")); search_->setPlaceholderText(QStringLiteral("⌕  Hazır ayar ara... (örn. bass, v-shape, vocal)")); search_->setClearButtonEnabled(true); layout->addWidget(search_);
-  auto *modes = new QHBoxLayout; fullButton_ = new QPushButton(QStringLiteral("Tam"), this); balancedButton_ = new QPushButton(QStringLiteral("Dengeli"), this); minimumButton_ = new QPushButton(QStringLiteral("Minimum"), this);
+  search_ = new QLineEdit(this); search_->setObjectName(QStringLiteral("eq-preset-search")); search_->setPlaceholderText(I18n::text(QStringLiteral("eq.search_placeholder"))); search_->setClearButtonEnabled(true); layout->addWidget(search_);
+  auto *modes = new QHBoxLayout; fullButton_ = new QPushButton(I18n::text(QStringLiteral("eq.mode_full")), this); balancedButton_ = new QPushButton(I18n::text(QStringLiteral("common.balanced")), this); minimumButton_ = new QPushButton(I18n::text(QStringLiteral("eq.mode_minimum")), this);
   for (QPushButton *button : {fullButton_, balancedButton_, minimumButton_}) { button->setCheckable(true); button->setObjectName(QStringLiteral("eq-preset-mode")); modes->addWidget(button); } modes->addStretch(); layout->addLayout(modes);
   performanceHint_ = new QLabel(this); performanceHint_->setObjectName(QStringLiteral("eq-preset-hint")); layout->addWidget(performanceHint_);
   group_ = new QComboBox(this);
@@ -165,12 +170,12 @@ EqPresetPage::EqPresetPage(WebAudioEffectsController *controller, QWidget *paren
     }
     group_->addItem(QStringLiteral("%1 (%2)").arg(groupName(id)).arg(count), id);
   }
-  group_->setToolTip(QStringLiteral("Kategori seçildiğinde marka/model araması temizlenir."));
+  group_->setToolTip(I18n::text(QStringLiteral("eq.category_clears_search")));
   layout->addWidget(group_, 0, Qt::AlignLeft);
   status_ = new QLabel(this); status_->setObjectName(QStringLiteral("eq-preset-status")); layout->addWidget(status_);
   list_ = new QListView(this); list_->setObjectName(QStringLiteral("eq-preset-list")); list_->setUniformItemSizes(true); list_->setSelectionMode(QAbstractItemView::SingleSelection); list_->setItemDelegate(new PresetDelegate(this)); list_->setModel(new PresetModel(this)); layout->addWidget(list_, 1);
   auto *footer = new QHBoxLayout; footer->addStretch();
-  auto *ok = new QPushButton(QStringLiteral("Kaydet"), this); ok->setObjectName(QStringLiteral("eq-preset-ok")); ok->setFixedSize(112, 36); footer->addWidget(ok); layout->addLayout(footer);
+  auto *ok = new QPushButton(I18n::text(QStringLiteral("common.save")), this); ok->setObjectName(QStringLiteral("eq-preset-ok")); ok->setFixedSize(112, 36); footer->addWidget(ok); layout->addLayout(footer);
   group_->setMinimumWidth(172);
   setStyleSheet(QStringLiteral("#eq-preset-page{background:#030303}#eq-preset-title{color:#edf4f7;font-size:28px;font-weight:800}#eq-preset-rule{background:#00aeca}#eq-preset-search,#eq-preset-group{background:#090b0d;border:1px solid #2c363d;border-radius:20px;padding:10px;color:#e8f4f5;font-size:14px}#eq-preset-mode{border:1px solid #2d343a;border-radius:16px;padding:6px 14px;background:#090b0d;color:#e6edf2}#eq-preset-mode:checked{background:#083941;border-color:#18bfd0}#eq-preset-hint,#eq-preset-status{color:#a4b0b9}#eq-preset-list{background:#050607;border:1px solid #202a30;border-radius:12px}#eq-preset-ok{background:#20d7bd;color:#001b1c;font-size:14px;font-weight:800;border:0;border-radius:9px;padding:0 18px}#eq-preset-ok:hover{background:#35e4c9}#eq-preset-ok:pressed{background:#18bda7}"));
   connect(search_, &QLineEdit::textChanged, this, [this] { applyFilter(); });
@@ -213,12 +218,12 @@ void EqPresetPage::commit() {
     // son kaydedilen ayara geri dönülür.
     originalBands_ = preset.bands;
     committed_ = false;
-    status_->setText(QStringLiteral("Kaydedildi: %1").arg(preset.name));
+    status_->setText(I18n::text(QStringLiteral("eq.saved")).arg(preset.name));
     return;
   }
 }
 void EqPresetPage::rollback() { if (!committed_ && controller_) controller_->previewEqualizerBands(originalBands_); }
-void EqPresetPage::updateStatus() { status_->setText(QStringLiteral("Gösterilen: %1 / %2 • Grup: %3").arg(visible_.size()).arg(repository_.presets().size()).arg(groupName(group_->currentData().toString()))); }
+void EqPresetPage::updateStatus() { status_->setText(I18n::text(QStringLiteral("eq.status")).arg(visible_.size()).arg(repository_.presets().size()).arg(groupName(group_->currentData().toString()))); }
 
 void EqPresetPage::setPerformanceMode(int mode) {
   performanceMode_ = std::clamp(mode, 0, 2);
@@ -227,9 +232,9 @@ void EqPresetPage::setPerformanceMode(int mode) {
   fullButton_->setChecked(performanceMode_ == 0);
   balancedButton_->setChecked(performanceMode_ == 1);
   minimumButton_->setChecked(performanceMode_ == 2);
-  performanceHint_->setText(performanceMode_ == 0 ? QStringLiteral("Tam mod: beş katmanlı gerçek response önizlemesi kullanılır.")
-      : performanceMode_ == 1 ? QStringLiteral("Dengeli mod: animasyonlar sadeleşir, performans daha stabildir.")
-      : QStringLiteral("Minimum mod: iki response katmanı ile çizim maliyeti azaltılır."));
+  performanceHint_->setText(performanceMode_ == 0 ? I18n::text(QStringLiteral("eq.mode_full_desc"))
+      : performanceMode_ == 1 ? I18n::text(QStringLiteral("eq.mode_balanced_desc"))
+      : I18n::text(QStringLiteral("eq.mode_minimum_desc")));
   list_->setUniformItemSizes(performanceMode_ != 0);
   QSettings().setValue(QStringLiteral("audioEffects/web/eqPresets/performanceMode"), performanceMode_);
   if (auto *model = static_cast<PresetModel *>(list_->model())) model->reset();

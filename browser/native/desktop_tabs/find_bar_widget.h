@@ -7,6 +7,8 @@
 #include <QToolButton>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QSize>
+#include <QFrame>
 
 namespace dalinira::desktop_tabs {
 
@@ -23,6 +25,8 @@ class FindBarWidget : public QWidget {
   void setMatchCount(int current, int total);
   void clearMatchCount();
   void focusAndSelectAll();
+  void refreshAppearance();
+  QSize sizeHint() const override;
 
  signals:
   void findRequested(const QString &text, bool forward, bool caseSensitive);
@@ -32,6 +36,9 @@ class FindBarWidget : public QWidget {
  protected:
   bool eventFilter(QObject *watched, QEvent *event) override;
   void keyPressEvent(QKeyEvent *event) override;
+  void changeEvent(QEvent *event) override;
+  void resizeEvent(QResizeEvent *event) override;
+  void showEvent(QShowEvent *event) override;
 
  private slots:
   void onTextChanged(const QString &text);
@@ -41,13 +48,20 @@ class FindBarWidget : public QWidget {
 
  private:
   void setupUi();
-  void applyStyle();
+  void applyStyle(bool force = true);
+  void retranslateUi();
+  void updateNavigationState();
+  void updateNativeMask();
 
   QLineEdit *searchEdit_ = nullptr;
   QLabel *matchCountLabel_ = nullptr;
   QToolButton *prevBtn_ = nullptr;
   QToolButton *nextBtn_ = nullptr;
   QToolButton *caseBtn_ = nullptr;
+  QFrame *divider_ = nullptr;
+  bool styledDark_ = false;
+  bool styled_ = false;
+  bool applyingStyle_ = false;
   QToolButton *closeBtn_ = nullptr;
 };
 

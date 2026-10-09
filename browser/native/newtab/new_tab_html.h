@@ -13,9 +13,9 @@ QString newTabHtml(const QString &defaultEngine,
                    quint64 totalBlockedCount = 0,
                    int recentDownloadCount = 0,
                    quint64 sessionBlockedCount = 0,
-                   bool showDownloadsCard = true,
-                   bool showBlockedCard = true,
-                   const QString &blockedCounterMode = QStringLiteral("all_time"),
+                   bool showDownloadsCard = false,
+                   bool showBlockedCard = false,
+                   const QString &blockedCounterMode = QStringLiteral("session"),
                    const QString &managedBackgroundCapability = QString{});
 QString incognitoNewTabHtml(const QString &defaultEngine);
 QString newTabTopSitesUpdateScript(const QJsonArray &frequentSites,

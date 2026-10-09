@@ -21,10 +21,12 @@ class VaultUnlockDialog : public QDialog {
   explicit VaultUnlockDialog(CredentialVaultManager *vaultManager,
                              const QString &canonicalOrigin = {},
                              QWidget *parent = nullptr,
-                             Purpose purpose = Purpose::Unlock);
+                             Purpose purpose = Purpose::Unlock,
+                             const QString &vaultId = {});
   ~VaultUnlockDialog() override;
 
   QString canonicalOrigin() const { return canonicalOrigin_; }
+  QString vaultId() const { return vaultId_; }
   Purpose purpose() const { return purpose_; }
   void setCanonicalOrigin(const QString &origin);
 
@@ -60,6 +62,7 @@ class VaultUnlockDialog : public QDialog {
 
   CredentialVaultManager *vaultManager_ = nullptr;
   QString canonicalOrigin_;
+  QString vaultId_;
   Purpose purpose_ = Purpose::Unlock;
   bool isChecking_ = false;
 

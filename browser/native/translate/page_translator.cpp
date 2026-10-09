@@ -2,23 +2,41 @@
 #include "language_detector.h"
 #include "translate_service.h"
 #include "translate_engine_script.h"
+#include "engine/engine_view.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QWebEnginePage>
 #include <QWebEngineScript>
+#include "i18n/i18n.h"
 
 namespace {
 constexpr int kMaxBatchSize = 40;
 constexpr int kMutationPollIntervalMs = 400;
+
+QVariantMap resultMap(const QVariant &result) {
+  if (result.metaType().id() == QMetaType::QString) {
+    QJsonParseError error;
+    const QJsonDocument doc = QJsonDocument::fromJson(result.toString().toUtf8(), &error);
+    return error.error == QJsonParseError::NoError && doc.isObject()
+        ? doc.object().toVariantMap() : QVariantMap{};
+  }
+  return result.toMap();
+}
 }
 
 PageTranslator::PageTranslator(QWebEngineView *view, TranslateService *service, QObject *parent)
     : QObject(parent ? parent : static_cast<QObject *>(view)), view_(view), service_(service) {
-  if (service_ && !service_->defaultTargetLanguage().isEmpty()) {
+  if (service_ && !service_->defaultTargetLanguage().isEmpty())
     targetLanguage_ = service_->defaultTargetLanguage();
-  }
+}
+
+PageTranslator::PageTranslator(dalinira::engine::EngineView *view,
+                               TranslateService *service, QObject *parent)
+    : QObject(parent ? parent : static_cast<QObject *>(view)), engineView_(view), service_(service) {
+  if (service_ && !service_->defaultTargetLanguage().isEmpty())
+    targetLanguage_ = service_->defaultTargetLanguage();
 }
 
 PageTranslator::~PageTranslator() {
@@ -46,14 +64,34 @@ uint64_t PageTranslator::currentGeneration() const {
 }
 
 void PageTranslator::ensureScriptInjected() {
-  if (!view_ || !view_->page()) return;
-  view_->page()->runJavaScript(translateEngineScript(), QWebEngineScript::ApplicationWorld);
+  if (!hasPage()) return;
+  runJavaScript(translateEngineScript());
+}
+
+bool PageTranslator::hasPage() const {
+  return (view_ && view_->page()) || engineView_;
+}
+
+QUrl PageTranslator::pageUrl() const {
+  return view_ ? view_->url() : (engineView_ ? engineView_->url() : QUrl{});
+}
+
+void PageTranslator::runJavaScript(
+    const QString &script, std::function<void(const QVariant &)> callback) {
+  if (view_ && view_->page()) {
+    if (callback) view_->page()->runJavaScript(script, QWebEngineScript::ApplicationWorld, std::move(callback));
+    else view_->page()->runJavaScript(script, QWebEngineScript::ApplicationWorld);
+  } else if (engineView_) {
+    engineView_->runJavaScript(script, std::move(callback));
+  } else if (callback) {
+    callback(QVariant{});
+  }
 }
 
 void PageTranslator::detectLanguage() {
-  if (!view_ || !view_->page()) return;
+  if (!hasPage()) return;
 
-  const QUrl url = view_->url();
+  const QUrl url = pageUrl();
   if (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https")) {
     reset();
     return;
@@ -63,14 +101,13 @@ void PageTranslator::detectLanguage() {
 
   const uint64_t generation = currentGeneration_;
   QPointer<PageTranslator> guardedThis(this);
-  view_->page()->runJavaScript(
-      QStringLiteral("window.__daliniraTranslate ? window.__daliniraTranslate.detect() : null;"),
-      QWebEngineScript::ApplicationWorld,
+  runJavaScript(
+      QStringLiteral("window.__daliniraTranslate ? JSON.stringify(window.__daliniraTranslate.detect()) : null;"),
       [guardedThis, generation](const QVariant &result) {
         if (!guardedThis || guardedThis->currentGeneration_ != generation) return;
         if (!result.isValid() || result.isNull()) return;
 
-        const QVariantMap map = result.toMap();
+        const QVariantMap map = resultMap(result);
         const QString htmlLang = map.value(QStringLiteral("htmlLang")).toString();
         const QString metaLang = map.value(QStringLiteral("metaLang")).toString();
         const QString sample = map.value(QStringLiteral("sampleText")).toString();
@@ -86,7 +123,11 @@ void PageTranslator::detectLanguage() {
           guardedThis->state_ = State::Detected;
           emit guardedThis->languageDetected(detected, guardedThis->targetLanguage_);
           emit guardedThis->stateChanged(guardedThis->state_);
-          if (guardedThis->service_ && guardedThis->service_->shouldAutoTranslate(detected)) {
+          if (!guardedThis->pendingManualTarget_.isEmpty()) {
+            const QString pendingTarget = guardedThis->pendingManualTarget_;
+            guardedThis->pendingManualTarget_.clear();
+            guardedThis->translatePage(pendingTarget);
+          } else if (guardedThis->service_ && guardedThis->service_->shouldAutoTranslate(detected)) {
             guardedThis->translatePage(guardedThis->targetLanguage_);
           }
         }
@@ -94,13 +135,19 @@ void PageTranslator::detectLanguage() {
 }
 
 void PageTranslator::translatePage(const QString &targetLang) {
-  if (!view_ || !view_->page() || !service_) return;
+  if (!hasPage() || !service_) return;
   if (!targetLang.isEmpty()) targetLanguage_ = targetLang;
+  if (sourceLanguage_.isEmpty()) {
+    pendingManualTarget_ = targetLanguage_;
+    detectLanguage();
+    return;
+  }
 
   stopDynamicMutationWatcher();
 
   state_ = State::Translating;
   lastError_.clear();
+  pendingManualTarget_.clear();
   emit stateChanged(state_);
 
   ensureScriptInjected();
@@ -109,23 +156,22 @@ void PageTranslator::translatePage(const QString &targetLang) {
   QPointer<PageTranslator> guardedThis(this);
 
   const QString extractCall = QStringLiteral(
-      "window.__daliniraTranslate ? window.__daliniraTranslate.extractNodes(%1) : null;")
+      "window.__daliniraTranslate ? JSON.stringify(window.__daliniraTranslate.extractNodes(%1)) : null;")
       .arg(QString::fromUtf8(QJsonDocument(QJsonObject{{QStringLiteral("lang"), targetLanguage_}}).toJson(QJsonDocument::Compact)));
 
-  view_->page()->runJavaScript(
+  runJavaScript(
       extractCall,
-      QWebEngineScript::ApplicationWorld,
       [guardedThis, generation](const QVariant &result) {
         if (!guardedThis || guardedThis->currentGeneration_ != generation) return;
         if (!result.isValid() || result.isNull()) {
           guardedThis->state_ = State::Error;
-          guardedThis->lastError_ = QStringLiteral("Sayfa metinleri ayıklanamadı.");
+          guardedThis->lastError_ = I18n::text(QStringLiteral("translate.extract_failed"));
           emit guardedThis->translationFinished(false, guardedThis->lastError_);
           emit guardedThis->stateChanged(guardedThis->state_);
           return;
         }
 
-        const QVariantList nodes = result.toMap().value(QStringLiteral("nodes")).toList();
+        const QVariantList nodes = resultMap(result).value(QStringLiteral("nodes")).toList();
         QList<BatchItem> items;
         items.reserve(nodes.size());
 
@@ -147,13 +193,11 @@ void PageTranslator::dispatchTranslationBatches(const QList<BatchItem> &items, u
   if (items.isEmpty()) {
     if (!isDynamic) {
       state_ = State::Translated;
-      if (view_ && view_->page()) {
+      if (hasPage()) {
         const QString startObsCall = QStringLiteral(
             "window.__daliniraTranslate ? window.__daliniraTranslate.startObserving(%1) : null;")
             .arg(QString::fromUtf8(QJsonDocument(QJsonObject{{QStringLiteral("lang"), targetLanguage_}}).toJson(QJsonDocument::Compact)));
-        view_->page()->runJavaScript(
-            startObsCall,
-            QWebEngineScript::ApplicationWorld);
+        runJavaScript(startObsCall);
       }
       startDynamicMutationWatcher();
       emit translationFinished(true, QString());
@@ -198,7 +242,7 @@ void PageTranslator::dispatchTranslationBatches(const QList<BatchItem> &items, u
               *hasFailed = true;
               if (!isDynamic) {
                 guardedThis->state_ = State::Error;
-                guardedThis->lastError_ = err.isEmpty() ? QStringLiteral("Çeviri servisi hatası.") : err;
+                guardedThis->lastError_ = err.isEmpty() ? I18n::text(QStringLiteral("translate.service_error")) : err;
                 emit guardedThis->translationFinished(false, guardedThis->lastError_);
                 emit guardedThis->stateChanged(guardedThis->state_);
               } else {
@@ -224,9 +268,7 @@ void PageTranslator::dispatchTranslationBatches(const QList<BatchItem> &items, u
           const QString jsCall = QStringLiteral("window.__daliniraTranslate ? window.__daliniraTranslate.applyTranslations(%1) : null;")
                                      .arg(QString::fromUtf8(QJsonDocument(updates).toJson(QJsonDocument::Compact)));
 
-          if (guardedThis->view_ && guardedThis->view_->page()) {
-            guardedThis->view_->page()->runJavaScript(jsCall, QWebEngineScript::ApplicationWorld);
-          }
+          guardedThis->runJavaScript(jsCall);
 
           (*remaining)--;
           if (*remaining == 0 && !*hasFailed) {
@@ -234,13 +276,11 @@ void PageTranslator::dispatchTranslationBatches(const QList<BatchItem> &items, u
               guardedThis->isDynamicTranslating_ = false;
             } else {
               guardedThis->state_ = State::Translated;
-              if (guardedThis->view_ && guardedThis->view_->page()) {
+              if (guardedThis->hasPage()) {
                 const QString startObsCall = QStringLiteral(
                     "window.__daliniraTranslate ? window.__daliniraTranslate.startObserving(%1) : null;")
                     .arg(QString::fromUtf8(QJsonDocument(QJsonObject{{QStringLiteral("lang"), guardedThis->targetLanguage_}}).toJson(QJsonDocument::Compact)));
-                guardedThis->view_->page()->runJavaScript(
-                    startObsCall,
-                    QWebEngineScript::ApplicationWorld);
+                guardedThis->runJavaScript(startObsCall);
               }
               guardedThis->startDynamicMutationWatcher();
               emit guardedThis->translationFinished(true, QString());
@@ -269,19 +309,18 @@ void PageTranslator::stopDynamicMutationWatcher() {
 }
 
 void PageTranslator::processPendingMutations() {
-  if (!view_ || !view_->page() || state_ != State::Translated || isDynamicTranslating_) return;
+  if (!hasPage() || state_ != State::Translated || isDynamicTranslating_) return;
 
   const uint64_t generation = currentGeneration_;
   QPointer<PageTranslator> guardedThis(this);
 
-  view_->page()->runJavaScript(
-      QStringLiteral("window.__daliniraTranslate ? window.__daliniraTranslate.checkPendingMutations() : null;"),
-      QWebEngineScript::ApplicationWorld,
+  runJavaScript(
+      QStringLiteral("window.__daliniraTranslate ? JSON.stringify(window.__daliniraTranslate.checkPendingMutations()) : null;"),
       [guardedThis, generation](const QVariant &result) {
         if (!guardedThis || guardedThis->currentGeneration_ != generation) return;
         if (!result.isValid() || result.isNull()) return;
 
-        const QVariantList nodes = result.toMap().value(QStringLiteral("nodes")).toList();
+        const QVariantList nodes = resultMap(result).value(QStringLiteral("nodes")).toList();
         if (nodes.isEmpty()) return;
 
         QList<BatchItem> items;
@@ -313,11 +352,8 @@ void PageTranslator::handleSpaNavigation(const QUrl &newUrl) {
 void PageTranslator::restoreOriginal() {
   stopDynamicMutationWatcher();
   currentGeneration_++;
-  if (view_ && view_->page()) {
-    view_->page()->runJavaScript(
-        QStringLiteral("window.__daliniraTranslate ? window.__daliniraTranslate.restoreOriginal() : null;"),
-        QWebEngineScript::ApplicationWorld);
-  }
+  if (hasPage()) runJavaScript(
+      QStringLiteral("window.__daliniraTranslate ? window.__daliniraTranslate.restoreOriginal() : null;"));
 
   state_ = State::Detected;
   emit stateChanged(state_);
@@ -326,18 +362,13 @@ void PageTranslator::restoreOriginal() {
 void PageTranslator::reset() {
   stopDynamicMutationWatcher();
   currentGeneration_++;
-  if (view_ && view_->page()) {
-    view_->page()->runJavaScript(
-        QStringLiteral("window.__daliniraTranslate ? window.__daliniraTranslate.reset() : null;"),
-        QWebEngineScript::ApplicationWorld);
-  }
+  if (hasPage()) runJavaScript(
+      QStringLiteral("window.__daliniraTranslate ? window.__daliniraTranslate.reset() : null;"));
   state_ = State::Idle;
   sourceLanguage_.clear();
-  if (service_ && !service_->defaultTargetLanguage().isEmpty()) {
-    targetLanguage_ = service_->defaultTargetLanguage();
-  } else {
-    targetLanguage_ = QStringLiteral("tr");
-  }
+  targetLanguage_ = service_ && !service_->defaultTargetLanguage().isEmpty()
+      ? service_->defaultTargetLanguage() : QStringLiteral("en");
   lastError_.clear();
+  pendingManualTarget_.clear();
   emit stateChanged(state_);
 }

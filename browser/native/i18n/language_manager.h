@@ -7,6 +7,7 @@
 #include <QReadWriteLock>
 #include <QSettings>
 #include <QString>
+#include <QStringList>
 #include <QVariantMap>
 
 namespace dalinira::i18n {
@@ -53,6 +54,15 @@ class LanguageManager : public QObject {
   // Translation Lookups
   QString translate(const QString &key, const QString &fallback = QString()) const;
   QString translate(const QString &key, const QVariantMap &replacements) const;
+  // Value of `key` in a specific supported language (tests, cross-language
+  // matching). Falls back to English, then to the key itself.
+  QString translateIn(const QString &code, const QString &key) const;
+  // Every distinct value `key` has across the supported catalogs.
+  QStringList translationsOf(const QString &key) const;
+  // Reverse lookup used by live widget retranslation: the catalog key whose
+  // value is exactly `text`, preferring the active language. Empty when the
+  // text is not a catalog value (user data, composed strings).
+  QString keyForText(const QString &text) const;
 
   // Helper formatting
   QString formatSystemLanguageLabel() const;
@@ -78,6 +88,8 @@ class LanguageManager : public QObject {
   void determineAndApplyActiveLanguage(bool notify = true);
   QString resolveFilePath(const QString &preferredPath, const QString &fallbackSubPath) const;
   void populateDefaultFallbackLanguages();
+  void ensureInitialized() const;
+  void ensureAllCatalogs() const;
 
   mutable QReadWriteLock lock_;
   QString configPath_;
@@ -88,6 +100,12 @@ class LanguageManager : public QObject {
 
   QHash<QString, QString> currentCatalog_;
   QHash<QString, QString> fallbackCatalog_;
+  QHash<QString, QString> currentReverse_;
+  // Lazily loaded, immutable after load: every supported catalog and the
+  // value->key index across all of them.
+  mutable QHash<QString, QHash<QString, QString>> allCatalogs_;
+  mutable QHash<QString, QString> allReverse_;
+  mutable bool allCatalogsLoaded_{false};
   bool initialized_{false};
 };
 

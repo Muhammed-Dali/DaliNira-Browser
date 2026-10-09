@@ -26,6 +26,16 @@ namespace dalinira::desktop_tabs {
 class FindBarWidget;
 }
 
+namespace dalinira::engine {
+class EngineView;
+}
+
+namespace dalinira::layout {
+class BrowserLayoutController;
+class BrowserSidePanel;
+enum class BrowserLayoutMode;
+}
+
 #include "audio/audio_effects_page.h"
 #include "audio/web_audio_effects_controller.h"
 #include "blocker/dalinira_blocker_page.h"
@@ -46,6 +56,7 @@ class FindBarWidget;
 #include "pulse/song_finder_settings.h"
 #include "pulse/song_recognition_service.h"
 #include "session/session_store.h"
+#include "blocker/dalinira_blocker_element_picker.h"
 #include "settings/settings_page.h"
 #include "translate/page_translator.h"
 #include "translate/translate_bubble_popup.h"
@@ -79,9 +90,11 @@ struct PendingPermissionRequest {
 };
 #endif
 
+class BookmarkBarReorder;
 class DaliNiraBlockerService;
 class CredentialVaultManager;
 class CredentialAutofillController;
+class WebKitCredentialController;
 class SongFinderSettingsPage;
 class TranslateService;
 class QLineEdit;
@@ -129,8 +142,10 @@ struct BrowserTabInfo {
   QString title;
   QUrl url;
   QIcon icon;
+  QString faviconHost;  // Host whose favicon state `icon` holds: its real favicon, or the engine reported none.
   QPointer<QWidget> content;
   QPointer<QWebEngineView> view;
+  QPointer<dalinira::engine::EngineView> engineView;
   bool isInternal = false;
   QString internalId;
   std::optional<QUuid> groupId;
@@ -141,6 +156,9 @@ struct BrowserTabInfo {
   bool translationOffered = false;
   QPointer<PageTranslator> translator;
   bool isLoading = false;
+  // Set when the UI language changed while this New Tab was in the
+  // background (and possibly frozen by tab sleep); reloaded on activation.
+  bool pendingLanguageReload = false;
 };
 
 class BrowserWindow : public QMainWindow {
@@ -169,11 +187,29 @@ public:
                      int targetIndex);
   void adoptTab(BrowserTabInfo info, int targetIndex);
   int findIndexByTabId(uint64_t tabId) const;
+  int indexOfEngineView(const dalinira::engine::EngineView *view) const;
   uint64_t findTabIdByIndex(int index) const;
 
   // Tab Context Menu & Actions
   void onTabContextMenuRequested(int index, const QPoint &globalPos);
   void toggleTabPin(int index);
+
+  // Tab sleeping (shared memory saver for both engines, TabPerformanceManager).
+  bool sleepTabAt(int index);
+  int sleepOtherTabs(int index);
+  void setNeverSleepSite(int index, bool neverSleep);
+  bool isTabSleeping(int index) const;
+  // Wakes a sleeping tab in place, through the same path as activating it.
+  bool wakeTabAt(int index);
+  void showSleepingTabsManager();
+  // The tab context menu's "Uyku / Bellek" submenu; its actions follow the
+  // tab's real lifecycle state (both engines).
+  void populateTabSleepMenu(QMenu *sleepMenu, int index);
+  // The shared resource model of a tab (lifecycle, memory, CPU), as the hover
+  // card shows it.
+  dalinira::TabResourceSnapshot tabResourceSnapshot(int index) const;
+  // A page dialog (alert/confirm/prompt) is open in a Chromium page.
+  void setPageDialogActive(QWebEnginePage *page, bool active);
   void closeOtherTabs(int index);
   void closeTabsToRight(int index);
   BrowserWindow *openNewWindow(const QUrl &url = QUrl());
@@ -181,8 +217,22 @@ public:
   bool isIncognito() const {
     return (services_.profile && services_.profile->isOffTheRecord()) || services_.privateProfileOwner != nullptr;
   }
+  // Whether local search/history data belongs to this window's profile. The
+  // WebKit backend runs without any QWebEngineProfile, so services_.profile is
+  // null there and must not be dereferenced.
+  bool usesPersistentProfile() const {
+    if (!services_.profileService || isIncognito()) return false;
+    return !services_.profile || services_.profile == services_.profileService->profile();
+  }
   void openDevToolsForPage(QWebEnginePage *page);
   void showBookmarkContextMenu(const QUrl &url, const QString &title, const QPoint &globalPos);
+  void showLinkContextMenu(const QUrl &linkUrl, const QString &linkText, const QPoint &globalPos);
+  void showSelectionContextMenu(const QString &selectedText, const QPoint &globalPos);
+  void showPageContextMenu(const QPoint &globalPos);
+
+  // Whether a web page may run its own JavaScript: the JavaScript setting and
+  // the site's "block scripts" policy. Shared by both engines.
+  bool pageScriptsAllowed(const QUrl &url) const;
 
   void showFindBar();
   void hideFindBar();
@@ -191,22 +241,51 @@ public:
   void captureVisiblePage();
   void showReaderMode();
   void handleFullScreenRequest(QWebEngineView *view, const QWebEngineFullScreenRequest &request);
+  // Shared page (element) fullscreen for both engines: hides the browser
+  // chrome and fullscreens the window, or restores both.
+  // `owner` is the page that asked; closing its tab leaves fullscreen.
+  void setPageFullScreen(bool on, QWidget *owner = nullptr);
 
   dalinira::desktop_tabs::TabStripWidget *tabStrip() const { return tabStrip_; }
   int tabCount() const { return tabs_.size(); }
   const BrowserTabInfo &tabInfo(int index) const { return tabs_[index]; }
   const QVector<BrowserTabInfo> &allTabs() const { return tabs_; }
   QWebEngineView *currentView() const;
+  dalinira::engine::EngineView *currentEngineView() const;
+  QUrl currentTabUrl() const;
+  QString currentTabTitle() const;
+  bool currentTabAudible() const;
+  QUrl currentActiveWebUrl() const;
+
+  // The engine workspace this window's tabs belong to ("chromium"/"webkit").
+  // One engine runs per process; switching engine relaunches DaliNira, which
+  // then restores the other engine's own workspace (SessionStore).
+  dalinira::engine::EngineType currentWorkspaceEngine() const { return currentWorkspaceEngine_; }
+  QString currentEngineScope() const;
 
   QString currentSearchEngine() const;
   void navigateFromUserInput(const QString &rawInput, const QString &searchEngine = QString{});
+  // Shared by both engines. Loads an already-resolved URL in the current tab
+  // (a new tab only when the current tab is an internal Qt page).
+  void navigateCurrentTab(const QUrl &url, bool typed = false);
+  // Bookmark/quick-access activation: current tab unless `newTab` is requested.
+  void openBookmarkUrl(const QUrl &url, bool newTab);
+  // A search suggestion is the final query; navigates to its search URL once.
+  void activateSearchSuggestion(const QString &query);
   dalinira::core::INavigationCandidateProvider *candidateProvider() const { return candidateProvider_.get(); }
   void requestNewTabSuggestions(QWebEnginePage *page, const QString &query, int requestId);
+  void requestEngineNewTabSuggestions(dalinira::engine::EngineView *view, const QString &query, int requestId);
   void setSearchEngine(const QString &engine);
   void syncNewTabViews();
+  void onEngineFaviconLoaded(const QUrl &pageUrl, const QIcon &icon);
+  void handleFrequentSitesCommand(const QString &op, const QUrl &url, const QString &engine = QString{}, const QString &name = QString{}, const QString &original = QString{});
   void handleNewTabBackgroundCommand(QWebEnginePage *sourcePage,
                                      const QString &command,
                                      const QString &capability);
+  void handleEngineInternalNavigation(dalinira::engine::EngineView *sourceView,
+                                      const QUrl &url);
+  void handleEngineNewTabBackgroundCommand(dalinira::engine::EngineView *sourceView,
+                                           const QString &command);
   void updateSearchEngineIcon();
   void toggleTabSearchPopup();
 
@@ -224,6 +303,8 @@ public:
   std::optional<dalinira::desktop_tabs::TabGroup> groupForTab(uint64_t tabId) const;
 
   // Feature page navigations
+  void showOnboarding();
+  void finishOnboarding();
   void showSettings(
       SettingsPage::Category category = SettingsPage::Category::Startup);
   void showPasswords();
@@ -245,6 +326,10 @@ public:
   void showDownloadsMenu();
   void toggleCurrentBookmark();
   void renderBookmarks();
+  QIcon bookmarkFavicon(const QUrl &url) const;
+  void requestBookmarkFavicon(const QUrl &url, std::function<void(const QIcon &)> callback);
+  void fetchFaviconFromNetwork(const QUrl &url, std::function<void(const QIcon &)> callback);
+  void updateBookmarkIconsForUrl(const QUrl &url, const QIcon &icon);
   bool isCurrentTabNewTab() const;
   void updateBookmarkBarVisibility();
   void toggleBookmarkBar();
@@ -264,6 +349,11 @@ public:
   void fillCurrentPageFromVault();
   CredentialAutofillController *autofillController() const { return autofillController_.get(); }
   void updateSaveBubblePosition();
+
+  // Layout mode management
+  void applyLayoutMode(dalinira::layout::BrowserLayoutMode mode);
+  dalinira::layout::BrowserLayoutMode currentLayoutMode() const;
+  void updateSidePanelTabs();
   void dismissCredentialSaveBubble();
   QIcon tabIconForRecord(const BrowserTabInfo &info) const;
 
@@ -285,6 +375,12 @@ public:
 
   void prepareAdBlockScripts(QWebEnginePage *page, const QUrl &url,
                              bool force = false);
+  // HTTPS by default, after a tab's load finished: a successful upgrade is
+  // settled; for a failed one, the http:// URL the tab retries (else empty).
+  QUrl httpsUpgradeResult(const QList<QUrl> &urls, bool ok);
+  // "Block an element" on the current tab (DaliNiraElementPickerSession).
+  void startElementPicker();
+  DaliNiraElementPickerSession *elementPicker() const { return elementPicker_.data(); }
   void saveSessionNow();
   void restoreSession(const QVector<SavedTab> &savedTabs);
   void ensureInitialTab();
@@ -316,23 +412,39 @@ private slots:
   void onTabHoverLeave();
 
 private:
+  QPointer<DaliNiraElementPickerSession> elementPicker_;
+  // Vertical-tab transfers must recreate WebKit/XEmbed views instead of
+  // reparenting their foreign native surface between top-level windows.
+  bool transferSidePanelTabTo(uint64_t tabId, BrowserWindow *destination,
+                              int targetIndex);
   void setupUi();
   void setupStyle();
+  // Applies an appearance theme ("system"/"light"/"dark") to the application
+  // palette and restyles every browser window's chrome (Settings, onboarding).
+  static void applyAppearanceToAllWindows(const QString &themeString);
   void setupTabStripSignals();
   void wireViewSignals(QWebEngineView *view, uint64_t tabId);
+  void wireEngineViewSignals(dalinira::engine::EngineView *engineView, uint64_t tabId);
+  // TabManager's tab order for this window follows tabs_.
+  void syncTabManagerOrder();
   void updateNavButtons();
   void retranslateUi();
-  void updateOmniboxForCurrentTab();
+  // Page URL updates never replace text the user is still editing; tab switches force it.
+  void updateOmniboxForCurrentTab(bool force = false);
   Qt::Edges calculateEdges(const QPoint &pos) const;
   void updateCursorShape(const QPoint &pos);
   void handleManualResize(const QPoint &globalPos);
-  QVector<QPointer<QWebEngineView>> collectAllWebViewsAcrossWindows() const;
   void onThrobberTick();
 
   BrowserServices services_;
   bool isCaptureShell_ = false;
   bool isMovingTab_ = false;
+  bool isSwitchingTab_ = false;
+  bool adoptingEnginePopup_ = false;  // addNewTab() for a page-opened WebKit popup: WebKit loads it
+  void closeTabForWindowClose(uint64_t tabId);
   QList<BrowserTabInfo> tabs_;
+
+  dalinira::engine::EngineType currentWorkspaceEngine_ = dalinira::engine::EngineType::Chromium;
 
   // Frameless Top Bar
   QWidget *topBar_ = nullptr;
@@ -359,23 +471,46 @@ private:
   int pendingSuggestionIcons_ = 0;
   QJsonArray searchRows(const QString &query, const QStringList &remote) const;
   void updateOmniboxSuggestions(const QString &query);
+  // Shared tab favicon policy for both engines: DaliNira icon on internal
+  // pages, the page's favicon on web pages, a per-site fallback otherwise.
+  // `engineReported`: the icon comes from the engine's icon signal, so a null
+  // icon means the page has no favicon. Otherwise null only means "not known
+  // yet" and a favicon already shown for the same site is kept (e.g. reload).
+  void applyTabFavicon(int idx, const QObject *throbberKey, const QIcon &pageIcon, bool engineReported);
+  // Engine-independent New Tab suggestion delivery. Each engine adapter
+  // supplies its page object, privacy state, liveness check and JS runner.
+  struct NewTabSuggestionTarget {
+    QPointer<QObject> owner;
+    bool privateMode = true;
+    std::function<bool()> isCurrent;
+    std::function<void(const QString &)> runScript;
+  };
+  void deliverNewTabSuggestions(const NewTabSuggestionTarget &target, const QString &query, int requestId);
+  void handleEngineSuggestCommand(dalinira::engine::EngineView *sourceView, const QUrl &url);
   void activateSuggestion(const QUrl &url, const QString &text = QString{}, const QString &type = QString{});
   bool beginForgetClosedView(QWebEngineView *view);
   QAction *searchEngineAction_ = nullptr;
   QToolBar *bookmarkBar_ = nullptr;
+  BookmarkBarReorder *bookmarkReorder_ = nullptr;
   QToolButton *appsBtn_ = nullptr;
   QPointer<dalinira::desktop_tabs::TabSearchPopup> tabSearchPopup_;
   dalinira::desktop_tabs::TabGroupModel *groupModel_ = nullptr;
   QPointer<dalinira::desktop_tabs::TabGroupPopup> tabGroupPopup_;
   QPointer<dalinira::desktop_tabs::TabGroupLauncherPopup> tabGroupLauncherPopup_;
   QProgressBar *progressBar_ = nullptr;
+  QWidget *bodyContainer_ = nullptr;
+  QBoxLayout *bodyLayout_ = nullptr;
+  dalinira::layout::BrowserSidePanel *sidePanel_ = nullptr;
+  dalinira::layout::BrowserLayoutController *layoutController_ = nullptr;
   QStackedWidget *pageStack_ = nullptr;
+
 
   // Feature buttons in navBar_
   QToolButton *zoomButton_ = nullptr;
   QFrame *zoomPopup_ = nullptr;
   QLabel *zoomPercent_ = nullptr;
   QToolButton *translateButton_ = nullptr;
+  QToolButton *findButton_ = nullptr;
   DaliNiraBlockerShieldButton *adBlockShield_ = nullptr;
   PulseToolbarButton *pulseButton_ = nullptr;
   DownloadToolbarButton *mediaDownload_ = nullptr;
@@ -384,6 +519,7 @@ private:
   QToolButton *passwordsBtn_ = nullptr;
   QToolButton *mainMenuBtn_ = nullptr;
   std::unique_ptr<CredentialAutofillController> autofillController_;
+  std::unique_ptr<WebKitCredentialController> webKitCredentialController_;
 
   void updateDownloadToolbar();
   void showDownloadStartedAnimation();
@@ -393,6 +529,7 @@ private:
 
   TranslateBubblePopup *translateBubble_ = nullptr;
   PageTranslator *pageTranslator_ = nullptr;
+  QSet<QString> dismissedTranslationOffers_;
   PageTranslator *getOrCreatePageTranslator(int tabIndex);
 
   QPointer<SitePermissionPromptBubble> permissionBubble_;
@@ -400,6 +537,9 @@ private:
   QSet<TabSessionPermissionKey> tabSessionGrants_;
   void updateSiteControlsBubblePosition();
   void updatePermissionBubblePosition();
+  void updatePermissionProtection();
+  void syncTabSleepingIndicator(const QUuid &uuid);
+  void resleepRestoredTabs(const QList<uint64_t> &tabIds);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
   QList<PendingPermissionRequest> pendingPermissionQueue_;
   std::optional<PendingPermissionRequest> currentActivePermissionRequest_;
@@ -414,6 +554,8 @@ private:
   Qt::Edges resizeEdges_{};
   QPoint resizeStartPos_;
   QRect resizeStartGeometry_;
+  bool manualMoving_ = false;
+  QPoint manualMoveOffset_;
   bool hasOverrideCursor_ = false;
   Qt::CursorShape currentOverrideShape_ = Qt::ArrowCursor;
 
@@ -430,6 +572,7 @@ private:
   void toggleBrowserFullScreen();
 
   bool isWebFullScreen_ = false;
+  QPointer<QWidget> pageFullScreenOwner_;  // the page holding element fullscreen, if any
   Qt::WindowStates windowStateBeforeFullScreen_;
   QRect geometryBeforeFullScreen_;
 };

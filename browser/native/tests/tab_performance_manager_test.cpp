@@ -165,9 +165,9 @@ int main(int argc, char *argv[]) {
     const auto id = manager.registerTab(view, &owner, false, QStringLiteral("Rec State Tab"));
 
     int recSignalCount = 0;
-    QWebEnginePage::LifecycleState recordedState = QWebEnginePage::LifecycleState::Active;
+    dalinira::TabLifecycleState recordedState = dalinira::TabLifecycleState::Active;
     QObject::connect(perf, &TabPerformanceManager::tabRecommendedStateChanged,
-                     [&](TabManager::TabId tabId, QWebEnginePage::LifecycleState state) {
+                     [&](TabManager::TabId tabId, dalinira::TabLifecycleState state) {
                        if (tabId == id) {
                          ++recSignalCount;
                          recordedState = state;
@@ -175,11 +175,11 @@ int main(int argc, char *argv[]) {
                      });
 
     emit view->page()->recommendedStateChanged(QWebEnginePage::LifecycleState::Active);
-    assert(perf->metadata(id).recommendedState == QWebEnginePage::LifecycleState::Active);
+    assert(perf->metadata(id).recommendedState == dalinira::TabLifecycleState::Active);
     assert(perf->protectedReasons(id).testFlag(ProtectedReason::RecommendedActive));
 
     emit view->page()->recommendedStateChanged(QWebEnginePage::LifecycleState::Frozen);
-    assert(perf->metadata(id).recommendedState == QWebEnginePage::LifecycleState::Frozen);
+    assert(perf->metadata(id).recommendedState == dalinira::TabLifecycleState::Frozen);
     assert(!perf->protectedReasons(id).testFlag(ProtectedReason::RecommendedActive));
 
     delete view;
@@ -196,22 +196,22 @@ int main(int argc, char *argv[]) {
 
     // If recommendedState is Active: Frozen & Discarded are NOT permitted
     emit view->page()->recommendedStateChanged(QWebEnginePage::LifecycleState::Active);
-    assert(perf->isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Active) == true);
-    assert(perf->isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Frozen) == false);
-    assert(perf->isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Discarded) == false);
+    assert(perf->isAggressiveStatePermitted(id, dalinira::TabLifecycleState::Active) == true);
+    assert(perf->isAggressiveStatePermitted(id, dalinira::TabLifecycleState::Frozen) == false);
+    assert(perf->isAggressiveStatePermitted(id, dalinira::TabLifecycleState::Discarded) == false);
 
     // Make tab non-visible and recommendedState Frozen
     perf->setTabVisible(id, false);
     emit view->page()->recommendedStateChanged(QWebEnginePage::LifecycleState::Frozen);
-    assert(perf->isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Active) == true);
-    assert(perf->isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Frozen) == true);
-    assert(perf->isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Discarded) == false);
+    assert(perf->isAggressiveStatePermitted(id, dalinira::TabLifecycleState::Active) == true);
+    assert(perf->isAggressiveStatePermitted(id, dalinira::TabLifecycleState::Frozen) == true);
+    assert(perf->isAggressiveStatePermitted(id, dalinira::TabLifecycleState::Discarded) == false);
 
     // If recommendedState is Discarded
     emit view->page()->recommendedStateChanged(QWebEnginePage::LifecycleState::Discarded);
-    assert(perf->isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Active) == true);
-    assert(perf->isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Frozen) == true);
-    assert(perf->isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Discarded) == true);
+    assert(perf->isAggressiveStatePermitted(id, dalinira::TabLifecycleState::Active) == true);
+    assert(perf->isAggressiveStatePermitted(id, dalinira::TabLifecycleState::Frozen) == true);
+    assert(perf->isAggressiveStatePermitted(id, dalinira::TabLifecycleState::Discarded) == true);
 
     delete view;
   }
@@ -402,7 +402,7 @@ int main(int argc, char *argv[]) {
 
     const auto metaB = perf->metadata(idB);
     assert(metaB.frozenByDaliNira == true);
-    assert(metaB.lifecycleState == QWebEnginePage::LifecycleState::Frozen);
+    assert(metaB.lifecycleState == dalinira::TabLifecycleState::Frozen);
     assert(metaB.lastFreezeMonotonicMs > 0);
 
     delete viewA;
@@ -446,7 +446,7 @@ int main(int argc, char *argv[]) {
     const auto metaB = perf->metadata(idB);
     assert(metaB.visible == true);
     assert(metaB.frozenByDaliNira == false);
-    assert(metaB.lifecycleState == QWebEnginePage::LifecycleState::Active);
+    assert(metaB.lifecycleState == dalinira::TabLifecycleState::Active);
     assert(metaB.lastResumeMonotonicMs > 0);
     assert(viewB->url() == urlB);
 
@@ -805,7 +805,7 @@ int main(int argc, char *argv[]) {
     assert(!perf->canDiscard(idA));
 
     // Tab B is background. If recommendedState is Active -> cannot discard
-    if (perf->metadata(idB).recommendedState == QWebEnginePage::LifecycleState::Active) {
+    if (perf->metadata(idB).recommendedState == dalinira::TabLifecycleState::Active) {
       assert(!perf->canDiscard(idB));
     }
 
@@ -990,21 +990,25 @@ int main(int argc, char *argv[]) {
     TabManager manager;
     auto *perf = manager.performanceManager();
 
-    // Default: Balanced
+    // Default: Balanced. Light sleep at the timeout; full sleep only after
+    // long inactivity (or memory pressure).
     assert(perf->policyMode() == PerformancePolicyMode::Balanced);
-    assert(perf->backgroundFreezeDelayMs() == 0);
+    assert(perf->backgroundFreezeDelayMs() == 60 * 1000);
     assert(perf->backgroundDiscardDelayMs() == 60 * 1000);
+    assert(perf->discardPolicyRequirement() == DiscardPolicyRequirement::LongIdleOrMemoryPressure);
+    assert(perf->fullSleepDelayMs() == TabPerformanceManager::kBalancedFullSleepMinMs);
 
-    // Switch to MemorySaver
+    // Switch to MemorySaver (Aggressive): full sleep at the shorter timeout
     perf->setPolicyMode(PerformancePolicyMode::MemorySaver);
     assert(perf->policyMode() == PerformancePolicyMode::MemorySaver);
-    assert(perf->backgroundFreezeDelayMs() == 0);
+    assert(perf->backgroundFreezeDelayMs() == 30 * 1000);
     assert(perf->backgroundDiscardDelayMs() == 30 * 1000);
+    assert(perf->fullSleepDelayMs() == 30 * 1000);
 
     // Switch to MaximumPerformance
     perf->setPolicyMode(PerformancePolicyMode::MaximumPerformance);
     assert(perf->policyMode() == PerformancePolicyMode::MaximumPerformance);
-    assert(perf->backgroundFreezeDelayMs() == 0);
+    assert(perf->backgroundFreezeDelayMs() == 2 * 60 * 1000);
     assert(perf->backgroundDiscardDelayMs() == 2 * 60 * 1000);
 
     // Revert to Balanced
@@ -1038,7 +1042,7 @@ int main(int argc, char *argv[]) {
     manager.activate(id1);
     assert(!perf->isTabDiscarded(id1));
     assert(perf->metadata(id1).visible);
-    assert(perf->metadata(id1).lifecycleState == QWebEnginePage::LifecycleState::Active);
+    assert(perf->metadata(id1).lifecycleState == dalinira::TabLifecycleState::Active);
 
     delete view1;
     delete view2;
@@ -1236,14 +1240,14 @@ int main(int argc, char *argv[]) {
     perf->setPolicyMode(PerformancePolicyMode::MemorySaver);
     assert(signalFired);
     assert(signalMode == PerformancePolicyMode::MemorySaver);
-    assert(perf->backgroundFreezeDelayMs() == 0);
+    assert(perf->backgroundFreezeDelayMs() == 30 * 1000);
     assert(perf->backgroundDiscardDelayMs() == 30 * 1000);
 
     signalFired = false;
     perf->setPolicyMode(PerformancePolicyMode::MaximumPerformance);
     assert(signalFired);
     assert(signalMode == PerformancePolicyMode::MaximumPerformance);
-    assert(perf->backgroundFreezeDelayMs() == 0);
+    assert(perf->backgroundFreezeDelayMs() == 2 * 60 * 1000);
     assert(perf->backgroundDiscardDelayMs() == 2 * 60 * 1000);
   }
 

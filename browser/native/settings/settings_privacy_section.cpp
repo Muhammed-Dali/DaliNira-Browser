@@ -80,8 +80,8 @@ class PrivacyDetailSubpage final : public QWidget {
     backBtn->setCursor(Qt::PointingHandCursor);
     backBtn->setIcon(BrowserIcons::icon(BrowserIcon::ArrowLeft));
     backBtn->setIconSize(QSize(18, 18));
-    backBtn->setToolTip(QStringLiteral("Geri"));
-    backBtn->setAccessibleName(QStringLiteral("Geri"));
+    backBtn->setToolTip(I18n::text(QStringLiteral("common.back")));
+    backBtn->setAccessibleName(I18n::text(QStringLiteral("common.back")));
     connect(backBtn, &QPushButton::clicked, this, [this] {
       if (onBack_) onBack_();
     });
@@ -98,13 +98,11 @@ class PrivacyDetailSubpage final : public QWidget {
     helpBtn_->setCursor(Qt::PointingHandCursor);
     helpBtn_->setIcon(BrowserIcons::icon(BrowserIcon::Help));
     helpBtn_->setIconSize(QSize(18, 18));
-    helpBtn_->setToolTip(QStringLiteral("Üçüncü taraf çerezleri hakkında"));
+    helpBtn_->setToolTip(I18n::text(QStringLiteral("settings.site.third_party_cookies_about")));
     helpBtn_->setVisible(false);
     connect(helpBtn_, &QPushButton::clicked, this, [this] {
-      QMessageBox::information(this, QStringLiteral("Üçüncü Taraf Çerezleri"),
-                               QStringLiteral("Üçüncü taraf çerezleri, ziyaret ettiğiniz siteden farklı bir web sitesine ait çerezlerdir.\n\n"
-                                              "DaliNira Kalkanlar bu tür takip çerezlerini varsayılan olarak engeller. "
-                                              "Buraya izin verilen olarak eklediğiniz siteler üçüncü taraf çerezlerini kullanabilir."));
+      QMessageBox::information(this, I18n::text(QStringLiteral("settings.site.third_party_cookies_title")),
+                               I18n::text(QStringLiteral("settings.site.third_party_cookies_help")));
     });
     headerLayout->addWidget(helpBtn_, 0, Qt::AlignVCenter);
 
@@ -112,7 +110,7 @@ class PrivacyDetailSubpage final : public QWidget {
 
     filterEdit_ = new QLineEdit(header);
     filterEdit_->setObjectName(QStringLiteral("settings-subpage-filter"));
-    filterEdit_->setPlaceholderText(QStringLiteral("Sayfadaki siteleri filtrele"));
+    filterEdit_->setPlaceholderText(I18n::text(QStringLiteral("settings.site.filter_sites_placeholder")));
     filterEdit_->setFixedWidth(240);
     filterEdit_->setClearButtonEnabled(true);
     filterEdit_->addAction(BrowserIcons::icon(BrowserIcon::Search), QLineEdit::LeadingPosition);
@@ -126,14 +124,14 @@ class PrivacyDetailSubpage final : public QWidget {
     auto *devLayout = new QHBoxLayout(deviceContainer_);
     devLayout->setContentsMargins(0, 0, 0, 2);
     devLayout->setSpacing(12);
-    auto *devLabel = new QLabel(QStringLiteral("Mikrofon aygıtı:"), deviceContainer_);
+    auto *devLabel = new QLabel(I18n::text(QStringLiteral("settings.site.microphone_device_label")), deviceContainer_);
     devLabel->setStyleSheet(QStringLiteral("color: #edf5fc; font-size: 13px; font-weight: 600;"));
     devLayout->addWidget(devLabel);
     deviceCombo_ = new QComboBox(deviceContainer_);
     deviceCombo_->setMinimumWidth(320);
-    deviceCombo_->addItem(QStringLiteral("Sistem varsayılanı (Dahili Mikrofon)"), QStringLiteral("default"));
-    deviceCombo_->addItem(QStringLiteral("Analog Giriş (Dahili Ses Kartı)"), QStringLiteral("analog"));
-    deviceCombo_->addItem(QStringLiteral("Harici Mikrofon / Kulaklık Girişi"), QStringLiteral("external"));
+    deviceCombo_->addItem(I18n::text(QStringLiteral("settings.site.microphone_device_system_default")), QStringLiteral("default"));
+    deviceCombo_->addItem(I18n::text(QStringLiteral("settings.site.microphone_device_analog")), QStringLiteral("analog"));
+    deviceCombo_->addItem(I18n::text(QStringLiteral("settings.site.microphone_device_external")), QStringLiteral("external"));
     devLayout->addWidget(deviceCombo_);
     devLayout->addStretch(1);
     deviceContainer_->setVisible(false);
@@ -153,9 +151,9 @@ class PrivacyDetailSubpage final : public QWidget {
     layout->addWidget(introLabel_);
 
     // 4. Varsayılan davranış Card
-    defaultCard_ = makeCard(column, QStringLiteral("VARSAYILAN DAVRANIŞ"));
+    defaultCard_ = makeCard(column, I18n::text(QStringLiteral("settings.site.default_behavior_card")));
 
-    auto *defaultIntro = new QLabel(QStringLiteral("Siteler, siz ziyaret ettiğinizde otomatik olarak bu ayarı izler"), defaultCard_);
+    auto *defaultIntro = new QLabel(I18n::text(QStringLiteral("settings.site.default_behavior_intro")), defaultCard_);
     defaultIntro->setStyleSheet(QStringLiteral("color: #7f91a3; font-size: 12px; padding: 0 18px 8px;"));
     cardLayout(defaultCard_)->addWidget(defaultIntro);
 
@@ -195,23 +193,23 @@ class PrivacyDetailSubpage final : public QWidget {
     dmLayout->setContentsMargins(36, 4, 0, 4);
     dmLayout->setSpacing(8);
 
-    auto *dmHeading = new QLabel(QStringLiteral("İstekler nasıl gösterilsin?"), displayModeContainer_);
+    auto *dmHeading = new QLabel(I18n::text(QStringLiteral("settings.site.request_display_heading")), displayModeContainer_);
     dmHeading->setStyleSheet(QStringLiteral("color: #d1dde8; font-size: 13px; font-weight: 600; margin-top: 2px;"));
     dmLayout->addWidget(dmHeading);
 
     dmGroup_ = new QButtonGroup(displayModeContainer_);
 
-    radioCollapseAll_ = new QRadioButton(QStringLiteral("Adres çubuğundaki tüm istekleri daralt"), displayModeContainer_);
+    radioCollapseAll_ = new QRadioButton(I18n::text(QStringLiteral("settings.site.request_collapse_all")), displayModeContainer_);
     radioCollapseAll_->setCursor(Qt::PointingHandCursor);
     dmGroup_->addButton(radioCollapseAll_, 0);
     dmLayout->addWidget(radioCollapseAll_);
 
-    radioQuiet_ = new QRadioButton(QStringLiteral("İstenmeyen istekleri daralt (önerilir)"), displayModeContainer_);
+    radioQuiet_ = new QRadioButton(I18n::text(QStringLiteral("settings.site.request_collapse_unwanted")), displayModeContainer_);
     radioQuiet_->setCursor(Qt::PointingHandCursor);
     dmGroup_->addButton(radioQuiet_, 1);
     dmLayout->addWidget(radioQuiet_);
 
-    radioExpandAll_ = new QRadioButton(QStringLiteral("Tüm istekleri genişlet"), displayModeContainer_);
+    radioExpandAll_ = new QRadioButton(I18n::text(QStringLiteral("settings.site.request_expand_all")), displayModeContainer_);
     radioExpandAll_->setCursor(Qt::PointingHandCursor);
     dmGroup_->addButton(radioExpandAll_, 2);
     dmLayout->addWidget(radioExpandAll_);
@@ -323,19 +321,19 @@ class PrivacyDetailSubpage final : public QWidget {
     });
 
     // Zoom Card (only for zoomLevels)
-    zoomCard_ = makeCard(column, QStringLiteral("VARSAYILAN YAKINLAŞTIRMA"));
+    zoomCard_ = makeCard(column, I18n::text(QStringLiteral("settings.site.default_zoom_card")));
     auto *zoomRowWidget = new QWidget(zoomCard_);
     auto *zoomRowLayout = new QHBoxLayout(zoomRowWidget);
     zoomRowLayout->setContentsMargins(18, 12, 18, 12);
     zoomRowLayout->setSpacing(12);
-    auto *zoomLbl = new QLabel(QStringLiteral("Varsayılan sayfa yakınlaştırma düzeyi:"), zoomRowWidget);
+    auto *zoomLbl = new QLabel(I18n::text(QStringLiteral("settings.site.default_zoom_label")), zoomRowWidget);
     zoomLbl->setStyleSheet(QStringLiteral("color: #e7edf5; font-size: 14px; font-weight: 500;"));
     zoomRowLayout->addWidget(zoomLbl, 1);
     zoomCombo_ = new QComboBox(zoomRowWidget);
     zoomCombo_->setMinimumWidth(160);
     zoomCombo_->addItems({QStringLiteral("%25"), QStringLiteral("%33"), QStringLiteral("%50"),
                           QStringLiteral("%67"), QStringLiteral("%75"), QStringLiteral("%80"),
-                          QStringLiteral("%90"), QStringLiteral("%100 (Varsayılan)"),
+                          QStringLiteral("%90"), I18n::text(QStringLiteral("settings.site.zoom_100_default")),
                           QStringLiteral("%110"), QStringLiteral("%125"), QStringLiteral("%150"),
                           QStringLiteral("%175"), QStringLiteral("%200"), QStringLiteral("%250"),
                           QStringLiteral("%300"), QStringLiteral("%400"), QStringLiteral("%500")});
@@ -352,9 +350,9 @@ class PrivacyDetailSubpage final : public QWidget {
     });
 
     // 5. Özelleştirilmiş Davranışlar Card (default for permissions & content)
-    customCard_ = makeCard(column, QStringLiteral("ÖZELLEŞTİRİLMİŞ DAVRANIŞLAR"));
+    customCard_ = makeCard(column, I18n::text(QStringLiteral("settings.site.customized_behaviors_card")));
 
-    auto *customIntro = new QLabel(QStringLiteral("Aşağıdaki siteler, varsayılan yerine özel bir ayar kullanır"), customCard_);
+    auto *customIntro = new QLabel(I18n::text(QStringLiteral("settings.site.customized_behaviors_intro")), customCard_);
     customIntro->setStyleSheet(QStringLiteral("color: #7f91a3; font-size: 12px; padding: 0 18px 8px;"));
     cardLayout(customCard_)->addWidget(customIntro);
 
@@ -373,7 +371,7 @@ class PrivacyDetailSubpage final : public QWidget {
     deniedTitleLabel_->setStyleSheet(QStringLiteral("color: #e7edf5; font-size: 14px; font-weight: 600;"));
     deniedHLayout->addWidget(deniedTitleLabel_, 1);
 
-    auto *addDeniedBtn = new QPushButton(QStringLiteral("Ekle"), deniedHeader);
+    auto *addDeniedBtn = new QPushButton(I18n::text(QStringLiteral("common.add")), deniedHeader);
     addDeniedBtn->setObjectName(QStringLiteral("settings-add-btn"));
     connect(addDeniedBtn, &QPushButton::clicked, this, [this] { showAddSiteDialog(false); });
     deniedHLayout->addWidget(addDeniedBtn);
@@ -402,7 +400,7 @@ class PrivacyDetailSubpage final : public QWidget {
     allowedTitleLabel_->setStyleSheet(QStringLiteral("color: #e7edf5; font-size: 14px; font-weight: 600;"));
     allowedHLayout->addWidget(allowedTitleLabel_, 1);
 
-    auto *addAllowedBtn = new QPushButton(QStringLiteral("Ekle"), allowedHeader);
+    auto *addAllowedBtn = new QPushButton(I18n::text(QStringLiteral("common.add")), allowedHeader);
     addAllowedBtn->setObjectName(QStringLiteral("settings-add-btn"));
     connect(addAllowedBtn, &QPushButton::clicked, this, [this] { showAddSiteDialog(true); });
     allowedHLayout->addWidget(addAllowedBtn);
@@ -419,7 +417,7 @@ class PrivacyDetailSubpage final : public QWidget {
     layout->addWidget(customCard_);
 
     // 6. Üçüncü taraf çerezleri Card (only shown for thirdPartyCookies)
-    cookiesCard_ = makeCard(column, QStringLiteral("ÖZELLEŞTİRİLMİŞ DAVRANIŞLAR"));
+    cookiesCard_ = makeCard(column, I18n::text(QStringLiteral("settings.site.customized_behaviors_card")));
 
     auto *cookiesSection = new QWidget(cookiesCard_);
     auto *cookiesSecLayout = new QVBoxLayout(cookiesSection);
@@ -431,11 +429,11 @@ class PrivacyDetailSubpage final : public QWidget {
     cookiesHLayout->setContentsMargins(18, 12, 18, 8);
     cookiesHLayout->setSpacing(12);
 
-    auto *cookiesTitleLabel = new QLabel(QStringLiteral("Üçüncü taraf çerezlerini kullanmasına izin verilen siteler"), cookiesHeader);
+    auto *cookiesTitleLabel = new QLabel(I18n::text(QStringLiteral("settings.site.third_party_cookies_allowed_sites")), cookiesHeader);
     cookiesTitleLabel->setStyleSheet(QStringLiteral("color: #e7edf5; font-size: 14px; font-weight: 600;"));
     cookiesHLayout->addWidget(cookiesTitleLabel, 1);
 
-    auto *addCookiesBtn = new QPushButton(QStringLiteral("Ekle"), cookiesHeader);
+    auto *addCookiesBtn = new QPushButton(I18n::text(QStringLiteral("common.add")), cookiesHeader);
     addCookiesBtn->setObjectName(QStringLiteral("settings-add-btn"));
     connect(addCookiesBtn, &QPushButton::clicked, this, [this] { showAddSiteDialog(true); });
     cookiesHLayout->addWidget(addCookiesBtn);
@@ -458,7 +456,7 @@ class PrivacyDetailSubpage final : public QWidget {
     noticeIcon->setPixmap(BrowserIcons::icon(BrowserIcon::Privacy).pixmap(18, 18));
     noticeIcon->setFixedSize(18, 18);
     noticeLayout->addWidget(noticeIcon, 0, Qt::AlignVCenter);
-    auto *noticeLabel = new QLabel(QStringLiteral("Bazı çerez ayarları DaliNira Kalkanlar tarafından kontrol edilir. Bunları dalinira://blocker sayfasında görebilirsiniz."), noticeBox);
+    auto *noticeLabel = new QLabel(I18n::text(QStringLiteral("settings.site.cookie_shields_notice")), noticeBox);
     noticeLabel->setStyleSheet(QStringLiteral("color: #9ac2ef; font-size: 13px; background: transparent; border: none;"));
     noticeLabel->setWordWrap(true);
     noticeLayout->addWidget(noticeLabel, 1, Qt::AlignVCenter);
@@ -488,232 +486,232 @@ class PrivacyDetailSubpage final : public QWidget {
     }
 
     if (permissionKey == QLatin1String("geolocation")) {
-      titleLabel_->setText(QStringLiteral("Konum"));
-      introLabel_->setText(QStringLiteral("Yerel haberler veya yakındaki mağazalar gibi alakalı özellikleri ya da bilgileri sunmak için siteler genellikle konumunuzu kullanır"));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.location")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.location_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Location).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::LocationSlash).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler konum bilgimi isteyebilir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin konumumu görmesine izin verme"));
-      denySubLabel_->setText(QStringLiteral("Konumunuzu gerektiren özellikler çalışmaz"));
-      deniedTitleLabel_->setText(QStringLiteral("Konumunuzu görmesine izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Konumunuzu görmesine izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.location_allow")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.location_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.location_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.location_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.location_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = true;
     } else if (permissionKey == QLatin1String("camera")) {
-      titleLabel_->setText(QStringLiteral("Kamera"));
-      introLabel_->setText(QStringLiteral("Görüntülü sohbet gibi iletişim özelliklerinin kullanılması için siteler genellikle video kameranızı kullanır"));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.camera")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.camera_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Camera).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::CameraSlash).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler kameranızı kullanmak isteyebilir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin kameramı kullanmasına izin verme"));
-      denySubLabel_->setText(QStringLiteral("Kameranın kullanılmasını gerektiren özellikler çalışmaz"));
-      deniedTitleLabel_->setText(QStringLiteral("Kameranızı kullanmasına izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Kameranızı kullanmasına izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.camera_allow")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.camera_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.camera_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.camera_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.camera_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("microphone")) {
-      titleLabel_->setText(QStringLiteral("Mikrofon"));
-      introLabel_->setText(QStringLiteral("Görüntülü sohbet gibi iletişim özellikleri için siteler genellikle mikrofonunuzu kullanır"));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.microphone")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.microphone_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Microphone).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::MicrophoneSlash).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler mikrofonunuzu kullanmak isteyebilir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin mikrofonumu kullanmasına izin verme"));
-      denySubLabel_->setText(QStringLiteral("Mikrofonun kullanılmasını gerektiren özellikler çalışmaz"));
-      deniedTitleLabel_->setText(QStringLiteral("Mikrofonunuzu kullanmasına izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Mikrofonunuzu kullanmasına izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.microphone_allow")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.microphone_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.microphone_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.microphone_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.microphone_allowed_list")));
       hasDeviceSelector_ = true;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("notifications")) {
-      titleLabel_->setText(QStringLiteral("Bildirimler"));
-      introLabel_->setText(QStringLiteral("Siteler genellikle son dakika haberleri veya sohbet mesajları konusunda sizi bilgilendirmek için bildirim gönderir."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.notifications")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.notifications_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Notification).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::NotificationSlash).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler bildirim gönderme izni isteyebilir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin bildirim göndermesine izin verme"));
-      denySubLabel_->setText(QStringLiteral("Bildirim gönderilmesini gerektiren özellikler çalışmaz"));
-      deniedTitleLabel_->setText(QStringLiteral("Bildirim göndermesine izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Bildirim göndermesine izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.notifications_allow")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.notifications_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.notifications_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.notifications_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.notifications_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = true;
     } else if (permissionKey == QLatin1String("clipboard")) {
-      titleLabel_->setText(QStringLiteral("Pano"));
-      introLabel_->setText(QStringLiteral("Sitelerin panonuzdaki metin ve görselleri okuma/yazma davranışını belirleyin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.clipboard")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.clipboard_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Clipboard).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Clipboard).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler panoyu görebilir ve değiştirebilir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin panoyu görmesine veya değiştirmesine izin verme"));
-      denySubLabel_->setText(QStringLiteral("Pano erişim istekleri otomatik olarak engellenir"));
-      deniedTitleLabel_->setText(QStringLiteral("Panoyu kullanmasına izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Panoyu kullanmasına izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.clipboard_allow")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.clipboard_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.clipboard_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.clipboard_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.clipboard_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("localFonts")) {
-      titleLabel_->setText(QStringLiteral("Yerel yazı tipleri"));
-      introLabel_->setText(QStringLiteral("Sitelerin cihazınızda yüklü yerel yazı tiplerine erişim davranışını belirleyin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.local_fonts")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.local_fonts_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Fonts).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Fonts).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler yüklü yazı tiplerini kullanabilir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin yüklü yazı tiplerini kullanmasına izin verme"));
-      denySubLabel_->setText(QStringLiteral("Yerel yazı tiplerine erişim engellenir"));
-      deniedTitleLabel_->setText(QStringLiteral("Yerel yazı tiplerini kullanmasına izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Yerel yazı tiplerini kullanmasına izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.local_fonts_allow")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.local_fonts_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.local_fonts_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.local_fonts_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.local_fonts_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("mouseLock")) {
-      titleLabel_->setText(QStringLiteral("Fare kilidi"));
-      introLabel_->setText(QStringLiteral("Sitelerin fare imlecinizi kilitleme davranışını belirleyin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.pointer_lock")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.pointer_lock_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Mouse).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Mouse).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler fare imlecini kilitleyebilir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin fare imlecini kilitlemesine izin verme"));
-      denySubLabel_->setText(QStringLiteral("Fare kilitleme istekleri engellenir"));
-      deniedTitleLabel_->setText(QStringLiteral("Fareyi kilitlemesine izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Fareyi kilitlemesine izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.pointer_lock_allow")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.pointer_lock_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.pointer_lock_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.pointer_lock_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.pointer_lock_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("screenShare")) {
-      titleLabel_->setText(QStringLiteral("Ekran paylaşımı"));
-      introLabel_->setText(QStringLiteral("Web sitelerinin ekranınızı veya bir pencereyi paylaşma iznini belirleyin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.screen_sharing")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.screen_sharing_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Window).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Window).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler ekranınızı paylaşmak isteyebilir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin ekranınızı paylaşmasını engelle"));
-      denySubLabel_->setText(QStringLiteral("Ekran paylaşımı istekleri doğrudan reddedilir"));
-      deniedTitleLabel_->setText(QStringLiteral("Ekran paylaşmasına izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Ekran paylaşmasına izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.screen_sharing_allow")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.screen_sharing_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.screen_sharing_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.screen_sharing_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.screen_sharing_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("javascript")) {
       titleLabel_->setText(QStringLiteral("JavaScript"));
-      introLabel_->setText(QStringLiteral("Siteler JavaScript'i çalıştırabilir. Bu durum, bazı sitelerin beklendiği gibi çalışmasını engeller, ancak sitelerdeki hareketlerinizi izlemeyi ve güvenlik açıklarından yararlanmayı zorlaştırır."));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.javascript_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Javascript).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::JavascriptSlash).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler JavaScript kullanabilir (önerilir)"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin JavaScript kullanmasına izin verme"));
-      denySubLabel_->setText(QStringLiteral("JavaScript kullanılmasını gerektiren özellikler çalışmaz"));
-      deniedTitleLabel_->setText(QStringLiteral("JavaScript kullanmasına izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("JavaScript kullanmasına izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.javascript_allow_recommended")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.javascript_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.javascript_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.javascript_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.javascript_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("images")) {
-      titleLabel_->setText(QStringLiteral("Resimler"));
-      introLabel_->setText(QStringLiteral("Siteler genellikle resimleri otomatik olarak gösterir. Resimlerin gösterilmesine izin vermemek sayfaların daha hızlı yüklenmesini sağlar ve veri kullanımını azaltır."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.images")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.images_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Image).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::ImageSlash).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler resim gösterebilir (önerilir)"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin resim göstermesine izin verme"));
-      denySubLabel_->setText(QStringLiteral("Resimlerin kullanılmasını gerektiren özellikler çalışmaz"));
-      deniedTitleLabel_->setText(QStringLiteral("Resim göstermesine izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Resim göstermesine izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.images_allow_recommended")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.images_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.images_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.images_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.images_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("popups")) {
-      titleLabel_->setText(QStringLiteral("Pop-up ve yönlendirmeler"));
-      introLabel_->setText(QStringLiteral("Siteler, otomatik olarak yeni sekmeler açmak veya reklam göstermek için genellikle pop-up ve yönlendirmeleri kullanır."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.popups")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.popups_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Popup).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::PopupSlash).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler pop-up'lar gönderip yönlendirmeler kullanabilir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin pop-up'lar göndermesine veya yönlendirmeler kullanmasına izin verme (önerilir)"));
-      denySubLabel_->setText(QStringLiteral("Pop-up veya yönlendirme gerektiren özellikler engellenir"));
-      deniedTitleLabel_->setText(QStringLiteral("Pop-up göndermesine veya yönlendirme kullanmasına izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Pop-up göndermesine veya yönlendirme kullanmasına izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.popups_allow_send")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.popups_deny_recommended")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.popups_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.popups_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.popups_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("thirdPartyCookies")) {
-      titleLabel_->setText(QStringLiteral("Üçüncü taraf çerezleri"));
-      introLabel_->setText(QStringLiteral("Üçüncü taraf çerezleri, ziyaret ettiğiniz siteden farklı siteler tarafından oluşturulur. Bu çerezler, sitelerdeki hareketlerinizi izlemek ve reklamları kişiselleştirmek için kullanılabilir."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.third_party_cookies")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.third_party_cookies_intro")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("sound")) {
-      titleLabel_->setText(QStringLiteral("Ses"));
-      introLabel_->setText(QStringLiteral("Web sitelerinin ses ve medya oynatma davranışını belirleyin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.sound")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.sound_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Audio).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Audio).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler ses çalabilir (önerilir)"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin ses çalmasına izin verme"));
-      denySubLabel_->setText(QStringLiteral("Tüm web siteleri varsayılan olarak sessize alınır"));
-      deniedTitleLabel_->setText(QStringLiteral("Ses çalmasına izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Ses çalmasına izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.sound_allow_recommended")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.sound_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.sound_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.sound_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.sound_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("zoomLevels")) {
-      titleLabel_->setText(QStringLiteral("Yakınlaştırma seviyeleri"));
-      introLabel_->setText(QStringLiteral("Siteler için özel yakınlaştırma düzeylerini yönetin veya varsayılan sayfa yakınlaştırma oranını belirleyin."));
-      deniedTitleLabel_->setText(QStringLiteral("Özel yakınlaştırma uygulanan siteler"));
-      allowedTitleLabel_->setText(QStringLiteral("Standart yakınlaştırma kullanan siteler"));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.zoom_levels")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.zoom_levels_intro")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.zoom_custom_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.zoom_standard_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("pdf")) {
-      titleLabel_->setText(QStringLiteral("PDF dokümanları"));
-      introLabel_->setText(QStringLiteral("PDF dosyalarının tarayıcıda açılma veya indirilme davranışını belirleyin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.pdf_documents")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.pdf_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Pdf).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Download).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("PDF'leri DaliNira'de aç"));
-      denyTitleLabel_->setText(QStringLiteral("PDF'leri indir"));
-      denySubLabel_->setText(QStringLiteral("PDF belgeleri otomatik olarak İndirilenler klasörüne kaydedilir"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.pdf_open_in_browser")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.pdf_download")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.pdf_download_desc")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("protectedContent")) {
-      titleLabel_->setText(QStringLiteral("Korumalı içerik kimlikleri"));
-      introLabel_->setText(QStringLiteral("Müzik ve video akış sitelerinin (DRM) telif hakkı korumalı medya oynatmak için cihaz kimliğinizi kullanma davranışını belirleyin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.protected_content")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.protected_content_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::ProtectedContent).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::ProtectedContent).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Sitelerin korumalı içerik (DRM) kimliklerini kullanmasına izin ver (önerilir)"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin korumalı içerik kimliklerini kullanmasına izin verme"));
-      denySubLabel_->setText(QStringLiteral("Cihaz kimliği paylaşılmaz; DRM korumalı bazı medya akışları oynatılamayabilir"));
-      deniedTitleLabel_->setText(QStringLiteral("Korumalı içerik kimliklerini kullanmasına izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Korumalı içerik kimliklerini kullanmasına izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.protected_content_allow_recommended")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.protected_content_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.protected_content_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.protected_content_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.protected_content_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("insecureContent")) {
-      titleLabel_->setText(QStringLiteral("Güvenli olmayan içerik"));
-      introLabel_->setText(QStringLiteral("HTTPS güvenli web sitelerinde HTTP üzerinden yüklenen güvenli olmayan (karışık) içeriklerin davranışını yönetin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.insecure_content")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.insecure_content_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::InsecureContent).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::InsecureContent).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Güvenli sitelerde güvenli olmayan içeriği engelle (önerilir)"));
-      denyTitleLabel_->setText(QStringLiteral("Tüm sitelerde güvenli olmayan içeriğe izin ver"));
-      denySubLabel_->setText(QStringLiteral("Güvenli olmayan karma içerikler kısıtlama olmadan yüklenir"));
-      deniedTitleLabel_->setText(QStringLiteral("Güvenli olmayan içeriği engellenen siteler"));
-      allowedTitleLabel_->setText(QStringLiteral("Güvenli olmayan içeriğe izin verilen siteler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.insecure_content_block_recommended")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.insecure_content_allow_all")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.insecure_content_allow_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.insecure_content_blocked_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.insecure_content_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("siteData")) {
-      titleLabel_->setText(QStringLiteral("Cihaz üzerindeki site verileri"));
-      introLabel_->setText(QStringLiteral("Web sitelerinin cihazınızda yerel depolama, IndexedDB ve geçici veriler saklama davranışını belirleyin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.on_device_data")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.on_device_data_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::SiteData).pixmap(18, 18));
       middleIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::SiteData).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::SiteData).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler, cihazınıza veri kaydedebilir (önerilir)"));
-      middleTitleLabel_->setText(QStringLiteral("Tüm pencereleri kapattığınızda verileri sil"));
-      middleSubLabel_->setText(QStringLiteral("Tarayıcı kapandığında cihazda depolanan geçici site verileri otomatik temizlenir"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin cihazınıza veri kaydetmesini engelleyin (önerilmez)"));
-      denySubLabel_->setText(QStringLiteral("Hiçbir site yerel depolama kullanamaz; bazı siteler çalışmayabilir"));
-      deniedTitleLabel_->setText(QStringLiteral("Cihazınıza veri kaydetmesine izin verilmeyenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Cihazınıza veri kaydetmesine izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.on_device_data_allow_recommended")));
+      middleTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.on_device_data_clear_on_exit")));
+      middleSubLabel_->setText(I18n::text(QStringLiteral("settings.site.on_device_data_clear_on_exit_desc")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.on_device_data_block_not_recommended")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.on_device_data_block_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.on_device_data_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.on_device_data_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("jsOptimize")) {
-      titleLabel_->setText(QStringLiteral("JavaScript optimizasyonu ve güvenlik"));
-      introLabel_->setText(QStringLiteral("Web sitelerinde V8 JIT (Just-In-Time) derlemesini ve gelişmiş JavaScript optimizasyonlarını yönetin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.v8_optimizer")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.v8_optimizer_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::JsOptimize).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::JsOptimize).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Siteler JavaScript optimizasyonunu kullanabilir (önerilir)"));
-      denyTitleLabel_->setText(QStringLiteral("Sitelerin JavaScript optimizasyonunu kullanmasını devre dışı bırak"));
-      denySubLabel_->setText(QStringLiteral("JIT kapatılarak bellek istismarlarına karşı maksimum güvenlik sağlanır"));
-      deniedTitleLabel_->setText(QStringLiteral("JavaScript optimizasyonu engellenen siteler"));
-      allowedTitleLabel_->setText(QStringLiteral("JavaScript optimizasyonuna izin verilen siteler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.v8_optimizer_allow_recommended")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.v8_optimizer_deny")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.v8_optimizer_deny_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.v8_optimizer_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.v8_optimizer_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     } else if (permissionKey == QLatin1String("autoFullscreen")) {
-      titleLabel_->setText(QStringLiteral("Otomatik tam ekran"));
-      introLabel_->setText(QStringLiteral("Web sitelerinin kullanıcı etkileşimi olmadan tam ekrana geçme iznini belirleyin."));
+      titleLabel_->setText(I18n::text(QStringLiteral("settings.site.auto_fullscreen")));
+      introLabel_->setText(I18n::text(QStringLiteral("settings.site.auto_fullscreen_intro")));
       allowIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Fullscreen).pixmap(18, 18));
       denyIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Fullscreen).pixmap(18, 18));
-      allowTitleLabel_->setText(QStringLiteral("Sitelerin kullanıcı etkileşimi olmadan tam ekrana geçmesini engelle (önerilir)"));
-      denyTitleLabel_->setText(QStringLiteral("Siteler otomatik olarak tam ekrana geçebilir"));
-      denySubLabel_->setText(QStringLiteral("Web siteleri kullanıcı tıklaması olmadan da tam ekrana geçebilir"));
-      deniedTitleLabel_->setText(QStringLiteral("Otomatik tam ekrana geçmesi engellenenler"));
-      allowedTitleLabel_->setText(QStringLiteral("Otomatik tam ekrana geçmesine izin verilenler"));
+      allowTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.auto_fullscreen_block_recommended")));
+      denyTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.auto_fullscreen_allow")));
+      denySubLabel_->setText(I18n::text(QStringLiteral("settings.site.auto_fullscreen_allow_desc")));
+      deniedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.auto_fullscreen_denied_list")));
+      allowedTitleLabel_->setText(I18n::text(QStringLiteral("settings.site.auto_fullscreen_allowed_list")));
       hasDeviceSelector_ = false;
       hasDisplayMode_ = false;
     }
@@ -747,7 +745,7 @@ class PrivacyDetailSubpage final : public QWidget {
     }
 
     if (permissionKey_ == QLatin1String("zoomLevels")) {
-      const QString saved = QSettings().value(QStringLiteral("appearance/defaultZoom"), QStringLiteral("%100 (Varsayılan)")).toString();
+      const QString saved = QSettings().value(QStringLiteral("appearance/defaultZoom"), I18n::text(QStringLiteral("settings.site.zoom_100_default"))).toString();
       const QSignalBlocker blocker(zoomCombo_);
       int idx = zoomCombo_->findText(saved);
       if (idx >= 0) zoomCombo_->setCurrentIndex(idx);
@@ -859,7 +857,7 @@ class PrivacyDetailSubpage final : public QWidget {
 
   void showAddSiteDialog(bool allow) {
     QDialog dialog(this);
-    dialog.setWindowTitle(QStringLiteral("Site Ekle"));
+    dialog.setWindowTitle(I18n::text(QStringLiteral("settings.site.add_site_title")));
     dialog.setWindowFlags(dialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
     dialog.setMinimumWidth(440);
     dialog.setStyleSheet(QStringLiteral(R"CSS(
@@ -880,9 +878,9 @@ class PrivacyDetailSubpage final : public QWidget {
     const bool isCookies = (permissionKey_ == QLatin1String("thirdPartyCookies"));
     QString titleText;
     if (isCookies) {
-      titleText = QStringLiteral("Üçüncü Taraf Çerezlerine İzin Verilen Site Ekle");
+      titleText = I18n::text(QStringLiteral("settings.site.add_third_party_cookie_site"));
     } else {
-      titleText = allow ? QStringLiteral("İzin Verilen Site Ekle") : QStringLiteral("Engellenen Site Ekle");
+      titleText = allow ? I18n::text(QStringLiteral("settings.site.add_allowed_site")) : I18n::text(QStringLiteral("settings.site.add_blocked_site"));
     }
 
     auto *titleLbl = new QLabel(titleText, &dialog);
@@ -890,21 +888,21 @@ class PrivacyDetailSubpage final : public QWidget {
     layout->addWidget(titleLbl);
 
     QString descText = isCookies
-        ? QStringLiteral("Özel kural eklemek istediğiniz sitenin web adresini veya joker karakterli alan adını girin (Örn: [*.]example.com):")
-        : QStringLiteral("Özel kural eklemek istediğiniz sitenin web adresini girin:");
+        ? I18n::text(QStringLiteral("settings.site.add_site_prompt_wildcard"))
+        : I18n::text(QStringLiteral("settings.site.add_site_prompt"));
 
     auto *descLbl = new QLabel(descText, &dialog);
     descLbl->setStyleSheet(QStringLiteral("color: #8fa0b3; font-size: 13px;"));
     layout->addWidget(descLbl);
 
     auto *edit = new QLineEdit(&dialog);
-    edit->setPlaceholderText(isCookies ? QStringLiteral("[*.]example.com veya https://www.example.com") : QStringLiteral("https://www.example.com"));
+    edit->setPlaceholderText(isCookies ? I18n::text(QStringLiteral("settings.site.cookie_pattern_placeholder")) : QStringLiteral("https://www.example.com"));
     layout->addWidget(edit);
 
     auto *btnLayout = new QHBoxLayout;
     btnLayout->addStretch();
-    auto *cancelBtn = new QPushButton(QStringLiteral("İptal"), &dialog);
-    auto *addBtn = new QPushButton(QStringLiteral("Ekle"), &dialog);
+    auto *cancelBtn = new QPushButton(I18n::text(QStringLiteral("common.cancel")), &dialog);
+    auto *addBtn = new QPushButton(I18n::text(QStringLiteral("common.add")), &dialog);
     addBtn->setObjectName(QStringLiteral("primary"));
     btnLayout->addWidget(cancelBtn);
     btnLayout->addWidget(addBtn);
@@ -941,7 +939,7 @@ class PrivacyDetailSubpage final : public QWidget {
     }
 
     if (origins.isEmpty()) {
-      auto *emptyLabel = new QLabel(QStringLiteral("Site eklenmedi"), layout->parentWidget());
+      auto *emptyLabel = new QLabel(I18n::text(QStringLiteral("settings.site.no_sites_added")), layout->parentWidget());
       emptyLabel->setStyleSheet(QStringLiteral("color: #728496; font-size: 13px; font-style: italic; padding: 10px 18px;"));
       layout->addWidget(emptyLabel);
       return;
@@ -971,8 +969,8 @@ class PrivacyDetailSubpage final : public QWidget {
       delBtn->setCursor(Qt::PointingHandCursor);
       delBtn->setIcon(BrowserIcons::icon(BrowserIcon::Trash));
       delBtn->setIconSize(QSize(14, 14));
-      delBtn->setToolTip(QStringLiteral("Kaldır"));
-      delBtn->setAccessibleName(QStringLiteral("Kaldır: %1").arg(origin));
+      delBtn->setToolTip(I18n::text(QStringLiteral("common.remove")));
+      delBtn->setAccessibleName(I18n::text(QStringLiteral("common.remove_item")).arg(origin));
       connect(delBtn, &QPushButton::clicked, this, [this, origin] {
         profileService_->removeSitePermissionRule(permissionKey_, origin);
         refresh();
@@ -1125,12 +1123,12 @@ QWidget *SettingsPage::createPrivacySection() {
     if (updatePrivacySubtitles_) updatePrivacySubtitles_();
   }, privacyStack_);
 
-  Section section = makeSection(QStringLiteral("Gizlilik ve güvenlik"), QStringLiteral("Site izinlerini, çerezleri, içerik ayarlarını ve izleme korumasını yönetin."));
+  Section section = makeSection(I18n::text(QStringLiteral("settings.category.privacy")), I18n::text(QStringLiteral("settings.privacy.description")));
 
   // =========================================================================
   // 1. İZİNLER KARTI
   // =========================================================================
-  auto *permissionsCard = makeCard(section.page, QStringLiteral("İZİNLER"));
+  auto *permissionsCard = makeCard(section.page, I18n::text(QStringLiteral("settings.privacy.permissions_card")));
 
   auto openSubpage = [this](const QString &key) {
     if (privacySubpage_ && privacyStack_) {
@@ -1151,93 +1149,93 @@ QWidget *SettingsPage::createPrivacySection() {
   // Konum
   const auto getGeoSub = [this] {
     return profileService_->permissionDefaultPolicy(QStringLiteral("geolocation")) == QStringLiteral("deny")
-        ? QStringLiteral("Sitelerin konumumu görmesine izin verme")
-        : QStringLiteral("Siteler konum bilgimi isteyebilir");
+        ? I18n::text(QStringLiteral("settings.site.location_deny"))
+        : I18n::text(QStringLiteral("settings.site.location_allow"));
   };
   InteractiveSettingRowResult geoRow = makeInteractiveSettingRow(
-      permissionsCard, BrowserIcon::Location, QStringLiteral("Konum"), getGeoSub(),
+      permissionsCard, BrowserIcon::Location, I18n::text(QStringLiteral("settings.site.location")), getGeoSub(),
       [openSubpage] { openSubpage(QStringLiteral("geolocation")); });
   addRow(permissionsCard, geoRow.frame);
 
   // Kamera
   const auto getCamSub = [this] {
     return profileService_->permissionDefaultPolicy(QStringLiteral("camera")) == QStringLiteral("deny")
-        ? QStringLiteral("Sitelerin kameramı kullanmasına izin verme")
-        : QStringLiteral("Siteler kameranızı kullanmak isteyebilir");
+        ? I18n::text(QStringLiteral("settings.site.camera_deny"))
+        : I18n::text(QStringLiteral("settings.site.camera_allow"));
   };
   InteractiveSettingRowResult camRow = makeInteractiveSettingRow(
-      permissionsCard, BrowserIcon::Camera, QStringLiteral("Kamera"), getCamSub(),
+      permissionsCard, BrowserIcon::Camera, I18n::text(QStringLiteral("settings.site.camera")), getCamSub(),
       [openSubpage] { openSubpage(QStringLiteral("camera")); });
   addRow(permissionsCard, camRow.frame);
 
   // Mikrofon
   const auto getMicSub = [this] {
     return profileService_->permissionDefaultPolicy(QStringLiteral("microphone")) == QStringLiteral("deny")
-        ? QStringLiteral("Sitelerin mikrofonumu kullanmasına izin verme")
-        : QStringLiteral("Siteler mikrofonunuzu kullanmak isteyebilir");
+        ? I18n::text(QStringLiteral("settings.site.microphone_deny"))
+        : I18n::text(QStringLiteral("settings.site.microphone_allow"));
   };
   InteractiveSettingRowResult micRow = makeInteractiveSettingRow(
-      permissionsCard, BrowserIcon::Microphone, QStringLiteral("Mikrofon"), getMicSub(),
+      permissionsCard, BrowserIcon::Microphone, I18n::text(QStringLiteral("settings.site.microphone")), getMicSub(),
       [openSubpage] { openSubpage(QStringLiteral("microphone")); });
   addRow(permissionsCard, micRow.frame);
 
   // Bildirimler
   const auto getNotifSub = [this] {
     const auto pol = profileService_->permissionDefaultPolicy(QStringLiteral("notifications"));
-    if (pol == QStringLiteral("deny")) return QStringLiteral("Sitelerin bildirim göndermesine izin verme");
-    return QStringLiteral("Siteler bildirim gönderme izni isteyebilir");
+    if (pol == QStringLiteral("deny")) return I18n::text(QStringLiteral("settings.site.notifications_deny"));
+    return I18n::text(QStringLiteral("settings.site.notifications_allow"));
   };
   InteractiveSettingRowResult notifRow = makeInteractiveSettingRow(
-      permissionsCard, BrowserIcon::Notification, QStringLiteral("Bildirimler"), getNotifSub(),
+      permissionsCard, BrowserIcon::Notification, I18n::text(QStringLiteral("settings.site.notifications")), getNotifSub(),
       [openSubpage] { openSubpage(QStringLiteral("notifications")); });
   addRow(permissionsCard, notifRow.frame);
 
   // Ek izinler (Akordeon)
-  auto extraPerms = makeCollapsibleSectionRow(permissionsCard, QStringLiteral("Ek izinler"));
+  auto extraPerms = makeCollapsibleSectionRow(permissionsCard, I18n::text(QStringLiteral("settings.privacy.additional_permissions")));
   addRow(permissionsCard, extraPerms.headerRow);
 
   const auto getClipSub = [this] {
     return profileService_->permissionDefaultPolicy(QStringLiteral("clipboard")) == QStringLiteral("deny")
-        ? QStringLiteral("Sitelerin panoyu görmesine veya değiştirmesine izin verme")
-        : QStringLiteral("Siteler panoyu görebilir ve değiştirebilir");
+        ? I18n::text(QStringLiteral("settings.site.clipboard_deny"))
+        : I18n::text(QStringLiteral("settings.site.clipboard_allow"));
   };
   const auto getFontsSub = [this] {
     return profileService_->permissionDefaultPolicy(QStringLiteral("localFonts")) == QStringLiteral("deny")
-        ? QStringLiteral("Sitelerin yüklü yazı tiplerini kullanmasına izin verme")
-        : QStringLiteral("Siteler yüklü yazı tiplerini kullanabilir");
+        ? I18n::text(QStringLiteral("settings.site.local_fonts_deny"))
+        : I18n::text(QStringLiteral("settings.site.local_fonts_allow"));
   };
   const auto getMouseSub = [this] {
     return profileService_->permissionDefaultPolicy(QStringLiteral("mouseLock")) == QStringLiteral("deny")
-        ? QStringLiteral("Sitelerin fare imlecini kilitlemesine izin verme")
-        : QStringLiteral("Siteler fare imlecini kilitleyebilir");
+        ? I18n::text(QStringLiteral("settings.site.pointer_lock_deny"))
+        : I18n::text(QStringLiteral("settings.site.pointer_lock_allow"));
   };
   const auto getScreenSub = [this] {
     return profileService_->permissionDefaultPolicy(QStringLiteral("screenShare")) == QStringLiteral("deny")
-        ? QStringLiteral("Sitelerin ekranınızı paylaşmasını engelle")
-        : QStringLiteral("Siteler ekranınızı paylaşmak isteyebilir");
+        ? I18n::text(QStringLiteral("settings.site.screen_sharing_deny"))
+        : I18n::text(QStringLiteral("settings.site.screen_sharing_allow"));
   };
 
   // Ek izin 1: Pano
   InteractiveSettingRowResult clipRow = makeInteractiveSettingRow(
-      extraPerms.childContainer, BrowserIcon::Clipboard, QStringLiteral("Pano"), getClipSub(),
+      extraPerms.childContainer, BrowserIcon::Clipboard, I18n::text(QStringLiteral("settings.site.clipboard")), getClipSub(),
       [openSubpage] { openSubpage(QStringLiteral("clipboard")); });
   extraPerms.childContainer->layout()->addWidget(clipRow.frame);
 
   // Ek izin 2: Yerel yazı tipleri
   InteractiveSettingRowResult fontsRow = makeInteractiveSettingRow(
-      extraPerms.childContainer, BrowserIcon::Fonts, QStringLiteral("Yerel yazı tipleri"), getFontsSub(),
+      extraPerms.childContainer, BrowserIcon::Fonts, I18n::text(QStringLiteral("settings.site.local_fonts")), getFontsSub(),
       [openSubpage] { openSubpage(QStringLiteral("localFonts")); });
   extraPerms.childContainer->layout()->addWidget(fontsRow.frame);
 
   // Ek izin 3: Fare kilidi
   InteractiveSettingRowResult mouseRow = makeInteractiveSettingRow(
-      extraPerms.childContainer, BrowserIcon::Mouse, QStringLiteral("Fare kilidi"), getMouseSub(),
+      extraPerms.childContainer, BrowserIcon::Mouse, I18n::text(QStringLiteral("settings.site.pointer_lock")), getMouseSub(),
       [openSubpage] { openSubpage(QStringLiteral("mouseLock")); });
   extraPerms.childContainer->layout()->addWidget(mouseRow.frame);
 
   // Ek izin 4: Ekran paylaşımı
   InteractiveSettingRowResult screenRow = makeInteractiveSettingRow(
-      extraPerms.childContainer, BrowserIcon::Window, QStringLiteral("Ekran paylaşımı"), getScreenSub(),
+      extraPerms.childContainer, BrowserIcon::Window, I18n::text(QStringLiteral("settings.site.screen_sharing")), getScreenSub(),
       [openSubpage] { openSubpage(QStringLiteral("screenShare")); });
   extraPerms.childContainer->layout()->addWidget(screenRow.frame);
 
@@ -1247,33 +1245,33 @@ QWidget *SettingsPage::createPrivacySection() {
   // =========================================================================
   // 2. İÇERİK KARTI
   // =========================================================================
-  auto *contentCard = makeCard(section.page, QStringLiteral("İÇERİK"));
+  auto *contentCard = makeCard(section.page, I18n::text(QStringLiteral("settings.privacy.content_card")));
 
   const auto getCookieSub = [this] {
     const auto pol = profileService_->cookiePolicy();
-    if (pol == QStringLiteral("block_all")) return QStringLiteral("Tüm çerezler engelleniyor");
-    if (pol == QStringLiteral("allow_all")) return QStringLiteral("Tüm çerezlere izin veriliyor");
-    return QStringLiteral("Üçüncü taraf çerezleri engelleniyor");
+    if (pol == QStringLiteral("block_all")) return I18n::text(QStringLiteral("settings.privacy.cookies_block_all"));
+    if (pol == QStringLiteral("allow_all")) return I18n::text(QStringLiteral("settings.privacy.cookies_allow_all"));
+    return I18n::text(QStringLiteral("settings.privacy.cookies_block_third_party"));
   };
   const auto getJsSub = [this] {
     return profileService_->isJavascriptEnabled()
-        ? QStringLiteral("Siteler JavaScript kullanabilir")
-        : QStringLiteral("Sitelerin JavaScript kullanmasına izin verme");
+        ? I18n::text(QStringLiteral("settings.privacy.javascript_allowed"))
+        : I18n::text(QStringLiteral("settings.site.javascript_deny"));
   };
   const auto getImgSub = [this] {
     return profileService_->isAutoLoadImagesEnabled()
-        ? QStringLiteral("Siteler resim gösterebilir")
-        : QStringLiteral("Sitelerin resim göstermesine izin verme");
+        ? I18n::text(QStringLiteral("settings.privacy.images_allowed"))
+        : I18n::text(QStringLiteral("settings.site.images_deny"));
   };
   const auto getPopupSub = [this] {
     return !profileService_->arePopupsAllowed()
-        ? QStringLiteral("Sitelerin pop-up'lar göndermesine veya yönlendirmeler kullanmasına izin verme")
-        : QStringLiteral("Siteler pop-up gönderebilir ve yönlendirmeler kullanabilir");
+        ? I18n::text(QStringLiteral("settings.privacy.popups_blocked"))
+        : I18n::text(QStringLiteral("settings.privacy.popups_allowed"));
   };
 
   // 1. Üçüncü taraf çerezleri
   InteractiveSettingRowResult cookieRow = makeInteractiveSettingRow(
-      contentCard, BrowserIcon::Cookie, QStringLiteral("Üçüncü taraf çerezleri"), getCookieSub(),
+      contentCard, BrowserIcon::Cookie, I18n::text(QStringLiteral("settings.site.third_party_cookies")), getCookieSub(),
       [openSubpage] { openSubpage(QStringLiteral("thirdPartyCookies")); });
   addRow(contentCard, cookieRow.frame);
 
@@ -1285,104 +1283,104 @@ QWidget *SettingsPage::createPrivacySection() {
 
   // 3. Resimler
   InteractiveSettingRowResult imgRow = makeInteractiveSettingRow(
-      contentCard, BrowserIcon::Image, QStringLiteral("Resimler"), getImgSub(),
+      contentCard, BrowserIcon::Image, I18n::text(QStringLiteral("settings.site.images")), getImgSub(),
       [openSubpage] { openSubpage(QStringLiteral("images")); });
   addRow(contentCard, imgRow.frame);
 
   // 4. Pop-up ve yönlendirmeler
   InteractiveSettingRowResult popupRow = makeInteractiveSettingRow(
-      contentCard, BrowserIcon::Popup, QStringLiteral("Pop-up ve yönlendirmeler"), getPopupSub(),
+      contentCard, BrowserIcon::Popup, I18n::text(QStringLiteral("settings.site.popups")), getPopupSub(),
       [openSubpage] { openSubpage(QStringLiteral("popups")); });
   addRow(contentCard, popupRow.frame);
 
   // Ek içerik ayarları (Akordeon)
-  auto extraContent = makeCollapsibleSectionRow(contentCard, QStringLiteral("Ek içerik ayarları"));
+  auto extraContent = makeCollapsibleSectionRow(contentCard, I18n::text(QStringLiteral("settings.privacy.additional_content_settings")));
   addRow(contentCard, extraContent.headerRow);
 
   // Subtitle getters for extra content
   const auto getSoundSub = [this] {
     return profileService_->isSoundAllowed()
-        ? QStringLiteral("Siteler ses çalabilir")
-        : QStringLiteral("Sitelerin ses çalmasına izin verme");
+        ? I18n::text(QStringLiteral("settings.privacy.sound_allowed"))
+        : I18n::text(QStringLiteral("settings.site.sound_deny"));
   };
   const auto getPdfSub = [this] {
     return profileService_->openPdfInBrowser()
-        ? QStringLiteral("PDF'leri DaliNira'de aç")
-        : QStringLiteral("PDF'leri indir");
+        ? I18n::text(QStringLiteral("settings.site.pdf_open_in_browser"))
+        : I18n::text(QStringLiteral("settings.site.pdf_download"));
   };
   const auto getProtectedContentSub = [this] {
     return profileService_->isProtectedContentEnabled()
-        ? QStringLiteral("Sitelerin korumalı içerik (DRM) kimliklerini kullanmasına izin ver")
-        : QStringLiteral("Sitelerin korumalı içerik kimliklerini kullanmasına izin verme");
+        ? I18n::text(QStringLiteral("settings.privacy.protected_content_allowed"))
+        : I18n::text(QStringLiteral("settings.site.protected_content_deny"));
   };
   const auto getInsecureContentSub = [this] {
     return profileService_->insecureContentPolicy() == QStringLiteral("allow")
-        ? QStringLiteral("Tüm sitelerde güvenli olmayan içeriğe izin ver")
-        : QStringLiteral("Güvenli sitelerde güvenli olmayan içerik varsayılan olarak engellenir");
+        ? I18n::text(QStringLiteral("settings.site.insecure_content_allow_all"))
+        : I18n::text(QStringLiteral("settings.privacy.insecure_content_blocked"));
   };
   const auto getSiteDataSub = [this] {
     const QString pol = profileService_->siteDataPolicy();
-    if (pol == QStringLiteral("delete_on_exit")) return QStringLiteral("Tüm pencereleri kapattığınızda verileri sil");
-    if (pol == QStringLiteral("block")) return QStringLiteral("Sitelerin cihazınıza veri kaydetmesini engelleyin");
-    return QStringLiteral("Siteler, cihazınıza veri kaydedebilir");
+    if (pol == QStringLiteral("delete_on_exit")) return I18n::text(QStringLiteral("settings.site.on_device_data_clear_on_exit"));
+    if (pol == QStringLiteral("block")) return I18n::text(QStringLiteral("settings.privacy.on_device_data_blocked"));
+    return I18n::text(QStringLiteral("settings.privacy.on_device_data_allowed"));
   };
   const auto getJsOptimizeSub = [this] {
     return profileService_->isJsOptimizationEnabled()
-        ? QStringLiteral("Siteler JavaScript optimizasyonunu kullanabilir")
-        : QStringLiteral("Sitelerin JavaScript optimizasyonunu kullanmasını devre dışı bırak");
+        ? I18n::text(QStringLiteral("settings.privacy.v8_optimizer_allowed"))
+        : I18n::text(QStringLiteral("settings.site.v8_optimizer_deny"));
   };
   const auto getAutoFullscreenSub = [this] {
     return profileService_->isAutoFullscreenAllowed()
-        ? QStringLiteral("Siteler otomatik olarak tam ekrana geçebilir")
-        : QStringLiteral("Sitelerin kullanıcı etkileşimi olmadan tam ekrana geçmesini engelle");
+        ? I18n::text(QStringLiteral("settings.site.auto_fullscreen_allow"))
+        : I18n::text(QStringLiteral("settings.privacy.auto_fullscreen_blocked"));
   };
 
   // 1. Ses
   InteractiveSettingRowResult soundRow = makeInteractiveSettingRow(
-      extraContent.childContainer, BrowserIcon::Audio, QStringLiteral("Ses"), getSoundSub(),
+      extraContent.childContainer, BrowserIcon::Audio, I18n::text(QStringLiteral("settings.site.sound")), getSoundSub(),
       [openSubpage] { openSubpage(QStringLiteral("sound")); });
   extraContent.childContainer->layout()->addWidget(soundRow.frame);
 
   // 2. Yakınlaştırma seviyeleri
   InteractiveSettingRowResult zoomRow = makeInteractiveSettingRow(
-      extraContent.childContainer, BrowserIcon::Zoom, QStringLiteral("Yakınlaştırma seviyeleri"),
-      QStringLiteral("Siteler için özel yakınlaştırma düzeylerini yönetin"),
+      extraContent.childContainer, BrowserIcon::Zoom, I18n::text(QStringLiteral("settings.site.zoom_levels")),
+      I18n::text(QStringLiteral("settings.privacy.zoom_levels_summary")),
       [openSubpage] { openSubpage(QStringLiteral("zoomLevels")); });
   extraContent.childContainer->layout()->addWidget(zoomRow.frame);
 
   // 3. PDF dokümanları
   InteractiveSettingRowResult pdfRow = makeInteractiveSettingRow(
-      extraContent.childContainer, BrowserIcon::Pdf, QStringLiteral("PDF dokümanları"), getPdfSub(),
+      extraContent.childContainer, BrowserIcon::Pdf, I18n::text(QStringLiteral("settings.site.pdf_documents")), getPdfSub(),
       [openSubpage] { openSubpage(QStringLiteral("pdf")); });
   extraContent.childContainer->layout()->addWidget(pdfRow.frame);
 
   // 4. Korumalı içerik kimlikleri
   InteractiveSettingRowResult protectedContentRow = makeInteractiveSettingRow(
-      extraContent.childContainer, BrowserIcon::ProtectedContent, QStringLiteral("Korumalı içerik kimlikleri"), getProtectedContentSub(),
+      extraContent.childContainer, BrowserIcon::ProtectedContent, I18n::text(QStringLiteral("settings.site.protected_content")), getProtectedContentSub(),
       [openSubpage] { openSubpage(QStringLiteral("protectedContent")); });
   extraContent.childContainer->layout()->addWidget(protectedContentRow.frame);
 
   // 5. Güvenli olmayan içerik
   InteractiveSettingRowResult insecureContentRow = makeInteractiveSettingRow(
-      extraContent.childContainer, BrowserIcon::InsecureContent, QStringLiteral("Güvenli olmayan içerik"), getInsecureContentSub(),
+      extraContent.childContainer, BrowserIcon::InsecureContent, I18n::text(QStringLiteral("settings.site.insecure_content")), getInsecureContentSub(),
       [openSubpage] { openSubpage(QStringLiteral("insecureContent")); });
   extraContent.childContainer->layout()->addWidget(insecureContentRow.frame);
 
   // 6. Cihaz üzerindeki site verileri
   InteractiveSettingRowResult siteDataRow = makeInteractiveSettingRow(
-      extraContent.childContainer, BrowserIcon::SiteData, QStringLiteral("Cihaz üzerindeki site verileri"), getSiteDataSub(),
+      extraContent.childContainer, BrowserIcon::SiteData, I18n::text(QStringLiteral("settings.site.on_device_data")), getSiteDataSub(),
       [openSubpage] { openSubpage(QStringLiteral("siteData")); });
   extraContent.childContainer->layout()->addWidget(siteDataRow.frame);
 
   // 7. JavaScript optimizasyonu ve güvenlik
   InteractiveSettingRowResult jsOptimizeRow = makeInteractiveSettingRow(
-      extraContent.childContainer, BrowserIcon::JsOptimize, QStringLiteral("JavaScript optimizasyonu ve güvenlik"), getJsOptimizeSub(),
+      extraContent.childContainer, BrowserIcon::JsOptimize, I18n::text(QStringLiteral("settings.site.v8_optimizer")), getJsOptimizeSub(),
       [openSubpage] { openSubpage(QStringLiteral("jsOptimize")); });
   extraContent.childContainer->layout()->addWidget(jsOptimizeRow.frame);
 
   // 8. Otomatik tam ekran
   InteractiveSettingRowResult autoFullscreenRow = makeInteractiveSettingRow(
-      extraContent.childContainer, BrowserIcon::Fullscreen, QStringLiteral("Otomatik tam ekran"), getAutoFullscreenSub(),
+      extraContent.childContainer, BrowserIcon::Fullscreen, I18n::text(QStringLiteral("settings.site.auto_fullscreen")), getAutoFullscreenSub(),
       [openSubpage] { openSubpage(QStringLiteral("autoFullscreen")); });
   extraContent.childContainer->layout()->addWidget(autoFullscreenRow.frame);
 
@@ -1422,11 +1420,11 @@ QWidget *SettingsPage::createPrivacySection() {
   auto *autoRevokeCard = makeCard(section.page);
   auto *autoRevokeSwitch = new GlowToggleSwitch(autoRevokeCard);
   autoRevokeSwitch->setChecked(profileService_->autoRevokeUnusedPermissions());
-  autoRevokeSwitch->setAccessibleName(QStringLiteral("Kullanılmayan sitelerin izinlerini otomatik olarak kaldır"));
+  autoRevokeSwitch->setAccessibleName(I18n::text(QStringLiteral("settings.privacy.auto_revoke")));
   addRow(autoRevokeCard, settingRow(
       autoRevokeCard,
-      QStringLiteral("Kullanılmayan sitelerin izinlerini otomatik olarak kaldır"),
-      QStringLiteral("Verilerinizin korunması için DaliNira'nin, yakın zamanda ziyaret etmediğiniz sitelerin izinlerini kaldırmasına izin verin."),
+      I18n::text(QStringLiteral("settings.privacy.auto_revoke")),
+      I18n::text(QStringLiteral("settings.privacy.auto_revoke_desc")),
       autoRevokeSwitch));
   section.layout->addWidget(autoRevokeCard);
   connect(autoRevokeSwitch, &QCheckBox::toggled, this, [this](bool checked) {
@@ -1436,34 +1434,34 @@ QWidget *SettingsPage::createPrivacySection() {
   // =========================================================================
   // 4. TARAMA VERİLERİ VE İZLEME KORUMASI KARTI
   // =========================================================================
-  auto *privacyCard = makeCard(section.page, QStringLiteral("TARAMA VERİLERİ VE İZLEME KORUMASI"));
+  auto *privacyCard = makeCard(section.page, I18n::text(QStringLiteral("settings.privacy.browsing_data_card")));
   auto *adultSwitch = new GlowToggleSwitch(privacyCard);
   adultSwitch->setChecked(profileService_->isAdultContentProtectionEnabled());
-  adultSwitch->setAccessibleName(QStringLiteral("Yetişkin İçerik Koruması"));
+  adultSwitch->setAccessibleName(I18n::text(QStringLiteral("settings.privacy.adult_content_protection")));
   addRow(privacyCard, settingRow(
       privacyCard,
-      QStringLiteral("Yetişkin İçerik Koruması"),
-      QStringLiteral("Bilinen yetişkin içerik sitelerinin yüklenmesini engeller."),
+      I18n::text(QStringLiteral("settings.privacy.adult_content_protection")),
+      I18n::text(QStringLiteral("settings.privacy.adult_content_protection_desc")),
       adultSwitch,
       BrowserIcon::Privacy,
       true));
-  auto *strip = new QCheckBox(privacyCard); strip->setAccessibleName(QStringLiteral("İzleme parametrelerini kaldır")); strip->setChecked(profileService_->stripsTrackingParameters());
-  addRow(privacyCard, settingRow(privacyCard, QStringLiteral("İzleme parametrelerini kaldır"), QStringLiteral("Bilinen takip parametrelerini HTTP/HTTPS adreslerinden yönlendirme öncesinde temizler."), strip, BrowserIcon::Privacy, true));
-  auto *cache = new QPushButton(QStringLiteral("Temizle"), privacyCard); cache->setProperty("danger", true); cache->setAccessibleName(QStringLiteral("HTTP önbelleğini temizle"));
-  addRow(privacyCard, settingRow(privacyCard, QStringLiteral("HTTP önbelleği"), QStringLiteral("Bu profile ait geçici web kaynaklarını temizler."), cache, BrowserIcon::Trash, true));
-  auto *cookies = new QPushButton(QStringLiteral("Temizle"), privacyCard); cookies->setProperty("danger", true); cookies->setAccessibleName(QStringLiteral("Çerezleri temizle"));
-  addRow(privacyCard, settingRow(privacyCard, QStringLiteral("Çerezler ve site verileri"), QStringLiteral("Bu profile ait tüm çerezleri kullanıcı onayıyla siler."), cookies));
+  auto *strip = new QCheckBox(privacyCard); strip->setAccessibleName(I18n::text(QStringLiteral("settings.privacy.strip_tracking_params"))); strip->setChecked(profileService_->stripsTrackingParameters());
+  addRow(privacyCard, settingRow(privacyCard, I18n::text(QStringLiteral("settings.privacy.strip_tracking_params")), I18n::text(QStringLiteral("settings.privacy.strip_tracking_params_desc")), strip, BrowserIcon::Privacy, true));
+  auto *cache = new QPushButton(I18n::text(QStringLiteral("common.clear")), privacyCard); cache->setProperty("danger", true); cache->setAccessibleName(I18n::text(QStringLiteral("settings.privacy.clear_http_cache")));
+  addRow(privacyCard, settingRow(privacyCard, I18n::text(QStringLiteral("settings.privacy.http_cache")), I18n::text(QStringLiteral("settings.privacy.http_cache_desc")), cache, BrowserIcon::Trash, true));
+  auto *cookies = new QPushButton(I18n::text(QStringLiteral("common.clear")), privacyCard); cookies->setProperty("danger", true); cookies->setAccessibleName(I18n::text(QStringLiteral("settings.privacy.clear_cookies")));
+  addRow(privacyCard, settingRow(privacyCard, I18n::text(QStringLiteral("settings.privacy.cookies_and_site_data")), I18n::text(QStringLiteral("settings.privacy.cookies_and_site_data_desc")), cookies));
   section.layout->addWidget(privacyCard);
 
   connect(adultSwitch, &QCheckBox::toggled, this, [this](bool enabled) { profileService_->setAdultContentProtectionEnabled(enabled); });
   connect(strip, &QCheckBox::toggled, this, [this](bool enabled) { profileService_->setStripsTrackingParameters(enabled); });
-  connect(cache, &QPushButton::clicked, this, [this] { profileService_->clearHttpCache(); QMessageBox::information(this, QStringLiteral("Önbellek"), QStringLiteral("HTTP önbelleği temizleme isteği gönderildi.")); });
-  connect(cookies, &QPushButton::clicked, this, [this] { if (QMessageBox::question(this, QStringLiteral("Çerezleri temizle"), QStringLiteral("Bu profilin tüm çerezleri silinsin mi?")) == QMessageBox::Yes) profileService_->clearCookies(); });
+  connect(cache, &QPushButton::clicked, this, [this] { profileService_->clearHttpCache(); QMessageBox::information(this, I18n::text(QStringLiteral("settings.privacy.cache")), I18n::text(QStringLiteral("settings.privacy.http_cache_clear_requested"))); });
+  connect(cookies, &QPushButton::clicked, this, [this] { if (QMessageBox::question(this, I18n::text(QStringLiteral("settings.privacy.clear_cookies")), I18n::text(QStringLiteral("settings.privacy.clear_cookies_confirm"))) == QMessageBox::Yes) profileService_->clearCookies(); });
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
-  auto *sitePermsCard = makeCard(section.page, QStringLiteral("KAYITLI SİTE İZİNLERİ"));
-  auto *list = new QListWidget(sitePermsCard); list->setObjectName(QStringLiteral("settings-data-list")); list->setAccessibleName(QStringLiteral("Kalıcı site izinleri")); list->setMinimumHeight(180);
-  auto *reset = new QPushButton(QStringLiteral("Seçili izni sıfırla"), sitePermsCard); reset->setProperty("danger", true);
+  auto *sitePermsCard = makeCard(section.page, I18n::text(QStringLiteral("settings.privacy.saved_site_permissions_card")));
+  auto *list = new QListWidget(sitePermsCard); list->setObjectName(QStringLiteral("settings-data-list")); list->setAccessibleName(I18n::text(QStringLiteral("settings.privacy.persistent_site_permissions"))); list->setMinimumHeight(180);
+  auto *reset = new QPushButton(I18n::text(QStringLiteral("settings.privacy.reset_selected_permission")), sitePermsCard); reset->setProperty("danger", true);
   auto *listContainer = new QWidget(sitePermsCard); auto *listLayout = new QVBoxLayout(listContainer); listLayout->setContentsMargins(18, 12, 18, 14); listLayout->setSpacing(10); listLayout->addWidget(list); listLayout->addWidget(reset, 0, Qt::AlignLeft);
   addRow(sitePermsCard, listContainer);
   section.layout->addWidget(sitePermsCard);
@@ -1480,10 +1478,11 @@ QWidget *SettingsPage::createPrivacySection() {
       item->setSizeHint(QSize(0, 54));
     }
     if (!list->count()) {
-      auto *item = new QListWidgetItem(QStringLiteral("Kalıcı site izni yok"), list);
+      auto *item = new QListWidgetItem(I18n::text(QStringLiteral("settings.privacy.no_persistent_permissions")), list);
       item->setFlags(Qt::NoItemFlags);
     }
   };
+  languageRefreshers_.push_back(refresh);
   refresh();
   connect(profileService_, &BrowserProfileService::permissionsPolicyChanged, this, refresh);
   connect(reset, &QPushButton::clicked, this, [this, list, refresh] {
@@ -1498,11 +1497,11 @@ QWidget *SettingsPage::createPrivacySection() {
   // =========================================================================
   // 5. GÜVENLİ DNS (DNS-OVER-HTTPS)
   // =========================================================================
-  auto *dnsCard = makeCard(section.page, QStringLiteral("GÜVENLİ DNS (DNS-OVER-HTTPS)"));
+  auto *dnsCard = makeCard(section.page, I18n::text(QStringLiteral("settings.privacy.secure_dns_card")));
   auto *dnsModeCombo = new QComboBox(dnsCard);
-  dnsModeCombo->addItem(QStringLiteral("Sistem Varsayılanı"), QStringLiteral("system"));
-  dnsModeCombo->addItem(QStringLiteral("Otomatik (Varsa Güvenli DNS, Gerekirse Geri Dön)"), QStringLiteral("fallback"));
-  dnsModeCombo->addItem(QStringLiteral("Her Zaman Güvenli DNS Kullan (DoH)"), QStringLiteral("secure"));
+  dnsModeCombo->addItem(I18n::text(QStringLiteral("settings.privacy.dns_system_default")), QStringLiteral("system"));
+  dnsModeCombo->addItem(I18n::text(QStringLiteral("settings.privacy.dns_automatic")), QStringLiteral("fallback"));
+  dnsModeCombo->addItem(I18n::text(QStringLiteral("settings.privacy.dns_always_secure")), QStringLiteral("secure"));
 
   const QString curMode = profileService_->secureDnsMode();
   int dIdx = dnsModeCombo->findData(curMode);
@@ -1510,8 +1509,8 @@ QWidget *SettingsPage::createPrivacySection() {
 
   addRow(dnsCard, settingRow(
       dnsCard,
-      QStringLiteral("Güvenli DNS Modu"),
-      QStringLiteral("DNS sorgularınızı şifreleyerek ISS veya ağ dinleyicilerine karşı gizliliği korur."),
+      I18n::text(QStringLiteral("settings.privacy.dns_mode")),
+      I18n::text(QStringLiteral("settings.privacy.dns_mode_desc")),
       dnsModeCombo,
       BrowserIcon::Privacy));
 
@@ -1519,7 +1518,7 @@ QWidget *SettingsPage::createPrivacySection() {
   dnsProviderCombo->addItem(QStringLiteral("Cloudflare (1.1.1.1)"), QStringLiteral("https://cloudflare-dns.com/dns-query"));
   dnsProviderCombo->addItem(QStringLiteral("Google Public DNS (8.8.8.8)"), QStringLiteral("https://dns.google/dns-query"));
   dnsProviderCombo->addItem(QStringLiteral("Quad9 (9.9.9.9)"), QStringLiteral("https://dns.quad9.net/dns-query"));
-  dnsProviderCombo->addItem(QStringLiteral("Özel Sağlayıcı"), QStringLiteral("custom"));
+  dnsProviderCombo->addItem(I18n::text(QStringLiteral("settings.privacy.dns_custom_provider")), QStringLiteral("custom"));
 
   const QString curTpl = profileService_->secureDnsTemplate();
   int pIdx = dnsProviderCombo->findData(curTpl);
@@ -1536,15 +1535,15 @@ QWidget *SettingsPage::createPrivacySection() {
 
   addRow(dnsCard, settingRow(
       dnsCard,
-      QStringLiteral("DNS Sağlayıcısı"),
-      QStringLiteral("Şifreli DNS çözümlemesi için kullanılacak güvenli sağlayıcı şablonu."),
+      I18n::text(QStringLiteral("settings.privacy.dns_provider")),
+      I18n::text(QStringLiteral("settings.privacy.dns_provider_desc")),
       dnsProviderCombo,
       BrowserIcon::Privacy));
 
   addRow(dnsCard, settingRow(
       dnsCard,
-      QStringLiteral("Özel DoH Şablonu"),
-      QStringLiteral("RFC 8484 uyumlu HTTPS DNS sorgu uç noktası."),
+      I18n::text(QStringLiteral("settings.privacy.dns_custom_template")),
+      I18n::text(QStringLiteral("settings.privacy.dns_custom_template_desc")),
       customDnsEdit,
       BrowserIcon::Privacy));
 
@@ -1580,23 +1579,40 @@ QWidget *SettingsPage::createPrivacySection() {
 }
 
 QWidget *SettingsPage::createBlockerSection() {
-  Section section = makeSection(QStringLiteral("DaliNira Blocker"), QStringLiteral("Reklamları, izleyicileri ve istenmeyen içerikleri yönetin."));
-  auto *blockerCard = makeCard(section.page, QStringLiteral("REKLAM VE İZLEYİCİ KORUMASI"));
+  Section section = makeSection(QStringLiteral("DaliNira Blocker"), I18n::text(QStringLiteral("settings.blocker.description")));
+  auto *blockerCard = makeCard(section.page, I18n::text(QStringLiteral("settings.blocker.card")));
 
-  auto *openBtn = new QPushButton(QStringLiteral("DaliNira Blocker Ayarlarını Aç"), blockerCard);
-  openBtn->setAccessibleName(QStringLiteral("DaliNira Blocker sekmesini aç"));
-  addRow(blockerCard, settingRow(blockerCard, QStringLiteral("Filtreleme ve Kural Yönetimi"),
-                                 QStringLiteral("8 sekmeli tam koruma paneli: Mod ayarları, ruleset kataloğu, özel filtreler ve canlı istek günlüğü."),
+  auto *openBtn = new QPushButton(I18n::text(QStringLiteral("settings.blocker.open_settings")), blockerCard);
+  openBtn->setAccessibleName(I18n::text(QStringLiteral("settings.blocker.open_tab")));
+  addRow(blockerCard, settingRow(blockerCard, I18n::text(QStringLiteral("settings.blocker.filtering_rules")),
+                                 I18n::text(QStringLiteral("settings.blocker.filtering_rules_desc")),
                                  openBtn, BrowserIcon::Privacy, true));
 
   if (profileService_ && profileService_->blockerService()) {
     auto *blockerSvc = profileService_->blockerService();
+    auto *protectionCheck = new QCheckBox(blockerCard);
+    protectionCheck->setObjectName(QStringLiteral("settings-blocker-protection"));
+    protectionCheck->setChecked(blockerSvc->settings()->protectionEnabled());
+    protectionCheck->setAccessibleName(I18n::text(QStringLiteral("settings.blocker.protection")));
+    addRow(blockerCard, settingRow(blockerCard,
+                                   I18n::text(QStringLiteral("settings.blocker.protection")),
+                                   I18n::text(QStringLiteral("settings.blocker.protection_desc")),
+                                   protectionCheck, BrowserIcon::Privacy, true));
+
     auto *showCountCheck = new QCheckBox(blockerCard);
     showCountCheck->setChecked(blockerSvc->settings()->showBlockedCountOnToolbar());
-    addRow(blockerCard, settingRow(blockerCard, QStringLiteral("Araç çubuğunda kalkan sayacı"),
-                                   QStringLiteral("Engellenen istek sayısını kalkan butonu üzerinde rozet olarak gösterir."),
+    addRow(blockerCard, settingRow(blockerCard, I18n::text(QStringLiteral("settings.blocker.toolbar_counter")),
+                                   I18n::text(QStringLiteral("settings.blocker.toolbar_counter_desc")),
                                    showCountCheck, BrowserIcon::Privacy));
 
+    connect(protectionCheck, &QCheckBox::toggled, this, [blockerSvc](bool checked) {
+      blockerSvc->settings()->setProtectionEnabled(checked);
+    });
+    connect(blockerSvc->settings(), &DaliNiraBlockerSettings::protectionEnabledChanged,
+            protectionCheck, [protectionCheck](bool enabled) {
+      const QSignalBlocker blocker(protectionCheck);
+      protectionCheck->setChecked(enabled);
+    });
     connect(showCountCheck, &QCheckBox::toggled, this, [blockerSvc](bool checked) {
       blockerSvc->settings()->setShowBlockedCountOnToolbar(checked);
     });

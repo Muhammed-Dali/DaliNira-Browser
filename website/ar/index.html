@@ -3,108 +3,98 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
-  <!-- Security-First Content Security Policy -->
+
+  <!-- Security-first Content Security Policy (GitHub Pages ignores _headers) -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; worker-src 'none'; manifest-src 'self';">
   <meta name="referrer" content="no-referrer">
-  
-  <title>متصفح DaliNira — الخصوصية. السرعة. التحكم. | متصفح ويب أصلي لسطح المكتب مبني بـ Qt 6</title>
-  <meta name="description" content="متصفح DaliNira هو متصفح ويب أصلي لسطح المكتب يركز على الخصوصية، تم تطويره بلغة C++20 وإطار عمل Qt 6، مزود بمحرك تنزيل متوازي متكيف ونظام صوتي احترافي بمعادِل 32 نطاقاً.">
-  
-  <!-- Canonical & Multilingual Alternates -->
+
+  <title>DaliNira Browser 8.0 — محرّكان. متصفح واحد يحترم خصوصيتك.</title>
+  <meta name="description" content="DaliNira Browser متصفح أصلي لسطح المكتب على لينكس، يعمل بمحرّكي Chromium وWebKitGTK، مع حظر مدمج للإعلانات والمتتبعات وترجمة الصفحات وتنويم التبويبات.">
+
   <link rel="canonical" href="https://muhammed-dali.github.io/DaliNira-Browser/ar/">
   <link rel="alternate" hreflang="en" href="https://muhammed-dali.github.io/DaliNira-Browser/">
   <link rel="alternate" hreflang="tr" href="https://muhammed-dali.github.io/DaliNira-Browser/tr/">
   <link rel="alternate" hreflang="ar" href="https://muhammed-dali.github.io/DaliNira-Browser/ar/">
   <link rel="alternate" hreflang="x-default" href="https://muhammed-dali.github.io/DaliNira-Browser/">
-  
-  <!-- Open Graph / Facebook -->
+
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://muhammed-dali.github.io/DaliNira-Browser/ar/">
-  <meta property="og:title" content="متصفح DaliNira — الخصوصية. السرعة. التحكم.">
-  <meta property="og:description" content="متصفح أصلي لسطح المكتب بتقنية Qt 6 و C++20 مع حظر مدمج للإعلانات ومحرك تنزيل متكيف ومعادل صوتي فائق الدقة.">
+  <meta property="og:title" content="DaliNira Browser 8.0 — محرّكان. متصفح واحد يحترم خصوصيتك.">
+  <meta property="og:description" content="متصفح أصلي لسطح المكتب على لينكس مبني بـ Qt 6، يعمل بمحرّكي Chromium وWebKitGTK مع حظر مدمج للإعلانات والمتتبعات.">
   <meta property="og:image" content="https://muhammed-dali.github.io/DaliNira-Browser/assets/images/hero-browser.png">
-  <meta property="og:site_name" content="متصفح DaliNira">
-  
-  <!-- Twitter Cards -->
+  <meta property="og:site_name" content="DaliNira Browser">
+
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:url" content="https://muhammed-dali.github.io/DaliNira-Browser/ar/">
-  <meta name="twitter:title" content="متصفح DaliNira — الخصوصية. السرعة. التحكم.">
-  <meta name="twitter:description" content="متصفح أصلي لسطح المكتب يركز على الخصوصية بدون تتبع سحابي أو حزم زائدة.">
+  <meta name="twitter:title" content="DaliNira Browser 8.0 — محرّكان. متصفح واحد يحترم خصوصيتك.">
+  <meta name="twitter:description" content="متصفح أصلي لسطح المكتب على لينكس مبني بـ Qt 6، يعمل بمحرّكي Chromium وWebKitGTK مع حظر مدمج للإعلانات والمتتبعات.">
   <meta name="twitter:image" content="https://muhammed-dali.github.io/DaliNira-Browser/assets/images/hero-browser.png">
 
-  <!-- Icons -->
   <link rel="icon" type="image/png" sizes="128x128" href="../assets/images/dalinira-logo-128.png">
   <link rel="apple-touch-icon" href="../assets/images/dalinira-logo-128.png">
 
-  <!-- Local Stylesheet (Zero external CDNs or Google Fonts) -->
+  <!-- Local stylesheet only: no external CDNs or web fonts -->
   <link rel="stylesheet" href="../assets/css/main.css">
 </head>
 <body>
-  <!-- Accessibility Skip Link -->
-  <a href="#main-content" class="skip-link">الانتقال إلى المحتوى الرئيسي</a>
+  <a href="#main-content" class="skip-link">انتقل إلى المحتوى الرئيسي</a>
 
-  <!-- Header & Navigation -->
   <header class="site-header">
     <div class="container nav-wrapper">
-      <a href="./" class="brand-link" aria-label="الصفحة الرئيسية لمتصفح DaliNira">
-        <img src="../assets/images/dalinira-logo-128.png" alt="شعار متصفح DaliNira" class="brand-logo" width="38" height="38">
+      <a href="./" class="brand-link" aria-label="الصفحة الرئيسية لـ DaliNira Browser">
+        <img src="../assets/images/dalinira-logo-128.png" alt="شعار DaliNira Browser" class="brand-logo" width="38" height="38">
         <span>DaliNira</span>
-        <span class="brand-badge">v7.2.1</span>
+        <span class="brand-badge">v8.0.0</span>
       </a>
 
       <nav class="site-nav" aria-label="القائمة الرئيسية">
         <ul class="nav-links">
-          <li><a href="#features">المميزات</a></li>
-          <li><a href="#showcase">واجهة المستخدم</a></li>
+          <li><a href="#features">المزايا</a></li>
+          <li><a href="#engines">المحرّكات</a></li>
+          <li><a href="#screenshots">لقطات الشاشة</a></li>
           <li><a href="#privacy">الخصوصية</a></li>
-          <li><a href="#open-source">المصدر المفتوح</a></li>
           <li><a href="#download">التنزيل</a></li>
         </ul>
 
         <div class="nav-actions">
-          <div class="lang-selector" role="navigation" aria-label="اختيار اللغة">
-            <a href="../" class="lang-btn" title="English">EN</a>
-            <a href="../tr/" class="lang-btn" title="Türkçe">TR</a>
-            <a href="./" class="lang-btn active" aria-current="page" title="العربية">AR</a>
+          <div class="lang-selector" role="navigation" aria-label="اللغة">
+            <a href="../" class="lang-btn" lang="en" title="English">EN</a>
+            <a href="../tr/" class="lang-btn" lang="tr" title="Türkçe">TR</a>
+            <a href="./" class="lang-btn active" aria-current="page" lang="ar" title="العربية">AR</a>
           </div>
 
-          <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-secondary" target="_blank" rel="noopener noreferrer" aria-label="عرض المصدر على GitHub">
+          <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-secondary" target="_blank" rel="noopener noreferrer" aria-label="عرض الشيفرة المصدرية على GitHub">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
             <span>GitHub</span>
           </a>
 
           <a href="#download" class="btn btn-primary">
-            <span>تنزيل المتصفح</span>
+            <span>تنزيل</span>
           </a>
         </div>
       </nav>
 
-      <button type="button" class="mobile-nav-toggle" aria-label="تبديل القائمة" aria-expanded="false">
+      <button type="button" class="mobile-nav-toggle" aria-label="فتح القائمة أو إغلاقها" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
       </button>
     </div>
   </header>
 
-  <!-- Main Content Container -->
   <main id="main-content">
-    
-    <!-- Hero Section -->
+
     <section class="hero">
       <div class="container">
         <div class="hero-pill">
           <span class="hero-pill-dot"></span>
-          <span>تقنية Qt 6 و C++20 • الخصوصية أولاً • ترخيص GPL-3.0 المفتوح</span>
+          <span>الإصدار 8.0.0 · Chromium + WebKitGTK · GPL-3.0</span>
         </div>
 
         <h1 class="hero-title">
-          الخصوصية. السرعة. التحكم.<br>
-          <span class="gradient-text">متصفح الويب الأصلي لسطح المكتب</span>
+          محرّكان.<br>
+          <span class="gradient-text">متصفح واحد يحترم خصوصيتك.</span>
         </h1>
 
-        <p class="hero-tagline">
-          يجمع متصفح DaliNira بين معايير الويب الحديثة، والخصوصية الفردية الصارمة، والتنزيل المتوازي عالي السرعة، مع نظام صوتي متكامل للاستماع فائق الدقة. تم تصميمه محلياً بلغة C++20 دون إرهاق إلكترون ودون أي تتبع سحابي.
-        </p>
+        <p class="hero-tagline">DaliNira متصفح أصلي لسطح المكتب على لينكس، مكتوب بلغة C++20 وإطار Qt 6. شغّله بمحرّك Chromium أو WebKitGTK، فالواجهة وحظر الإعلانات والمتتبعات والترجمة وتنويم التبويبات تعمل بالطريقة نفسها في كليهما.</p>
 
         <div class="hero-cta">
           <a href="#download" class="btn btn-primary btn-lg">
@@ -113,490 +103,426 @@
           </a>
           <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-secondary btn-lg" target="_blank" rel="noopener noreferrer">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-            <span>استعراض على GitHub</span>
+            <span>عرض المشروع على GitHub</span>
           </a>
         </div>
 
         <div class="hero-platforms">
           <span class="platform-item">
             <img src="../assets/icons/linux.svg" alt="" aria-hidden="true" width="16" height="16">
-            Linux (Arch AUR، Pacman، حزم مستقلة)
-          </span>
-          <span class="platform-item">
-            <img src="../assets/icons/windows.svg" alt="" aria-hidden="true" width="16" height="16">
-            Windows
+            Linux x86_64 · ‎.deb · ‎.rpm · Arch · أرشيف محمول
           </span>
         </div>
 
-        <!-- Browser Mockup -->
         <div class="browser-mockup">
-          <div class="mockup-toolbar">
-            <div class="mockup-controls">
-              <span class="mockup-dot close"></span>
-              <span class="mockup-dot minimize"></span>
-              <span class="mockup-dot maximize"></span>
-            </div>
-            <div class="mockup-address-bar">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-              <span>dalinira://newtab</span>
-            </div>
-          </div>
-          <img src="../assets/images/hero-browser.png" alt="واجهة متصفح DaliNira الأصلية" class="mockup-image" width="1342" height="821" fetchpriority="high">
+          <img src="../assets/images/hero-browser.png" alt="نافذة DaliNira الرئيسية مع صفحة التبويب الجديد وشريط الإشارات المرجعية واختصارات الوصول السريع والساعة" class="mockup-image" width="1209" height="865" fetchpriority="high">
         </div>
       </div>
     </section>
 
-    <!-- Core Features Section -->
     <section id="features" class="section">
       <div class="container">
         <div class="section-header">
-          <span class="section-subtitle">أداء فائق وتحكم مطلق</span>
-          <h2 class="section-title">قدرات مدمجة، بدون إضافات تثقل المتصفح</h2>
-          <p class="section-desc">
-            كل ميزة في DaliNira مدمجة ومبرمجة مباشرة في نواة C++ الأصلية، مما يمنحك استجابة فائقة دون الحاجة إلى تثبيت عشرات إضافات المتصفح الخارجية.
-          </p>
+          <span class="section-subtitle">مدمجة لا مضافة</span>
+          <h2 class="section-title">كل ما تحتاجه في متصفح واحد</h2>
+          <p class="section-desc">يضم DaliNira أدوات يثبّتها كثيرون عادةً كإضافات منفصلة، مدمجةً في تطبيق أصلي لسطح المكتب.</p>
         </div>
 
         <div class="features-grid">
-          <!-- Feature 1: Ad & Tracker Blocker -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3 8-8 10-5-2-8-5-8-10V6Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
             </div>
-            <h3 class="feature-title">درع DaliNira وحظر الإعلانات</h3>
-            <p class="feature-text">
-              ثلاثة مستويات حماية (أساسي %35، متوازن %65، شامل %95) مع تقييم محلي لقوائم التصفية، وإخفاء مساحات الإعلانات، وتجريد معلمات التتبع تلقائياً.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">اعتراض على مستوى الشبكة</span>
-              <span class="feature-tag">تطهير معلمات التتبع</span>
-            </div>
+            <h3 class="feature-title">Chromium وWebKitGTK</h3>
+            <p class="feature-text">اختر المحرّك أثناء الإعداد أو لاحقًا من الإعدادات. لكل محرّك تبويباته وجلسته الخاصة، بينما الإشارات المرجعية والإعدادات مشتركة.</p>
+            <div class="feature-tags"><span class="feature-tag">محرّكان</span><span class="feature-tag">مختبر التطابق</span></div>
           </article>
-
-          <!-- Feature 2: Parallel Download Engine -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3 8-8 10-5-2-8-5-8-10V6Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
             </div>
-            <h3 class="feature-title">محرك التنزيل المتوازي المتكيف</h3>
-            <p class="feature-text">
-              يقوم محرك GeneralDownloadManager بتوسيع اتصالات التنزيل تلقائياً من 1 إلى 8 مسارات متزامنة، مع توزيع ديناميكي للأجزاء واستئناف فوري من النقطة الأخيرة.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">تنزيل متعدد المسارات</span>
-              <span class="feature-tag">استئناف دقيق</span>
-            </div>
+            <h3 class="feature-title">حظر الإعلانات والمتتبعات</h3>
+            <p class="feature-text">محرّك تصفية أصلي يعمل بقوائم EasyList وEasyPrivacy والقوائم الإقليمية، مع تصفية تجميلية وإزالة معاملات التتبع وتجاوز روابط إعادة التوجيه.</p>
+            <div class="feature-tags"><span class="feature-tag">في المحرّكين</span><span class="feature-tag">تصفية محلية</span></div>
           </article>
-
-          <!-- Feature 3: Encrypted Password Vault -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             </div>
-            <h3 class="feature-title">خزينة كلمات المرور المشفرة محلياً</h3>
-            <p class="feature-text">
-              حماية بيانات الدخول محلياً بتشفير AES-256-GCM واشتقاق المفاتيح عبر PBKDF2. بدون أي إرسال سحابي، وبدون تتبع، مع ملء تلقائي آمن داخل الصفحات.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">تشفير AES-256-GCM</span>
-              <span class="feature-tag">تخزين محلي %100</span>
-            </div>
+            <h3 class="feature-title">إعدادات خصوصية افتراضية</h3>
+            <p class="feature-text">HTTPS افتراضيًا، وGlobal Privacy Control، وتشويش البصمة الرقمية، وحظر ملفات تعريف الارتباط من الأطراف الثالثة.</p>
+            <div class="feature-tags"><span class="feature-tag">GPC</span><span class="feature-tag">HTTPS أولًا</span></div>
           </article>
-
-          <!-- Feature 4: Granular Site Permissions -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 6 6m-7 0 6-6 2-3M2 5h12M7 2h1m14 20-5-10-5 10m2-4h6"/></svg>
             </div>
-            <h3 class="feature-title">أذونات دقيقة لكل موقع ويب</h3>
-            <p class="feature-text">
-              تحكم فوري من شريط العناوين في وصول المواقع إلى الكاميرا، الميكروفون، الموقع الجغرافي، الإشعارات، والنوافذ المنبثقة، وسياسات تحسين جافاسكريبت.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">تحكم مباشر من الشريط</span>
-              <span class="feature-tag">تطهير تلقائي للأذونات</span>
-            </div>
+            <h3 class="feature-title">ترجمة الصفحات</h3>
+            <p class="feature-text">ترجم الصفحات في مكانها عبر Google أو Google Cloud أو DeepL أو LibreTranslate، دون أن تحجب النافذة المنبثقة الصفحة.</p>
+            <div class="feature-tags"><span class="feature-tag">4 مزوّدين</span><span class="feature-tag">داخل الصفحة</span></div>
           </article>
-
-          <!-- Feature 5: Smart Omnibox & Tab Strip -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
             </div>
-            <h3 class="feature-title">شريط عناوين ذكي وإدارة التبويبات</h3>
-            <p class="feature-text">
-              محرك تصنيف ذكي يدمج السجل والإشارات المرجعية واقتراحات البحث. بطاقات استهلاك الذاكرة عند التمرير، ورسوم متحركة سلسة عبر كرت الشاشة، واستعادة الجلسة بعد الإغلاق.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">اقتراحات بحث سريعة</span>
-              <span class="feature-tag">استعادة الجلسات</span>
-            </div>
+            <h3 class="feature-title">تنويم التبويبات</h3>
+            <p class="feature-text">تُنوَّم التبويبات غير النشطة على مرحلتين لتحرير الذاكرة، ولا تُفرَّغ تلقائيًا التبويبات التي تحتوي على مدخلات نماذج غير محفوظة.</p>
+            <div class="feature-tags"><span class="feature-tag">مرحلتان</span><span class="feature-tag">إيقاظ عند الطلب</span></div>
           </article>
-
-          <!-- Feature 6: Centralized i18n & Translation -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 8 6 6m-7 0 6-6 2-3M2 5h12M7 2h1m14 20-5-10-5 10m2-4h6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M9 9h12"/></svg>
             </div>
-            <h3 class="feature-title">نظام تعدّد اللغات والترجمة الفورية</h3>
-            <p class="feature-text">
-              إمكانية تغيير لغة واجهة المتصفح بضغطة زر دون الحاجة لإعادة التشغيل. دعم متكامل للترجمة السريعة لصفحات الويب الخارجية بين لغات العالم المختلفة.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">أكثر من 13 لغة مدعومة</span>
-              <span class="feature-tag">ترجمة صفحات مباشرة</span>
-            </div>
+            <h3 class="feature-title">اللغات والتخطيطات</h3>
+            <p class="feature-text">الإنجليزية والتركية والعربية والفرنسية دون إعادة التشغيل، مع تبويبات تقليدية أو عمودية أو شريط جانبي عائم.</p>
+            <div class="feature-tags"><span class="feature-tag">4 لغات</span><span class="feature-tag">4 تخطيطات</span></div>
           </article>
-
-          <!-- Feature 7: 32-Band Studio Equalizer -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v20M17 5v14M7 9v6M22 8v8M2 11v2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
             </div>
-            <h3 class="feature-title">معادل استوديو بـ 32 نطاقاً و AutoEQ</h3>
-            <p class="feature-text">
-              نظام صوتي مخصص لعشاق الصوت النقي مع معادل صوتي بـ 32 نطاقاً، ومحدد ذروة Brickwall، وموسع ستيريو، وأكثر من 1,757 ملف تصحيح AutoEQ لسماعات الرأس.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">1,757 ملف AutoEQ جاهز</span>
-              <span class="feature-tag">مؤثرات DSP متقدمة</span>
-            </div>
+            <h3 class="feature-title">التنزيلات وكلمات المرور</h3>
+            <p class="feature-text">تنزيلات متوازية مجزأة قابلة للاستئناف، وخزنة كلمات مرور مشفّرة محليًا بخوارزمية AES-256-GCM.</p>
+            <div class="feature-tags"><span class="feature-tag">استئناف</span><span class="feature-tag">خزنة محلية</span></div>
           </article>
-
-          <!-- Feature 8: DaliNira Pulse -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M17 5v14M7 9v6M22 8v8M2 11v2"/></svg>
             </div>
-            <h3 class="feature-title">DaliNira Pulse (التعرف على الصوت)</h3>
-            <p class="feature-text">
-              محلل طيف صوتي يتعرف على الموسيقى المشغلة في أي تبويب أو تطبيق نظام مباشرة عبر إشارات الصوت المحلية دون استدعاء خدمات تتبع خارجية.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">تحليل صوت النظام</span>
-              <span class="feature-tag">سجل محلي للتعرف</span>
-            </div>
+            <h3 class="feature-title">المؤثرات الصوتية وPulse</h3>
+            <p class="feature-text">معادل صوتي بـ 32 نطاقًا مع 1757 إعدادًا مسبقًا من AutoEQ لسماعات الرأس، وميزة Pulse للتعرّف على الأغاني.</p>
+            <div class="feature-tags"><span class="feature-tag">32 نطاقًا</span><span class="feature-tag">AutoEQ</span></div>
           </article>
         </div>
       </div>
     </section>
 
-    <!-- Visual Showcase / Screenshots Section -->
-    <section id="showcase" class="section">
+    <section id="engines" class="section">
       <div class="container">
         <div class="section-header">
-          <span class="section-subtitle">جولة بصرية</span>
-          <h2 class="section-title">واجهات احترافية لبيئة سطح المكتب</h2>
-          <p class="section-desc">
-            استكشف واجهات متصفح DaliNira الحقيقية العاملة على بيئات لينكس وويندوز.
-          </p>
+          <span class="section-subtitle">محرّكان</span>
+          <h2 class="section-title">اختر محرّكك، واحتفظ بمتصفحك.</h2>
+          <p class="section-desc">يعمل DaliNira 8.0 بمحرّك Chromium عبر Qt WebEngine أو بمحرّك WebKitGTK، وكلاهما يستخدم واجهة DaliNira نفسها.</p>
         </div>
 
         <div class="spotlight-wrapper">
-          <!-- Spotlight 1: Blocker -->
           <div class="spotlight-row">
             <div class="spotlight-content">
-              <span class="spotlight-pill">درع منع الإعلانات والتعقب</span>
-              <h3 class="spotlight-title">تصفح نقي خالٍ من الإزعاج</h3>
-              <p class="spotlight-desc">
-                يقوم مانع DaliNira بفحص الطلبات محلياً بالاعتماد على قوائم موثوقة مثل EasyList و EasyPrivacy. يخفي مساحات الإعلانات الفارغة ويمنع النوافذ المنبثقة غير المرغوب فيها.
-              </p>
+              <span class="spotlight-pill">الإعدادات ← النظام</span>
+              <h3 class="spotlight-title">بدّل المحرّك من الإعدادات</h3>
+              <p class="spotlight-desc">عند تبديل المحرّك يُعاد تشغيل DaliNira ويفتح تبويبات ذلك المحرّك. وتشغّل اختبارات التطابق الآلية السيناريوهات نفسها على المحرّكين وتقارن النتائج.</p>
               <ul class="spotlight-bullets">
                 <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>ثلاثة مستويات حماية: خفيف، متوازن، وشامل.</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>واجهة مشتركة: شريط الأدوات والقوائم وشريط البحث والترجمة والحظر والأذونات والتنزيلات.</span>
                 </li>
                 <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>تطهير معلمات التتبع (fbclid, gclid, utm_*) قبل خروج الطلب من جهازك.</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>مساحات عمل منفصلة: التبويبات والجلسة والوصول السريع خاصة بكل محرّك.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>يعمل Chromium أصليًا على Wayland، بينما يعمل WebKitGTK عبر XWayland.</span>
                 </li>
               </ul>
             </div>
             <div class="spotlight-preview">
-              <img src="../assets/images/dalinira-blocker.png" alt="واجهة مانع الإعلانات في DaliNira" width="1425" height="941" loading="lazy">
-            </div>
-          </div>
-
-          <!-- Spotlight 2: Parallel Download Engine -->
-          <div class="spotlight-row reverse">
-            <div class="spotlight-content">
-              <span class="spotlight-pill">GeneralDownloadManager</span>
-              <h3 class="spotlight-title">تسريع ذكي متعدد المسارات</h3>
-              <p class="spotlight-desc">
-                لا تفقد تقدم التنزيل بعد اليوم. يقسم محرك التنزيل المتكيف الملفات إلى أجزاء متزامنة مستفيداً من ترويسات HTTP Range، متكيفاً مع سرعة الخادم.
-              </p>
-              <ul class="spotlight-bullets">
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>توسيع ديناميكي من مسار واحد إلى 8 مسارات تنزيل متوازية.</span>
-                </li>
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>معالجة تلقائية لتقييد الخوادم HTTP 429 وإعادة محاولة تنزيل الأجزاء المتعثرة.</span>
-                </li>
-              </ul>
-            </div>
-            <div class="spotlight-preview">
-              <img src="../assets/images/downloads.png" alt="مركز التنزيل في DaliNira" width="1425" height="940" loading="lazy">
-            </div>
-          </div>
-
-          <!-- Spotlight 3: Password Vault -->
-          <div class="spotlight-row">
-            <div class="spotlight-content">
-              <span class="spotlight-pill">أمان محلي صارم</span>
-              <h3 class="spotlight-title">خزينة مشفرة بمعيار AES-256-GCM</h3>
-              <p class="spotlight-desc">
-                بيانات تسجيل دخولك لا تغادر وسيط التخزين المحلي أبداً. يقوم المتصفح بحمايتها عبر اشتقاق المفاتيح بـ PBKDF2 والتشفير القوي AES-256-GCM.
-              </p>
-              <ul class="spotlight-bullets">
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>صفر مزامنة سحابية: البيانات محفوظة داخل جهازك فقط.</span>
-                </li>
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>حماية بكلمة مرور رئيسية مع ملء تلقائي فوري وآمن داخل النماذج.</span>
-                </li>
-              </ul>
-            </div>
-            <div class="spotlight-preview">
-              <img src="../assets/images/password-manager.png" alt="مدير كلمات المرور في DaliNira" width="1600" height="900" loading="lazy">
-            </div>
-          </div>
-
-          <!-- Spotlight 4: Equalizer & Sound Studio -->
-          <div class="spotlight-row reverse">
-            <div class="spotlight-content">
-              <span class="spotlight-pill">صوت ويب فائق الجودة</span>
-              <h3 class="spotlight-title">معادل استوديو بـ 32 نطاقاً ومعالجة DSP</h3>
-              <p class="spotlight-desc">
-                استمع إلى وسائط الويب بدقة استوديوهات الصوت. يمرر المتصفح الصوت عبر 32 مرشحاً دقيقاً مع ملفات تصحيح AutoEQ المعايرة لأكثر من 1,750 طراز سماعة.
-              </p>
-              <ul class="spotlight-bullets">
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>منحنيات جاهزة لسماعات Sony و Sennheiser و Beyerdynamic و AKG و Apple.</span>
-                </li>
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>مؤثرات فورية: تردد BASS FX، محدد Brickwall، وموسع النطاق الفراغي للستيريو.</span>
-                </li>
-              </ul>
-            </div>
-            <div class="spotlight-preview">
-              <img src="../assets/images/audio-effects.png" alt="استوديو الصوت في DaliNira" width="1425" height="944" loading="lazy">
+              <img src="../assets/images/settings.png" alt="صفحة إعدادات DaliNira مع الشريط الجانبي للفئات؛ ويُختار محرّك المتصفح من قسم النظام" width="1212" height="916" loading="lazy">
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Privacy by Design Section -->
+    <section id="screenshots" class="section">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-subtitle">لقطات الشاشة</span>
+          <h2 class="section-title">واجهة DaliNira الحقيقية</h2>
+          <p class="section-desc">التُقطت جميع الصور من DaliNira 8.0.0 يعمل على لينكس.</p>
+        </div>
+
+        <div class="spotlight-wrapper">
+          <div class="spotlight-row">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">درع الإعلانات والمتتبعات</span>
+              <h3 class="spotlight-title">صفحات أنظف دون إضافات</h3>
+              <p class="spotlight-desc">يطبّق حاجب DaliNira قوائم التصفية محليًا، ويخفي مساحات الإعلانات الفارغة، ويزيل معاملات التتبع مثل utm_* وfbclid وgclid.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>مستويات حماية واختيار القوائم واستثناءات لكل موقع.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>محرّك التصفية نفسه لـ Chromium وWebKitGTK.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/dalinira-blocker.png" alt="صفحة حاجب DaliNira مع أوضاع التصفية الأساسي والأمثل والكامل" width="1208" height="862" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row reverse">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">التنزيلات</span>
+              <h3 class="spotlight-title">كل التنزيلات في مكان واحد</h3>
+              <p class="spotlight-desc">تنزيلات متوازية مجزّأة مع الاستئناف وإعادة المحاولة، وتحليل الوسائط في المواقع المدعومة.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>الصق رابطًا وحلّله، أو نزّل الوسائط من الصفحة الحالية.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>التنزيلات النشطة والسجل في dalinira://downloads.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/downloads.png" alt="صفحة التنزيلات مع حقل الرابط والتنزيلات النشطة وسجل التنزيلات" width="1207" height="839" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">خزنة كلمات المرور</span>
+              <h3 class="spotlight-title">كلمات المرور تبقى على هذا الجهاز</h3>
+              <p class="spotlight-desc">خزنة اختيارية وتجريبية تشفّر بيانات الدخول التي توافق عليها باستخدام AES-256-GCM ومفتاح PBKDF2-HMAC-SHA256.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>لا تُزامَن مع أي خادم، ولا يوجد باب خلفي للمطوّر.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>لا تُفعَّل إلا بعد قراءة الإشعار والموافقة عليه.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/password-manager.png" alt="شاشة تفعيل مدير كلمات المرور مع إشعار الخزنة المحلية" width="1208" height="859" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row reverse">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">الصوت</span>
+              <h3 class="spotlight-title">أدوات احترافية لوسائط الويب</h3>
+              <p class="spotlight-desc">مرّر صوت الويب عبر معادل بـ 32 نطاقًا وضاغط ومحدِّد وموسّع للمجال الستيريو، مع 1757 إعدادًا مسبقًا من AutoEQ لسماعات الرأس.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>إعدادات مسبقة لـ Sony وSennheiser وBeyerdynamic وAKG وApple وغيرها.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>مفتاح واحد يشغّل المؤثرات الصوتية لوسائط الويب أو يوقفها.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/audio-effects.png" alt="صفحة المؤثرات الصوتية مع المعادل بـ 32 نطاقًا" width="1207" height="869" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Pulse</span>
+              <h3 class="spotlight-title">اعرف اسم الأغنية التي تُشغَّل</h3>
+              <p class="spotlight-desc">يتعرّف Pulse على الأغنية التي تُشغَّل على حاسوبك. يُنشئ بصمة صوتية محليًا ولا يرسل إلى خدمة التعرّف من Shazam سوى هذه البصمة.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>صوت النظام أو الميكروفون أو كلاهما مصدرًا للصوت.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>قائمة بالأغاني التي تعرّف عليها Pulse.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/dalinira-pulse.png" alt="DaliNira Pulse جاهز للاستماع مع محدِّد مصدر الصوت" width="1210" height="863" loading="lazy">
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="privacy" class="section privacy-section">
       <div class="container">
         <div class="privacy-card">
           <div class="section-header">
-            <span class="section-subtitle">ضمانات معمارية</span>
-            <h2 class="section-title">الخصوصية مبدأ أساسي، وليست فكرة لاحقة</h2>
-            <p class="section-desc">
-              نصمم برمجياتنا بأصغر مساحة هجوم ممكنة، ونلتزم بوعود تقنية قابلة للفحص والتأكيد بدلاً من الشعارات التسويقية المضللة.
-            </p>
+            <span class="section-subtitle">مبادئ الخصوصية</span>
+            <h2 class="section-title">بياناتك تبقى على حاسوبك</h2>
+            <p class="section-desc">قرارات تصميم ملموسة بدلًا من الوعود التسويقية.</p>
           </div>
 
           <div class="privacy-grid">
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>صفر تتبع على موقع الويب</h3>
-                <p>هذا الموقع التعريفي لا يحتوي على Google Analytics، ولا متتبعات خارجية، ولا ملفات تعريف ارتباط، ولا نصوص بصمات المتصفح.</p>
+                <h3>المحلية أولًا</h3>
+                <p>يُحفظ السجل والإشارات المرجعية وكلمات المرور والإعدادات والإعدادات المسبقة في ملف تعريف المستخدم على حاسوبك.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>بدون شبكات CDN خارجية</h3>
-                <p>جميع ملفات التنسيق والنصوص البرمجية والأيقونات والصور يتم استضافتها محلياً على هذا النطاق الساكن دون تحميل خطوط أو مكتبات خارجية.</p>
+                <h3>لا حساب ولا قياس عن بُعد</h3>
+                <p>لا يتطلب DaliNira تسجيل الدخول، ولا يتضمن أي قياس مدمج لبيانات الاستخدام.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>لا يُشترط إنشاء حساب</h3>
-                <p>لا يتطلب DaliNira تسجيل الدخول أو إنشاء حساب لاستخدام المتصفح أو حفظ الإشارات المرجعية أو تشغيل مدير التنزيل.</p>
+                <h3>الشبكة عند الحاجة فقط</h3>
+                <p>لا تتصل اقتراحات البحث والترجمة والتعرّف عبر Pulse وتحديثات قوائم التصفية إلا بالخدمة التي تحتاجها الميزة.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>بنية محلية أولاً</h3>
-                <p>كلمات المرور والسجل والأذونات ومضبوطات الصوت تبقى بالكامل على جهازك باستخدام مسارات XDG القياسية وواجهات النظام الآمنة.</p>
+                <h3>خزنة كلمات مرور مشفّرة</h3>
+                <p>تُشفَّر بيانات الاعتماد محليًا بخوارزمية AES-256-GCM ومفتاح PBKDF2-HMAC-SHA256، ولا تُزامَن أبدًا.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>سياسة أمان محتوى صارمة (CSP)</h3>
-                <p>الموقع محمي بترويسات أمان متقدمة وسياسات تقييد الأذونات Permissions-Policy وسياسة no-referrer للخصوصية.</p>
+                <h3>موقع بلا متتبعات</h3>
+                <p>لا يحمّل هذا الموقع أدوات تحليل أو ملفات تعريف ارتباط أو خطوطًا أو سكربتات خارجية، ويستخدم سياسة أمان محتوى صارمة.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>مصدر مفتوح خاضع للتدقيق</h3>
-                <p>كل سطر برمجي في متصفح DaliNira متاح للعامة ويمكن مراجعته والتدقيق فيه بموجب ترخيص GNU العام v3.0.</p>
+                <h3>مفتوح المصدر</h3>
+                <p>الشيفرة المصدرية كاملة متاحة للجميع بموجب رخصة جنو العمومية العامة الإصدار 3.0.</p>
               </div>
             </div>
           </div>
 
           <div class="privacy-badge-note">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            <span>ملاحظة مهمة: نحن نتجنب استخدام ادعاءات مضللة مثل "مستحيل الاختراق" أو "آمن بنسبة 100%". الأمان الحقيقي يتحقق بتقليص مساحة الهجوم، والمراجعة الشفافة للشفرة، والمعالجة المحلية للبيانات.</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span>يرسل Pulse إلى خدمة التعرّف من Shazam بصمةً صوتية محسوبة محليًا، لا تسجيلًا صوتيًا.</span>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Open Source Section -->
     <section id="open-source" class="section">
       <div class="container">
         <div class="open-source-card">
           <div class="open-source-content">
             <span class="license-pill">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-              <span>ترخيص جنو العام (GPL-3.0)</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              <span>رخصة جنو العمومية العامة الإصدار 3.0</span>
             </span>
-            <h2>مشروع حر ومفتوح المصدر</h2>
-            <p>
-              يتم تطوير متصفح DaliNira بشفافية تامة على GitHub. يمكنك استعراض بنية البرنامج، وتجميعه محلياً باستخدام خيارات المترجم التي تفضلها، والمساهمة في تطويره مع المجتمع البرمجي.
-            </p>
+            <h2>حر ومفتوح المصدر</h2>
+            <p>يُطوَّر DaliNira Browser علنًا على GitHub. اطّلع على الشيفرة، وابنِه بنفسك، وأبلغ عن المشكلات أو ساهم في تطويره.</p>
             <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-primary btn-lg" target="_blank" rel="noopener noreferrer">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-              <span>عرض المصدر على GitHub</span>
+              <span>عرض الشيفرة المصدرية على GitHub</span>
             </a>
           </div>
 
           <div class="open-source-stats">
             <div class="stat-row">
+              <span class="stat-label">المحرّكات</span>
+              <span class="stat-value" dir="ltr">Chromium · WebKitGTK</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">الواجهة</span>
+              <span class="stat-value" dir="ltr">Qt 6</span>
+            </div>
+            <div class="stat-row">
               <span class="stat-label">لغة البرمجة</span>
-              <span class="stat-value">C++20</span>
+              <span class="stat-value" dir="ltr">C++20</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label">إطار الواجهة</span>
-              <span class="stat-value">Qt 6.4+ (أصلي)</span>
+              <span class="stat-label">لغات الواجهة</span>
+              <span class="stat-value" dir="ltr">EN · TR · AR · FR</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label">محرك الويب</span>
-              <span class="stat-value">Chromium / QtWebEngine</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">نظام معالجة الصوت</span>
-              <span class="stat-value">DALI Web Audio + BASS</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">الترخيص</span>
-              <span class="stat-value">GPL-3.0-only</span>
+              <span class="stat-label">الرخصة</span>
+              <span class="stat-value" dir="ltr">GPL-3.0-only</span>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Download Section -->
     <section id="download" class="section">
       <div class="container">
         <div class="section-header">
           <span class="section-subtitle">ابدأ الآن</span>
-          <h2 class="section-title">تنزيل متصفح DaliNira</h2>
-          <p class="section-desc">
-            اختر نظام تشغيل سطح المكتب الخاص بك. نوفر حزم مستودعات سريعة وحزم إصدارات مستقلة على GitHub.
-          </p>
+          <h2 class="section-title">ثبّت DaliNira 8.0.0</h2>
+          <p class="section-desc">يدعم DaliNira نظام Linux x86_64. يتضمن كل إصدار حزمًا لـ Debian وUbuntu وFedora وأرشيفًا محمولًا.</p>
         </div>
 
         <div class="download-grid">
-          <!-- Linux Card -->
           <div class="download-card">
             <div class="download-card-header">
               <div class="platform-icon">
-                <img src="../assets/icons/linux.svg" alt="Linux" width="24" height="24">
+                <img src="../assets/icons/linux.svg" alt="" aria-hidden="true" width="24" height="24">
               </div>
               <div>
-                <h3 class="download-card-title">Linux</h3>
-                <span class="download-card-subtitle">Arch Linux و Manjaro وتوزيعات دبيان والحزم المستقلة</span>
+                <h3 class="download-card-title">Debian وUbuntu وFedora</h3>
+                <span class="download-card-subtitle">حزم من صفحة إصدارات GitHub</span>
+              </div>
+            </div>
+
+            <ul class="spotlight-bullets download-list">
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Debian 12 — ‎.deb</span></li>
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Ubuntu 24.04 — ‎.deb</span></li>
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Fedora — ‎.rpm</span></li>
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>أي توزيعة — أرشيف ‎.tar.zst محمول</span></li>
+            </ul>
+
+            <div class="download-card-cta">
+              <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases/latest" class="btn btn-primary btn-block" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
+                <span>التنزيل من إصدارات GitHub</span>
+              </a>
+              <p class="download-note">يتطلب تشغيل الوسائط في WebKitGTK إضافات GStreamer، وتثبّتها الحزم كاعتماديات.</p>
+            </div>
+          </div>
+
+          <div class="download-card">
+            <div class="download-card-header">
+              <div class="platform-icon">
+                <img src="../assets/icons/linux.svg" alt="" aria-hidden="true" width="24" height="24">
+              </div>
+              <div>
+                <h3 class="download-card-title">Arch Linux</h3>
+                <span class="download-card-subtitle">من AUR أو مستودع DaliNira الموقّع</span>
               </div>
             </div>
 
             <div class="install-methods">
               <div class="install-method">
-                <span class="install-method-label">مستودع Pacman الرسمي (موصى به)</span>
-                <div class="code-box">
-                  <code id="cmd-pacman">curl -fsSL https://muhammed-dali.github.io/DaliNira-Browser/dalinira.repo | sudo tee -a /etc/pacman.conf &gt;/dev/null &amp;&amp; sudo pacman -Syu dalinira</code>
-                  <button type="button" class="copy-btn" data-target="cmd-pacman" data-copied="تم النسخ!">نسخ</button>
-                </div>
-              </div>
-
-              <div class="install-method">
                 <span class="install-method-label">حزمة AUR</span>
-                <div class="code-box">
+                <div class="code-box" dir="ltr">
                   <code id="cmd-aur">yay -S dalinira-bin</code>
                   <button type="button" class="copy-btn" data-target="cmd-aur" data-copied="تم النسخ!">نسخ</button>
                 </div>
               </div>
-            </div>
 
-            <div class="download-card-cta">
-              <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" class="btn btn-primary" style="width: 100%;" target="_blank" rel="noopener noreferrer">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
-                <span>تنزيل الحزمة المستقلة (.tar.zst)</span>
-              </a>
-              <p class="download-note">تستضاف الإصدارات بأمان عبر GitHub Releases</p>
-            </div>
-          </div>
-
-          <!-- Windows Card -->
-          <div class="download-card">
-            <div class="download-card-header">
-              <div class="platform-icon">
-                <img src="../assets/icons/windows.svg" alt="Windows" width="24" height="24">
-              </div>
-              <div>
-                <h3 class="download-card-title">Windows</h3>
-                <span class="download-card-subtitle">Windows 10 / 11 (64-بت)</span>
-              </div>
-            </div>
-
-            <div class="install-methods">
               <div class="install-method">
-                <span class="install-method-label">حزم الإصدارات المستقلة</span>
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                  حزمة Windows غير متاحة بعد في الإصدار v7.2.1. تابع صفحة GitHub Releases للحصول على الإصدارات القادمة.
-                </p>
+                <span class="install-method-label">مستودع pacman الموقّع</span>
+                <div class="code-box" dir="ltr">
+                  <code id="cmd-pacman">curl -sL https://github.com/Muhammed-Dali/DaliNira-Browser/releases/download/pacman-repo/dalinira.gpg | sudo pacman-key --add - &amp;&amp; sudo pacman-key --lsign-key BC741FD0AC804351B0DDBB86FDFEC60C11202588 &amp;&amp; curl -fsSL https://muhammed-dali.github.io/DaliNira-Browser/dalinira.repo | sudo tee -a /etc/pacman.conf &gt;/dev/null &amp;&amp; sudo pacman -Syu dalinira</code>
+                  <button type="button" class="copy-btn" data-target="cmd-pacman" data-copied="تم النسخ!">نسخ</button>
+                </div>
               </div>
-            </div>
-
-            <div class="download-card-cta">
-              <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" class="btn btn-primary" style="width: 100%;" target="_blank" rel="noopener noreferrer">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
-                <span>عرض الإصدارات على GitHub</span>
-              </a>
-              <p class="download-note">تستضاف الإصدارات بأمان عبر GitHub Releases</p>
             </div>
           </div>
         </div>
@@ -605,25 +531,23 @@
 
   </main>
 
-  <!-- Site Footer -->
   <footer class="site-footer">
     <div class="container">
       <div class="footer-top">
         <div class="footer-brand">
           <a href="./" class="brand-link">
-            <img src="../assets/images/dalinira-logo-128.png" alt="شعار DaliNira" width="30" height="30">
-            <span>متصفح DaliNira</span>
+            <img src="../assets/images/dalinira-logo-128.png" alt="" width="30" height="30">
+            <span>DaliNira Browser</span>
           </a>
-          <p class="footer-desc">
-            متصفح ويب مستقل يركز على الخصوصية، مصمم بـ Qt 6 و C++20 لتحقيق السرعة والحرية والدقة الصوتية.
-          </p>
+          <p class="footer-desc">متصفح مستقل لسطح المكتب على لينكس يعمل بمحرّكي Chromium وWebKitGTK.</p>
         </div>
 
         <div class="footer-column">
           <h4>التنقل</h4>
           <ul>
-            <li><a href="#features">المميزات</a></li>
-            <li><a href="#showcase">واجهة المستخدم</a></li>
+            <li><a href="#features">المزايا</a></li>
+            <li><a href="#engines">المحرّكات</a></li>
+            <li><a href="#screenshots">لقطات الشاشة</a></li>
             <li><a href="#privacy">الخصوصية</a></li>
             <li><a href="#download">التنزيل</a></li>
           </ul>
@@ -633,37 +557,36 @@
           <h4>المصدر المفتوح</h4>
           <ul>
             <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser" target="_blank" rel="noopener noreferrer">مستودع GitHub</a></li>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" target="_blank" rel="noopener noreferrer">الإصدارات وسجل التغييرات</a></li>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">ترخيص GPL-3.0</a></li>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/issues" target="_blank" rel="noopener noreferrer">متتبع البلاغات (Issues)</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" target="_blank" rel="noopener noreferrer">الإصدارات</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">سجل التغييرات</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/issues/new/choose" target="_blank" rel="noopener noreferrer">الإبلاغ عن خطأ</a></li>
           </ul>
         </div>
 
         <div class="footer-column">
           <h4>اللغات</h4>
           <ul>
-            <li><a href="../">English</a></li>
-            <li><a href="../tr/">Türkçe</a></li>
-            <li><a href="./">العربية (الحالية)</a></li>
+            <li><a href="../" lang="en">English</a></li>
+            <li><a href="../tr/" lang="tr">Türkçe</a></li>
+            <li><a href="./" lang="ar">العربية</a></li>
           </ul>
         </div>
       </div>
 
       <div class="footer-bottom">
         <div>
-          <span>© 2026 مشروع متصفح DaliNira. تم النشر بموجب ترخيص GNU العام v3.0.</span>
+          <span>© 2026 مشروع DaliNira Browser. صدر بموجب رخصة جنو العمومية العامة الإصدار 3.0.</span>
         </div>
         <div>
-          <button type="button" class="back-to-top" aria-label="التمرير إلى الأعلى">
-            <span>العودة للأعلى</span>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+          <button type="button" class="back-to-top">
+            <span>العودة إلى الأعلى</span>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
           </button>
         </div>
       </div>
     </div>
   </footer>
 
-  <!-- Minimal Vanilla JavaScript -->
   <script src="../assets/js/main.js"></script>
 </body>
 </html>

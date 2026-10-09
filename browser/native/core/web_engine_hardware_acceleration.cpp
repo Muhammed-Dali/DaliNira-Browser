@@ -176,6 +176,20 @@ void WebEngineHardwareAcceleration::initializeEarlyRuntime(const QString &driDir
   g_initialized = true;
 }
 
+QStringList WebEngineHardwareAcceleration::privacyFlags() {
+  return {
+      QStringLiteral("--site-per-process"),
+      QStringLiteral("--enable-features=SplitCacheByNetworkIsolationKey,SplitCodeCacheByNetworkIsolationKey,"
+                     "SplitAuthCacheByNetworkIsolationKey,SplitCacheByCrossSiteMainFrameNavigationBoolean,"
+                     "PartitionConnectionsByNetworkIsolationKey,UseDnsHttpsSvcb,EncryptedClientHello")
+  };
+}
+
+void WebEngineHardwareAcceleration::applyPrivacyFlags() {
+  const QString existing = QString::fromLocal8Bit(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS"));
+  qputenv("QTWEBENGINE_CHROMIUM_FLAGS", mergeChromiumFlags(existing, privacyFlags()).toUtf8());
+}
+
 HardwareAccelerationStatus WebEngineHardwareAcceleration::currentStatus() {
   if (!g_initialized) {
     g_cachedStatus = detectCapability();

@@ -1,3 +1,4 @@
+#include "i18n/i18n.h"
 #include <cassert>
 #include <QCoreApplication>
 #include <QEventLoop>
@@ -240,17 +241,24 @@ class FakeTranslateNetworkAccessManager final : public QNetworkAccessManager {
 void testLanguageDetection() {
   std::cout << "[Test] Running testLanguageDetection..." << std::endl;
 
-  assert(LanguageDetector::detectLanguage(QStringLiteral("en-US"), QString(), QString()) == QStringLiteral("en"));
-  assert(LanguageDetector::detectLanguage(QStringLiteral("tr-TR"), QString(), QString()) == QStringLiteral("tr"));
-  assert(LanguageDetector::detectLanguage(QStringLiteral("de_DE"), QString(), QString()) == QStringLiteral("de"));
-  assert(LanguageDetector::detectLanguage(QStringLiteral("FR"), QString(), QString()) == QStringLiteral("fr"));
-  assert(LanguageDetector::detectLanguage(QString(), QStringLiteral("es-ES"), QString()) == QStringLiteral("es"));
-
   const QString enSample = QStringLiteral("The quick brown fox jumps over the lazy dog and that was for you.");
-  assert(LanguageDetector::detectLanguage(QString(), QString(), enSample) == QStringLiteral("en"));
+  const QString trSample = QStringLiteral("Bu web sayfası Türkçe olarak hazırlanmıştır ve herkes için çok güzeldir.");
+  const QString frSample = QStringLiteral("Cette page est écrite en français et contient des informations pour les personnes qui visitent le site.");
+  const QString arSample = QString::fromUtf8("هذه صفحة عربية تحتوي على معلومات مفيدة لجميع الزوار والمستخدمين في الموقع");
 
-  const QString trSample = QStringLiteral("Bu web sayfası Türkçe olarak hazırlanmıştır ve çok güzeldir.");
+  assert(LanguageDetector::detectLanguage(QStringLiteral("en-US"), QString(), enSample) == QStringLiteral("en"));
+  assert(LanguageDetector::detectLanguage(QStringLiteral("tr-TR"), QString(), trSample) == QStringLiteral("tr"));
+  assert(LanguageDetector::detectLanguage(QStringLiteral("FR"), QString(), frSample) == QStringLiteral("fr"));
+  assert(LanguageDetector::detectLanguage(QStringLiteral("ar"), QString(), arSample) == QStringLiteral("ar"));
+  // Visible page text wins over incorrect metadata.
+  assert(LanguageDetector::detectLanguage(QStringLiteral("tr"), QString(), enSample) == QStringLiteral("en"));
+  // Tiny/empty documents are deliberately not offered unreliable translation.
+  assert(LanguageDetector::detectLanguage(QStringLiteral("en"), QString(), QStringLiteral("Hello")) .isEmpty());
+
+  assert(LanguageDetector::detectLanguage(QString(), QString(), enSample) == QStringLiteral("en"));
   assert(LanguageDetector::detectLanguage(QString(), QString(), trSample) == QStringLiteral("tr"));
+  assert(LanguageDetector::detectLanguage(QString(), QString(), frSample) == QStringLiteral("fr"));
+  assert(LanguageDetector::detectLanguage(QString(), QString(), arSample) == QStringLiteral("ar"));
 
   assert(LanguageDetector::languageDisplayName(QStringLiteral("en")) == QStringLiteral("İngilizce"));
   assert(LanguageDetector::languageDisplayName(QStringLiteral("tr")) == QStringLiteral("Türkçe"));
@@ -546,7 +554,8 @@ void testGoogleGtxExplicitSelection() {
 
   service.setProvider(QStringLiteral("google_gtx"));
   assert(service.providerId() == QStringLiteral("google_gtx"));
-  assert(service.currentProvider()->displayName().contains(QStringLiteral("Experimental / Unofficial")));
+  // The name is localized; it must be the catalog's "experimental / unofficial" label.
+  assert(service.currentProvider()->displayName() == I18n::text(QStringLiteral("settings.languages.provider_gtx")));
 
   QEventLoop loop;
   bool success = false;

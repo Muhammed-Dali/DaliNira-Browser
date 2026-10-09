@@ -6,6 +6,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QTimer>
+#include "i18n/i18n.h"
 
 namespace {
 constexpr int kDefaultTimeoutMs = 12000;
@@ -36,14 +37,14 @@ void DeepLProvider::translateBatch(
 ) {
   if (!isConfigured()) {
     if (callback) {
-      callback({false, {}, TranslationError::NotConfigured, QStringLiteral("DeepL API anahtarı girilmemiş.")});
+      callback({false, {}, TranslationError::NotConfigured, I18n::text(QStringLiteral("translate.deepl_key_missing"))});
     }
     return;
   }
 
   if (!nam_) {
     if (callback) {
-      callback({false, {}, TranslationError::ProviderUnavailable, QStringLiteral("Ağ yöneticisi kullanılamıyor.")});
+      callback({false, {}, TranslationError::ProviderUnavailable, I18n::text(QStringLiteral("translate.network_manager_unavailable"))});
     }
     return;
   }
@@ -95,16 +96,16 @@ void DeepLProvider::translateBatch(
 
       if (reply->error() == QNetworkReply::OperationCanceledError || reply->error() == QNetworkReply::TimeoutError) {
         errType = TranslationError::Timeout;
-        errMsg = QStringLiteral("DeepL istek zaman aşımına uğradı.");
+        errMsg = I18n::text(QStringLiteral("translate.deepl_timeout"));
       } else if (httpCode == 403 || httpCode == 401) {
         errType = TranslationError::AuthenticationFailed;
-        errMsg = QStringLiteral("DeepL API anahtarı geçersiz veya yetkisiz.");
+        errMsg = I18n::text(QStringLiteral("translate.deepl_key_invalid"));
       } else if (httpCode == 456) {
         errType = TranslationError::RateLimited;
-        errMsg = QStringLiteral("DeepL çeviri kotası doldu.");
+        errMsg = I18n::text(QStringLiteral("translate.deepl_quota"));
       } else if (httpCode == 429) {
         errType = TranslationError::RateLimited;
-        errMsg = QStringLiteral("Çok fazla istek (DeepL rate limit).");
+        errMsg = I18n::text(QStringLiteral("translate.deepl_rate_limit"));
       }
 
       if (callback) {
@@ -119,7 +120,7 @@ void DeepLProvider::translateBatch(
 
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
       if (callback) {
-        callback({false, {}, TranslationError::InvalidResponse, QStringLiteral("DeepL yanıtı geçerli JSON formatında değil.")});
+        callback({false, {}, TranslationError::InvalidResponse, I18n::text(QStringLiteral("translate.deepl_invalid_json"))});
       }
       return;
     }
@@ -127,7 +128,7 @@ void DeepLProvider::translateBatch(
     const QJsonObject rootObj = doc.object();
     if (!rootObj.contains(QStringLiteral("translations"))) {
       if (callback) {
-        callback({false, {}, TranslationError::InvalidResponse, QStringLiteral("DeepL yanıtında çeviri alanı bulunamadı.")});
+        callback({false, {}, TranslationError::InvalidResponse, I18n::text(QStringLiteral("translate.deepl_no_translation"))});
       }
       return;
     }
@@ -144,7 +145,7 @@ void DeepLProvider::translateBatch(
 
     if (translatedList.size() != expectedCount) {
       if (callback) {
-        callback({false, {}, TranslationError::InvalidResponse, QStringLiteral("Çeviri sonucu beklenen metin sayısıyla eşleşmedi.")});
+        callback({false, {}, TranslationError::InvalidResponse, I18n::text(QStringLiteral("translate.count_mismatch"))});
       }
       return;
     }

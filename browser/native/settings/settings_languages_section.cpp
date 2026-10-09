@@ -31,51 +31,47 @@
 using namespace dalinira::settings_ui;
 
 namespace {
+// Display names are resolved at use time from language.name.* so they follow
+// the active UI language (never frozen at static-initialization time).
 struct LanguageMeta {
   QString code;
-  QString displayName;
   QString spellCheckCode;
 };
 
 static const QList<LanguageMeta> kLanguagesList = {
-  {QStringLiteral("tr"), QStringLiteral("Türkçe"), QStringLiteral("tr-TR")},
-  {QStringLiteral("en-US"), QStringLiteral("İngilizce (Amerika Birleşik Devletleri)"), QStringLiteral("en-US")},
-  {QStringLiteral("en"), QStringLiteral("İngilizce"), QStringLiteral("en-GB")},
-  {QStringLiteral("en-GB"), QStringLiteral("İngilizce (Birleşik Krallık)"), QStringLiteral("en-GB")},
-  {QStringLiteral("de"), QStringLiteral("Almanca"), QStringLiteral("de-DE")},
-  {QStringLiteral("fr"), QStringLiteral("Fransızca"), QStringLiteral("fr-FR")},
-  {QStringLiteral("es"), QStringLiteral("İspanyolca"), QStringLiteral("es-ES")},
-  {QStringLiteral("it"), QStringLiteral("İtalyanca"), QStringLiteral("it-IT")},
-  {QStringLiteral("ar"), QStringLiteral("Arapça"), QStringLiteral("ar")},
-  {QStringLiteral("ru"), QStringLiteral("Rusça"), QStringLiteral("ru-RU")},
-  {QStringLiteral("ja"), QStringLiteral("Japonca"), QStringLiteral("ja")},
-  {QStringLiteral("zh-CN"), QStringLiteral("Çince (Basitleştirilmiş)"), QStringLiteral("zh-CN")},
-  {QStringLiteral("ko"), QStringLiteral("Korece"), QStringLiteral("ko")},
-  {QStringLiteral("pt-BR"), QStringLiteral("Portekizce (Brezilya)"), QStringLiteral("pt-BR")},
-  {QStringLiteral("pt"), QStringLiteral("Portekizce"), QStringLiteral("pt-PT")},
-  {QStringLiteral("nl"), QStringLiteral("Felemenkçe"), QStringLiteral("nl-NL")},
-  {QStringLiteral("pl"), QStringLiteral("Lehçe"), QStringLiteral("pl-PL")},
-  {QStringLiteral("uk"), QStringLiteral("Ukraynaca"), QStringLiteral("uk-UA")},
-  {QStringLiteral("az"), QStringLiteral("Azerice"), QStringLiteral("az")},
-  {QStringLiteral("el"), QStringLiteral("Yunanca"), QStringLiteral("el-GR")},
-  {QStringLiteral("hi"), QStringLiteral("Hintçe"), QStringLiteral("hi-IN")},
-  {QStringLiteral("sv"), QStringLiteral("İsveççe"), QStringLiteral("sv-SE")},
-  {QStringLiteral("no"), QStringLiteral("Norveççe"), QStringLiteral("nb-NO")},
-  {QStringLiteral("da"), QStringLiteral("Danca"), QStringLiteral("da-DK")},
-  {QStringLiteral("fi"), QStringLiteral("Fince"), QStringLiteral("fi-FI")},
-  {QStringLiteral("cs"), QStringLiteral("Çekçe"), QStringLiteral("cs-CZ")},
-  {QStringLiteral("hu"), QStringLiteral("Macarca"), QStringLiteral("hu-HU")},
-  {QStringLiteral("ro"), QStringLiteral("Rumence"), QStringLiteral("ro-RO")},
-  {QStringLiteral("id"), QStringLiteral("Endonezce"), QStringLiteral("id-ID")},
-  {QStringLiteral("vi"), QStringLiteral("Vietnamca"), QStringLiteral("vi-VN")}
+  {QStringLiteral("tr"), QStringLiteral("tr-TR")},
+  {QStringLiteral("en-US"), QStringLiteral("en-US")},
+  {QStringLiteral("en"), QStringLiteral("en-GB")},
+  {QStringLiteral("en-GB"), QStringLiteral("en-GB")},
+  {QStringLiteral("de"), QStringLiteral("de-DE")},
+  {QStringLiteral("fr"), QStringLiteral("fr-FR")},
+  {QStringLiteral("es"), QStringLiteral("es-ES")},
+  {QStringLiteral("it"), QStringLiteral("it-IT")},
+  {QStringLiteral("ar"), QStringLiteral("ar")},
+  {QStringLiteral("ru"), QStringLiteral("ru-RU")},
+  {QStringLiteral("ja"), QStringLiteral("ja")},
+  {QStringLiteral("zh-CN"), QStringLiteral("zh-CN")},
+  {QStringLiteral("ko"), QStringLiteral("ko")},
+  {QStringLiteral("pt-BR"), QStringLiteral("pt-BR")},
+  {QStringLiteral("pt"), QStringLiteral("pt-PT")},
+  {QStringLiteral("nl"), QStringLiteral("nl-NL")},
+  {QStringLiteral("pl"), QStringLiteral("pl-PL")},
+  {QStringLiteral("uk"), QStringLiteral("uk-UA")},
+  {QStringLiteral("az"), QStringLiteral("az")},
+  {QStringLiteral("el"), QStringLiteral("el-GR")},
+  {QStringLiteral("hi"), QStringLiteral("hi-IN")},
+  {QStringLiteral("sv"), QStringLiteral("sv-SE")},
+  {QStringLiteral("no"), QStringLiteral("nb-NO")},
+  {QStringLiteral("da"), QStringLiteral("da-DK")},
+  {QStringLiteral("fi"), QStringLiteral("fi-FI")},
+  {QStringLiteral("cs"), QStringLiteral("cs-CZ")},
+  {QStringLiteral("hu"), QStringLiteral("hu-HU")},
+  {QStringLiteral("ro"), QStringLiteral("ro-RO")},
+  {QStringLiteral("id"), QStringLiteral("id-ID")},
+  {QStringLiteral("vi"), QStringLiteral("vi-VN")}
 };
 
 static QString getLanguageDisplayName(const QString &code) {
-  for (const auto &item : kLanguagesList) {
-    if (item.code.compare(code, Qt::CaseInsensitive) == 0) {
-      return item.displayName;
-    }
-  }
   return LanguageDetector::languageDisplayName(code);
 }
 
@@ -92,7 +88,7 @@ class AddLanguageDialog : public QDialog {
  public:
   explicit AddLanguageDialog(const QStringList &excludeCodes, QWidget *parent = nullptr)
       : QDialog(parent) {
-    setWindowTitle(QStringLiteral("Dil ekle"));
+    setWindowTitle(I18n::text(QStringLiteral("settings.languages.add_language")));
     setMinimumWidth(380);
     setMinimumHeight(440);
     setStyleSheet(QStringLiteral(
@@ -114,7 +110,7 @@ class AddLanguageDialog : public QDialog {
     layout->setSpacing(12);
 
     auto *search = new QLineEdit(this);
-    search->setPlaceholderText(QStringLiteral("Dillerde ara"));
+    search->setPlaceholderText(I18n::text(QStringLiteral("settings.languages.search_languages")));
     search->setClearButtonEnabled(true);
     layout->addWidget(search);
 
@@ -123,7 +119,7 @@ class AddLanguageDialog : public QDialog {
 
     for (const auto &item : kLanguagesList) {
       if (excludeCodes.contains(item.code, Qt::CaseInsensitive)) continue;
-      auto *listItem = new QListWidgetItem(item.displayName, listWidget);
+      auto *listItem = new QListWidgetItem(getLanguageDisplayName(item.code), listWidget);
       listItem->setData(Qt::UserRole, item.code);
       listItem->setFlags(listItem->flags() | Qt::ItemIsUserCheckable);
       listItem->setCheckState(Qt::Unchecked);
@@ -140,12 +136,12 @@ class AddLanguageDialog : public QDialog {
 
     auto *btnRow = new QHBoxLayout();
     btnRow->addStretch();
-    auto *cancelBtn = new QPushButton(QStringLiteral("İptal"), this);
+    auto *cancelBtn = new QPushButton(I18n::text(QStringLiteral("common.cancel")), this);
     cancelBtn->setObjectName(QStringLiteral("dlg-cancel-btn"));
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
     btnRow->addWidget(cancelBtn);
 
-    auto *addBtn = new QPushButton(QStringLiteral("Ekle"), this);
+    auto *addBtn = new QPushButton(I18n::text(QStringLiteral("common.add")), this);
     addBtn->setObjectName(QStringLiteral("dlg-add-btn"));
     connect(addBtn, &QPushButton::clicked, this, [this, listWidget]() {
       for (int i = 0; i < listWidget->count(); ++i) {
@@ -169,7 +165,7 @@ class AddLanguageDialog : public QDialog {
 class CustomizeSpellCheckDialog : public QDialog {
  public:
   explicit CustomizeSpellCheckDialog(QWidget *parent = nullptr) : QDialog(parent) {
-    setWindowTitle(QStringLiteral("Yazım denetimini özelleştir"));
+    setWindowTitle(I18n::text(QStringLiteral("settings.languages.customize_spellcheck")));
     setMinimumWidth(400);
     setMinimumHeight(440);
     setStyleSheet(QStringLiteral(
@@ -189,17 +185,17 @@ class CustomizeSpellCheckDialog : public QDialog {
     layout->setContentsMargins(18, 18, 18, 18);
     layout->setSpacing(12);
 
-    auto *desc = new QLabel(QStringLiteral("Özel sözcükler ekleyin. Bu sözcükler web sayfalarında metin yazarken yazım denetiminde yanlış olarak işaretlenmez."), this);
+    auto *desc = new QLabel(I18n::text(QStringLiteral("settings.languages.custom_words_desc")), this);
     desc->setWordWrap(true);
     desc->setStyleSheet(QStringLiteral("color: #91a1b2; font-size: 12px;"));
     layout->addWidget(desc);
 
     auto *inputRow = new QHBoxLayout();
     auto *wordEdit = new QLineEdit(this);
-    wordEdit->setPlaceholderText(QStringLiteral("Sözcük ekle"));
+    wordEdit->setPlaceholderText(I18n::text(QStringLiteral("settings.languages.add_word")));
     inputRow->addWidget(wordEdit, 1);
 
-    auto *addBtn = new QPushButton(QStringLiteral("Ekle"), this);
+    auto *addBtn = new QPushButton(I18n::text(QStringLiteral("common.add")), this);
     addBtn->setObjectName(QStringLiteral("dlg-add-word-btn"));
     inputRow->addWidget(addBtn);
     layout->addLayout(inputRow);
@@ -209,7 +205,7 @@ class CustomizeSpellCheckDialog : public QDialog {
 
     auto *btnRow = new QHBoxLayout();
     btnRow->addStretch();
-    auto *closeBtn = new QPushButton(QStringLiteral("Kapat"), this);
+    auto *closeBtn = new QPushButton(I18n::text(QStringLiteral("common.close")), this);
     closeBtn->setObjectName(QStringLiteral("dlg-close-btn"));
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
     btnRow->addWidget(closeBtn);
@@ -230,7 +226,7 @@ class CustomizeSpellCheckDialog : public QDialog {
         h->addWidget(lbl, 1);
         auto *delBtn = new QPushButton(QStringLiteral("✕"), wgt);
         delBtn->setObjectName(QStringLiteral("settings-icon-del-btn"));
-        delBtn->setToolTip(QStringLiteral("Kaldır"));
+        delBtn->setToolTip(I18n::text(QStringLiteral("common.remove")));
         QObject::connect(delBtn, &QPushButton::clicked, [w, words, listWidget]() {
           words->removeAll(w);
           QSettings s;
@@ -267,13 +263,16 @@ class CustomizeSpellCheckDialog : public QDialog {
 }  // namespace
 
 QWidget *SettingsPage::createLanguagesSection() {
-  Section section = makeSection(I18n::text(QStringLiteral("settings.language.header"), QStringLiteral("Diller")),
-                                I18n::text(QStringLiteral("settings.language.subtitle"), QStringLiteral("Tercih edilen web sitesi dilleri, yazım denetimi ve sayfa çevirisi yapılandırması.")));
+  Section section = makeSection(I18n::text(QStringLiteral("settings.language.header")),
+                                I18n::text(QStringLiteral("settings.language.subtitle")));
 
   QSettings settings;
   auto preferredLangs = std::make_shared<QStringList>(settings.value(QStringLiteral("language/preferredLanguages")).toStringList());
   if (preferredLangs->isEmpty()) {
-    *preferredLangs = {QStringLiteral("tr"), QStringLiteral("en-US"), QStringLiteral("en")};
+    // Default: the interface language, then English.
+    const QString interfaceLanguage = dalinira::i18n::LanguageManager::instance().activeLanguageCode();
+    if (!interfaceLanguage.isEmpty() && interfaceLanguage != QLatin1String("en")) preferredLangs->append(interfaceLanguage);
+    preferredLangs->append({QStringLiteral("en-US"), QStringLiteral("en")});
   }
 
   auto *translateSvc = profileService_ ? profileService_->translateService() : nullptr;
@@ -299,7 +298,7 @@ QWidget *SettingsPage::createLanguagesSection() {
   // =========================================================================
   // 1. TERCİH EDİLEN DİLLER
   // =========================================================================
-  auto *prefHeading = new QLabel(QStringLiteral("Tercih edilen diller"), section.page);
+  auto *prefHeading = new QLabel(I18n::text(QStringLiteral("settings.languages.preferred")), section.page);
   prefHeading->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 650; color: #f2f6fb; margin-top: 10px; margin-bottom: 6px;"));
   section.layout->addWidget(prefHeading);
 
@@ -326,17 +325,17 @@ QWidget *SettingsPage::createLanguagesSection() {
   });
 
   auto *uiLangRow = settingRow(prefCard,
-                               QStringLiteral("Uygulama Dili"),
-                               QStringLiteral("Menüler, ayarlar ve tarayıcı arayüzü için kullanılacak dili belirler."),
+                               I18n::text(QStringLiteral("settings.language.select_label")),
+                               I18n::text(QStringLiteral("settings.languages.ui_language_desc")),
                                uiLangCombo, BrowserIcon::Language, true);
   addRow(prefCard, uiLangRow);
 
-  auto *addLangBtn = new QPushButton(QStringLiteral("Dil ekle"), prefCard);
+  auto *addLangBtn = new QPushButton(I18n::text(QStringLiteral("settings.languages.add_language")), prefCard);
   addLangBtn->setObjectName(QStringLiteral("settings-pill-btn"));
 
   auto *topRow = settingRow(prefCard,
-                            QStringLiteral("Konuştuğunuz dillerdeki web siteleri"),
-                            QStringLiteral("Konuştuğunuz dilleri web sitelerine bildirin. Mümkün olduğunda bu dillerde içerik gösterirler."),
+                            I18n::text(QStringLiteral("settings.languages.websites_in_your_languages")),
+                            I18n::text(QStringLiteral("settings.languages.websites_in_your_languages_desc")),
                             addLangBtn);
   addRow(prefCard, topRow);
 
@@ -351,7 +350,7 @@ QWidget *SettingsPage::createLanguagesSection() {
   // =========================================================================
   // 2. YAZIM DENETİMİ
   // =========================================================================
-  auto *spellHeading = new QLabel(QStringLiteral("Yazım denetimi"), section.page);
+  auto *spellHeading = new QLabel(I18n::text(QStringLiteral("settings.languages.spellcheck")), section.page);
   spellHeading->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 650; color: #f2f6fb; margin-top: 24px; margin-bottom: 6px;"));
   section.layout->addWidget(spellHeading);
 
@@ -361,11 +360,11 @@ QWidget *SettingsPage::createLanguagesSection() {
   const bool initialSpellEnabled = profileService_ && profileService_->profile() ? profileService_->profile()->isSpellCheckEnabled() : true;
   spellMasterSwitch->setChecked(initialSpellEnabled);
   addRow(spellCard, settingRow(spellCard,
-                               QStringLiteral("Web sayfalarında metin yazarken yazım hatalarını kontrol et"),
+                               I18n::text(QStringLiteral("settings.languages.spellcheck_desc")),
                                QString{},
                                spellMasterSwitch));
 
-  auto *spellSubhead = new QLabel(QStringLiteral("Şu diller için yazım denetimi kullan:"), spellCard);
+  auto *spellSubhead = new QLabel(I18n::text(QStringLiteral("settings.languages.spellcheck_languages")), spellCard);
   spellSubhead->setStyleSheet(QStringLiteral("color: #91a1b2; font-size: 13px; font-weight: 550; padding: 12px 18px 4px;"));
   cardLayout(spellCard)->addWidget(spellSubhead);
 
@@ -377,7 +376,7 @@ QWidget *SettingsPage::createLanguagesSection() {
 
   auto *customDictBtn = new QPushButton(QStringLiteral("›"), spellCard);
   customDictBtn->setObjectName(QStringLiteral("settings-chevron-btn"));
-  auto *customDictRow = settingRow(spellCard, QStringLiteral("Yazım denetimini özelleştir"), QString{}, customDictBtn);
+  auto *customDictRow = settingRow(spellCard, I18n::text(QStringLiteral("settings.languages.customize_spellcheck")), QString{}, customDictBtn);
   addRow(spellCard, customDictRow);
 
   connect(customDictBtn, &QPushButton::clicked, this, [this]() {
@@ -390,7 +389,7 @@ QWidget *SettingsPage::createLanguagesSection() {
   // =========================================================================
   // 3. DALINIRA ÇEVİRİ
   // =========================================================================
-  auto *translateHeading = new QLabel(QStringLiteral("DaliNira Çeviri"), section.page);
+  auto *translateHeading = new QLabel(I18n::text(QStringLiteral("translate.brand")), section.page);
   translateHeading->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 650; color: #f2f6fb; margin-top: 24px; margin-bottom: 6px;"));
   section.layout->addWidget(translateHeading);
 
@@ -399,13 +398,13 @@ QWidget *SettingsPage::createLanguagesSection() {
   auto *transMasterSwitch = new GlowToggleSwitch(transCard);
   transMasterSwitch->setChecked(translateSvc ? translateSvc->isEnabled() : true);
   addRow(transCard, settingRow(transCard,
-                               QStringLiteral("DaliNira Çeviri'yi kullan"),
-                               QStringLiteral("Bu ayar açıkken DaliNira Çeviri, siteleri tercih ettiğiniz dile çevirmeyi önerir. Ayrıca, siteleri otomatik olarak da çevirebilir."),
+                               I18n::text(QStringLiteral("settings.languages.use_dalinira_translate")),
+                               I18n::text(QStringLiteral("settings.languages.use_dalinira_translate_desc")),
                                transMasterSwitch));
 
   auto *targetCombo = new QComboBox(transCard);
   for (const auto &item : kLanguagesList) {
-    targetCombo->addItem(item.displayName, item.code);
+    targetCombo->addItem(getLanguageDisplayName(item.code), item.code);
   }
   const QString curTarget = translateSvc ? translateSvc->defaultTargetLanguage() : QStringLiteral("tr");
   int targetIdx = targetCombo->findData(curTarget);
@@ -426,11 +425,11 @@ QWidget *SettingsPage::createLanguagesSection() {
       translateSvc->savePreferences(s);
     }
   });
-  addRow(transCard, settingRow(transCard, QStringLiteral("Şu dile çevir"), QString{}, targetCombo));
+  addRow(transCard, settingRow(transCard, I18n::text(QStringLiteral("settings.languages.translate_into")), QString{}, targetCombo));
 
-  auto *addAutoBtn = new QPushButton(QStringLiteral("Dil ekle"), transCard);
+  auto *addAutoBtn = new QPushButton(I18n::text(QStringLiteral("settings.languages.add_language")), transCard);
   addAutoBtn->setObjectName(QStringLiteral("settings-pill-btn"));
-  addRow(transCard, settingRow(transCard, QStringLiteral("Şu dilleri otomatik olarak çevir"), QString{}, addAutoBtn));
+  addRow(transCard, settingRow(transCard, I18n::text(QStringLiteral("settings.languages.always_translate")), QString{}, addAutoBtn));
 
   auto *autoLangsContainer = new QWidget(transCard);
   auto *autoLangsLayout = new QVBoxLayout(autoLangsContainer);
@@ -438,9 +437,9 @@ QWidget *SettingsPage::createLanguagesSection() {
   autoLangsLayout->setSpacing(0);
   addRow(transCard, autoLangsContainer);
 
-  auto *addNeverBtn = new QPushButton(QStringLiteral("Dil ekle"), transCard);
+  auto *addNeverBtn = new QPushButton(I18n::text(QStringLiteral("settings.languages.add_language")), transCard);
   addNeverBtn->setObjectName(QStringLiteral("settings-pill-btn"));
-  addRow(transCard, settingRow(transCard, QStringLiteral("Şu dilleri çevirmeyi hiçbir zaman önerme"), QString{}, addNeverBtn));
+  addRow(transCard, settingRow(transCard, I18n::text(QStringLiteral("settings.languages.never_offer")), QString{}, addNeverBtn));
 
   auto *neverLangsContainer = new QWidget(transCard);
   auto *neverLangsLayout = new QVBoxLayout(neverLangsContainer);
@@ -517,7 +516,7 @@ QWidget *SettingsPage::createLanguagesSection() {
       v->addWidget(titleLbl);
 
       if (i == 0) {
-        auto *subLbl = new QLabel(QStringLiteral("Bu dil, sayfalar çevrilirken kullanılır"), textWgt);
+        auto *subLbl = new QLabel(I18n::text(QStringLiteral("settings.languages.translate_into_desc")), textWgt);
         subLbl->setObjectName(QStringLiteral("settings-row-description"));
         v->addWidget(subLbl);
       }
@@ -525,7 +524,7 @@ QWidget *SettingsPage::createLanguagesSection() {
 
       auto *moreBtn = new QPushButton(QStringLiteral("⋮"), row);
       moreBtn->setObjectName(QStringLiteral("settings-more-btn"));
-      moreBtn->setToolTip(QStringLiteral("Daha fazla işlem"));
+      moreBtn->setToolTip(I18n::text(QStringLiteral("common.more_actions")));
 
       QObject::connect(moreBtn, &QPushButton::clicked, [moreBtn, i, code, preferredLangs, syncAcceptLanguage, refreshPreferredLangs, translateSvc, targetCombo]() {
         auto *menu = new QMenu(moreBtn);
@@ -544,7 +543,7 @@ QWidget *SettingsPage::createLanguagesSection() {
         else if (targetUiCode.startsWith(QLatin1String("en"))) targetUiCode = QStringLiteral("en");
         else if (targetUiCode.startsWith(QLatin1String("ar"))) targetUiCode = QStringLiteral("ar");
 
-        auto *uiAct = menu->addAction(QStringLiteral("DaliNira Browser'ı bu dilde görüntüle"));
+        auto *uiAct = menu->addAction(I18n::text(QStringLiteral("settings.languages.display_in_language")));
         uiAct->setCheckable(true);
         const bool isCurrentUi = (currentPref == targetUiCode || (currentPref == QLatin1String("system") && targetUiCode == dalinira::i18n::LanguageManager::instance().activeLanguage().code));
         uiAct->setChecked(isCurrentUi);
@@ -559,7 +558,7 @@ QWidget *SettingsPage::createLanguagesSection() {
         menu->addSeparator();
 
         // 2. En üste taşı
-        auto *topAct = menu->addAction(QStringLiteral("En üste taşı"));
+        auto *topAct = menu->addAction(I18n::text(QStringLiteral("settings.languages.move_to_top")));
         topAct->setEnabled(i > 0);
         QObject::connect(topAct, &QAction::triggered, [preferredLangs, i, syncAcceptLanguage, refreshPreferredLangs, translateSvc, targetCombo]() {
           preferredLangs->move(i, 0);
@@ -576,7 +575,7 @@ QWidget *SettingsPage::createLanguagesSection() {
         });
 
         // 3. Yukarı taşı
-        auto *upAct = menu->addAction(QStringLiteral("Yukarı taşı"));
+        auto *upAct = menu->addAction(I18n::text(QStringLiteral("settings.languages.move_up")));
         upAct->setEnabled(i > 0);
         QObject::connect(upAct, &QAction::triggered, [preferredLangs, i, syncAcceptLanguage, refreshPreferredLangs]() {
           preferredLangs->swapItemsAt(i, i - 1);
@@ -587,7 +586,7 @@ QWidget *SettingsPage::createLanguagesSection() {
         });
 
         // 4. Aşağı taşı
-        auto *downAct = menu->addAction(QStringLiteral("Aşağı taşı"));
+        auto *downAct = menu->addAction(I18n::text(QStringLiteral("settings.languages.move_down")));
         downAct->setEnabled(i < preferredLangs->size() - 1);
         QObject::connect(downAct, &QAction::triggered, [preferredLangs, i, syncAcceptLanguage, refreshPreferredLangs]() {
           preferredLangs->swapItemsAt(i, i + 1);
@@ -598,7 +597,7 @@ QWidget *SettingsPage::createLanguagesSection() {
         });
 
         // 5. Kaldır
-        auto *removeAct = menu->addAction(QStringLiteral("Kaldır"));
+        auto *removeAct = menu->addAction(I18n::text(QStringLiteral("common.remove")));
         removeAct->setEnabled(preferredLangs->size() > 1);
         QObject::connect(removeAct, &QAction::triggered, [preferredLangs, i, syncAcceptLanguage, refreshPreferredLangs]() {
           preferredLangs->removeAt(i);
@@ -611,7 +610,7 @@ QWidget *SettingsPage::createLanguagesSection() {
         menu->addSeparator();
 
         // 6. Bu dildeki sayfaları çevirmeyi öner
-        auto *offerAct = menu->addAction(QStringLiteral("Bu dildeki sayfaları çevirmeyi öner"));
+        auto *offerAct = menu->addAction(I18n::text(QStringLiteral("settings.languages.offer_translate")));
         offerAct->setCheckable(true);
         const bool never = translateSvc && translateSvc->neverTranslateLanguages().contains(code);
         offerAct->setChecked(!never);
@@ -645,7 +644,7 @@ QWidget *SettingsPage::createLanguagesSection() {
     }
     const QStringList autoLangs = translateSvc ? translateSvc->autoTranslateLanguages() : QStringList{};
     if (autoLangs.isEmpty()) {
-      auto *emptyLbl = new QLabel(QStringLiteral("Dil eklenmedi"), autoLangsContainer);
+      auto *emptyLbl = new QLabel(I18n::text(QStringLiteral("settings.languages.no_languages_added")), autoLangsContainer);
       emptyLbl->setStyleSheet(QStringLiteral("color: #7b8c9d; font-size: 13px; padding-left: 18px; padding-top: 4px; padding-bottom: 8px;"));
       autoLangsLayout->addWidget(emptyLbl);
     } else {
@@ -660,7 +659,7 @@ QWidget *SettingsPage::createLanguagesSection() {
 
         auto *delBtn = new QPushButton(QStringLiteral("🗑"), row);
         delBtn->setObjectName(QStringLiteral("settings-icon-del-btn"));
-        delBtn->setToolTip(QStringLiteral("Kaldır"));
+        delBtn->setToolTip(I18n::text(QStringLiteral("common.remove")));
         QObject::connect(delBtn, &QPushButton::clicked, [translateSvc, code, autoLangsContainer, autoLangsLayout]() {
           if (translateSvc) {
             translateSvc->removeAutoTranslateLanguage(code);
@@ -677,7 +676,7 @@ QWidget *SettingsPage::createLanguagesSection() {
               }
             }
             if (translateSvc->autoTranslateLanguages().isEmpty()) {
-              auto *emptyLbl = new QLabel(QStringLiteral("Dil eklenmedi"), autoLangsContainer);
+              auto *emptyLbl = new QLabel(I18n::text(QStringLiteral("settings.languages.no_languages_added")), autoLangsContainer);
               emptyLbl->setStyleSheet(QStringLiteral("color: #7b8c9d; font-size: 13px; padding-left: 18px; padding-top: 4px; padding-bottom: 8px;"));
               autoLangsLayout->addWidget(emptyLbl);
             }
@@ -697,7 +696,7 @@ QWidget *SettingsPage::createLanguagesSection() {
     }
     const QStringList neverLangs = translateSvc ? translateSvc->neverTranslateLanguages() : QStringList{QStringLiteral("tr")};
     if (neverLangs.isEmpty()) {
-      auto *emptyLbl = new QLabel(QStringLiteral("Dil eklenmedi"), neverLangsContainer);
+      auto *emptyLbl = new QLabel(I18n::text(QStringLiteral("settings.languages.no_languages_added")), neverLangsContainer);
       emptyLbl->setStyleSheet(QStringLiteral("color: #7b8c9d; font-size: 13px; padding-left: 18px; padding-top: 4px; padding-bottom: 8px;"));
       neverLangsLayout->addWidget(emptyLbl);
     } else {
@@ -712,7 +711,7 @@ QWidget *SettingsPage::createLanguagesSection() {
 
         auto *delBtn = new QPushButton(QStringLiteral("🗑"), row);
         delBtn->setObjectName(QStringLiteral("settings-icon-del-btn"));
-        delBtn->setToolTip(QStringLiteral("Kaldır"));
+        delBtn->setToolTip(I18n::text(QStringLiteral("common.remove")));
         QObject::connect(delBtn, &QPushButton::clicked, [translateSvc, code, neverLangsContainer, neverLangsLayout]() {
           if (translateSvc) {
             translateSvc->removeNeverTranslateLanguage(code);
@@ -729,7 +728,7 @@ QWidget *SettingsPage::createLanguagesSection() {
               }
             }
             if (translateSvc->neverTranslateLanguages().isEmpty()) {
-              auto *emptyLbl = new QLabel(QStringLiteral("Dil eklenmedi"), neverLangsContainer);
+              auto *emptyLbl = new QLabel(I18n::text(QStringLiteral("settings.languages.no_languages_added")), neverLangsContainer);
               emptyLbl->setStyleSheet(QStringLiteral("color: #7b8c9d; font-size: 13px; padding-left: 18px; padding-top: 4px; padding-bottom: 8px;"));
               neverLangsLayout->addWidget(emptyLbl);
             }
@@ -744,6 +743,12 @@ QWidget *SettingsPage::createLanguagesSection() {
   (*refreshPreferredLangs)();
   refreshAutoTranslateList();
   refreshNeverTranslateList();
+  // Language names follow the UI language; rebuild the lists after a switch.
+  languageRefreshers_.push_back([refreshPreferredLangs, refreshAutoTranslateList, refreshNeverTranslateList] {
+    (*refreshPreferredLangs)();
+    refreshAutoTranslateList();
+    refreshNeverTranslateList();
+  });
 
   // Connections for Add Language buttons
   connect(addLangBtn, &QPushButton::clicked, this, [this, preferredLangs, syncAcceptLanguage, refreshPreferredLangs]() {
@@ -811,15 +816,15 @@ QWidget *SettingsPage::createLanguagesSection() {
   // =========================================================================
   // 4. ÇEVİRİ SAĞLAYICISI VE API YAPILANDIRMASI
   // =========================================================================
-  auto *configCard = makeCard(section.page, QStringLiteral("ÇEVİRİ SAĞLAYICISI VE API YAPILANDIRMASI"));
+  auto *configCard = makeCard(section.page, I18n::text(QStringLiteral("settings.languages.provider_card")));
 
   auto *providerCombo = new QComboBox(configCard);
   providerCombo->setObjectName(QStringLiteral("settings-translation-provider"));
-  providerCombo->addItem(QStringLiteral("Yapılandırılmamış"), QStringLiteral("none"));
+  providerCombo->addItem(I18n::text(QStringLiteral("translate.provider_not_configured")), QStringLiteral("none"));
   providerCombo->addItem(QStringLiteral("LibreTranslate"), QStringLiteral("libretranslate"));
   providerCombo->addItem(QStringLiteral("DeepL"), QStringLiteral("deepl"));
   providerCombo->addItem(QStringLiteral("Google Cloud Translation"), QStringLiteral("google_cloud"));
-  providerCombo->addItem(QStringLiteral("Google Translate (Experimental / Unofficial)"), QStringLiteral("google_gtx"));
+  providerCombo->addItem(I18n::text(QStringLiteral("settings.languages.provider_gtx")), QStringLiteral("google_gtx"));
 
   QString currentProviderId = translateSvc ? translateSvc->providerId() : QStringLiteral("google_gtx");
   if (currentProviderId == QLatin1String("none")) {
@@ -833,8 +838,8 @@ QWidget *SettingsPage::createLanguagesSection() {
   int pIdx = providerCombo->findData(currentProviderId);
   if (pIdx >= 0) providerCombo->setCurrentIndex(pIdx);
 
-  addRow(configCard, settingRow(configCard, QStringLiteral("Çeviri sağlayıcısı"),
-                                QStringLiteral("Sayfaların metinlerini çevirecek backend servisi."),
+  addRow(configCard, settingRow(configCard, I18n::text(QStringLiteral("settings.translation.provider")),
+                                I18n::text(QStringLiteral("settings.translation.provider_desc")),
                                 providerCombo));
 
   auto *stacked = new QStackedWidget(configCard);
@@ -844,7 +849,7 @@ QWidget *SettingsPage::createLanguagesSection() {
   auto *nonePage = new QWidget(stacked);
   auto *noneLayout = new QVBoxLayout(nonePage);
   noneLayout->setContentsMargins(18, 14, 18, 14);
-  auto *noneLabel = new QLabel(QStringLiteral("Sayfa çevirisi için bir sağlayıcı seçilmedi. Çeviriyi kullanmak için yukarıdaki listeden LibreTranslate, DeepL veya Google Cloud seçin."), nonePage);
+  auto *noneLabel = new QLabel(I18n::text(QStringLiteral("settings.languages.no_provider_notice")), nonePage);
   noneLabel->setObjectName(QStringLiteral("settings-row-description"));
   noneLabel->setWordWrap(true);
   noneLayout->addWidget(noneLabel);
@@ -862,21 +867,21 @@ QWidget *SettingsPage::createLanguagesSection() {
   if (translateSvc && translateSvc->libreTranslateEndpoint().isValid()) {
     ltUrlEdit->setText(translateSvc->libreTranslateEndpoint().toString());
   }
-  ltLayout->addWidget(settingRow(ltPage, QStringLiteral("Sunucu adresi"), QStringLiteral("Self-hosted veya özel LibreTranslate REST uç noktası."), ltUrlEdit));
+  ltLayout->addWidget(settingRow(ltPage, I18n::text(QStringLiteral("settings.languages.server_address")), I18n::text(QStringLiteral("settings.languages.server_address_desc")), ltUrlEdit));
 
   auto *ltKeyEdit = new QLineEdit(ltPage);
   ltKeyEdit->setObjectName(QStringLiteral("settings-lt-key"));
   ltKeyEdit->setEchoMode(QLineEdit::Password);
-  ltKeyEdit->setPlaceholderText(QStringLiteral("Opsiyonel API Anahtarı"));
+  ltKeyEdit->setPlaceholderText(I18n::text(QStringLiteral("settings.languages.optional_api_key_placeholder")));
   if (translateSvc) {
     ltKeyEdit->setText(translateSvc->loadApiKey(QStringLiteral("libretranslate")));
   }
-  ltLayout->addWidget(settingRow(ltPage, QStringLiteral("API anahtarı (Opsiyonel)"), QStringLiteral("Sunucunuz kimlik doğrulama gerektiriyorsa girin."), ltKeyEdit));
+  ltLayout->addWidget(settingRow(ltPage, I18n::text(QStringLiteral("settings.languages.api_key_optional")), I18n::text(QStringLiteral("settings.languages.api_key_optional_desc")), ltKeyEdit));
 
-  auto *ltTestBtn = new QPushButton(QStringLiteral("Bağlantıyı Test Et"), ltPage);
+  auto *ltTestBtn = new QPushButton(I18n::text(QStringLiteral("settings.languages.test_connection")), ltPage);
   auto *ltStatusLabel = new QLabel(ltPage);
   ltStatusLabel->setObjectName(QStringLiteral("settings-row-description"));
-  ltLayout->addWidget(settingRow(ltPage, QStringLiteral("Bağlantı testi"), QStringLiteral("LibreTranslate sunucusuna test isteği göndererek doğrular."), ltTestBtn));
+  ltLayout->addWidget(settingRow(ltPage, I18n::text(QStringLiteral("settings.languages.connection_test")), I18n::text(QStringLiteral("settings.languages.libretranslate_test_desc")), ltTestBtn));
   ltLayout->addWidget(ltStatusLabel);
   stacked->addWidget(ltPage);
 
@@ -888,22 +893,22 @@ QWidget *SettingsPage::createLanguagesSection() {
   auto *deeplKeyEdit = new QLineEdit(deeplPage);
   deeplKeyEdit->setObjectName(QStringLiteral("settings-deepl-key"));
   deeplKeyEdit->setEchoMode(QLineEdit::Password);
-  deeplKeyEdit->setPlaceholderText(QStringLiteral("DeepL API Anahtarı (örn: ...:fx)"));
+  deeplKeyEdit->setPlaceholderText(I18n::text(QStringLiteral("settings.languages.deepl_key_placeholder")));
   if (translateSvc) {
     deeplKeyEdit->setText(translateSvc->loadApiKey(QStringLiteral("deepl")));
   }
-  deeplLayout->addWidget(settingRow(deeplPage, QStringLiteral("API anahtarı"), QStringLiteral("DeepL Free veya Pro abonelik anahtarınız."), deeplKeyEdit));
+  deeplLayout->addWidget(settingRow(deeplPage, I18n::text(QStringLiteral("settings.languages.api_key")), I18n::text(QStringLiteral("settings.languages.deepl_key_desc")), deeplKeyEdit));
 
   auto *deeplPlanCombo = new QComboBox(deeplPage);
   deeplPlanCombo->addItem(QStringLiteral("DeepL API Free"), QStringLiteral("free"));
   deeplPlanCombo->addItem(QStringLiteral("DeepL API Pro"), QStringLiteral("pro"));
   if (translateSvc && translateSvc->deepLIsPro()) deeplPlanCombo->setCurrentIndex(1);
-  deeplLayout->addWidget(settingRow(deeplPage, QStringLiteral("Plan türü"), QStringLiteral("Ücretsiz planlar için api-free.deepl.com, ücretli planlar için api.deepl.com kullanılır."), deeplPlanCombo));
+  deeplLayout->addWidget(settingRow(deeplPage, I18n::text(QStringLiteral("settings.languages.plan_type")), I18n::text(QStringLiteral("settings.languages.deepl_plan_desc")), deeplPlanCombo));
 
-  auto *deeplTestBtn = new QPushButton(QStringLiteral("Bağlantıyı Test Et"), deeplPage);
+  auto *deeplTestBtn = new QPushButton(I18n::text(QStringLiteral("settings.languages.test_connection")), deeplPage);
   auto *deeplStatusLabel = new QLabel(deeplPage);
   deeplStatusLabel->setObjectName(QStringLiteral("settings-row-description"));
-  deeplLayout->addWidget(settingRow(deeplPage, QStringLiteral("Bağlantı testi"), QStringLiteral("DeepL API anahtarınızı test metniyle doğrular."), deeplTestBtn));
+  deeplLayout->addWidget(settingRow(deeplPage, I18n::text(QStringLiteral("settings.languages.connection_test")), I18n::text(QStringLiteral("settings.languages.deepl_test_desc")), deeplTestBtn));
   deeplLayout->addWidget(deeplStatusLabel);
   stacked->addWidget(deeplPage);
 
@@ -915,16 +920,16 @@ QWidget *SettingsPage::createLanguagesSection() {
   auto *gcpKeyEdit = new QLineEdit(gcpPage);
   gcpKeyEdit->setObjectName(QStringLiteral("settings-gcp-key"));
   gcpKeyEdit->setEchoMode(QLineEdit::Password);
-  gcpKeyEdit->setPlaceholderText(QStringLiteral("Google Cloud API Anahtarı"));
+  gcpKeyEdit->setPlaceholderText(I18n::text(QStringLiteral("settings.languages.gcp_key_placeholder")));
   if (translateSvc) {
     gcpKeyEdit->setText(translateSvc->loadApiKey(QStringLiteral("google_cloud")));
   }
-  gcpLayout->addWidget(settingRow(gcpPage, QStringLiteral("API anahtarı"), QStringLiteral("Google Cloud Console üzerinden alınan Translation API anahtarı."), gcpKeyEdit));
+  gcpLayout->addWidget(settingRow(gcpPage, I18n::text(QStringLiteral("settings.languages.api_key")), I18n::text(QStringLiteral("settings.languages.gcp_key_desc")), gcpKeyEdit));
 
-  auto *gcpTestBtn = new QPushButton(QStringLiteral("Bağlantıyı Test Et"), gcpPage);
+  auto *gcpTestBtn = new QPushButton(I18n::text(QStringLiteral("settings.languages.test_connection")), gcpPage);
   auto *gcpStatusLabel = new QLabel(gcpPage);
   gcpStatusLabel->setObjectName(QStringLiteral("settings-row-description"));
-  gcpLayout->addWidget(settingRow(gcpPage, QStringLiteral("Bağlantı testi"), QStringLiteral("Google Cloud API anahtarını doğrular."), gcpTestBtn));
+  gcpLayout->addWidget(settingRow(gcpPage, I18n::text(QStringLiteral("settings.languages.connection_test")), I18n::text(QStringLiteral("settings.languages.gcp_test_desc")), gcpTestBtn));
   gcpLayout->addWidget(gcpStatusLabel);
   stacked->addWidget(gcpPage);
 
@@ -932,7 +937,7 @@ QWidget *SettingsPage::createLanguagesSection() {
   auto *gtxPage = new QWidget(stacked);
   auto *gtxLayout = new QVBoxLayout(gtxPage);
   gtxLayout->setContentsMargins(18, 14, 18, 14);
-  auto *gtxNotice = new QLabel(QStringLiteral("<b>Deneysel / Resmi Olmayan Sağlayıcı</b><br>Bu sağlayıcı Google'ın resmi Cloud Translation API'si değildir. Dokümante edilmemiş bir web endpoint'i kullanır ve gelecekte Google tarafından haber verilmeden çalışmayı durdurabilir veya sınırlandırılabilir."), gtxPage);
+  auto *gtxNotice = new QLabel(I18n::text(QStringLiteral("settings.languages.gtx_warning_html")), gtxPage);
   gtxNotice->setObjectName(QStringLiteral("settings-row-description"));
   gtxNotice->setWordWrap(true);
   gtxLayout->addWidget(gtxNotice);
@@ -993,7 +998,7 @@ QWidget *SettingsPage::createLanguagesSection() {
   });
 
   connect(ltTestBtn, &QPushButton::clicked, this, [translateSvc, ltStatusLabel]() {
-    ltStatusLabel->setText(QStringLiteral("⏳ Test ediliyor..."));
+    ltStatusLabel->setText(I18n::text(QStringLiteral("settings.languages.testing")));
     if (translateSvc) {
       translateSvc->testConnection(QStringLiteral("libretranslate"), [ltStatusLabel](bool success, const QString &msg) {
         ltStatusLabel->setText(msg);
@@ -1003,7 +1008,7 @@ QWidget *SettingsPage::createLanguagesSection() {
   });
 
   connect(deeplTestBtn, &QPushButton::clicked, this, [translateSvc, deeplStatusLabel]() {
-    deeplStatusLabel->setText(QStringLiteral("⏳ Test ediliyor..."));
+    deeplStatusLabel->setText(I18n::text(QStringLiteral("settings.languages.testing")));
     if (translateSvc) {
       translateSvc->testConnection(QStringLiteral("deepl"), [deeplStatusLabel](bool success, const QString &msg) {
         deeplStatusLabel->setText(msg);
@@ -1013,7 +1018,7 @@ QWidget *SettingsPage::createLanguagesSection() {
   });
 
   connect(gcpTestBtn, &QPushButton::clicked, this, [translateSvc, gcpStatusLabel]() {
-    gcpStatusLabel->setText(QStringLiteral("⏳ Test ediliyor..."));
+    gcpStatusLabel->setText(I18n::text(QStringLiteral("settings.languages.testing")));
     if (translateSvc) {
       translateSvc->testConnection(QStringLiteral("google_cloud"), [gcpStatusLabel](bool success, const QString &msg) {
         gcpStatusLabel->setText(msg);

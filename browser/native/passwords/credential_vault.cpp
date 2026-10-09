@@ -26,6 +26,7 @@ constexpr int kNonceBytes = 12;
 constexpr int kTagBytes = 16;
 constexpr qint64 kMaxVaultBytes = 16 * 1024 * 1024;
 constexpr int kMaxRecords = 1000;
+constexpr int kCurrentSchemaVersion = 4;
 
 QByteArray b64(const QByteArray &value) { return value.toBase64(); }
 QByteArray fromB64(const QJsonValue &value) { return QByteArray::fromBase64(value.toString().toLatin1()); }
@@ -103,6 +104,11 @@ QString CredentialVault::vaultKeyringId() const {
   return storageId_ + QLatin1Char('-') + saltHex;
 }
 
+QString CredentialVault::legacyNosaltKeyringId() const {
+  return storageId_.isEmpty() ? QStringLiteral("primary-nosalt")
+                              : storageId_ + QStringLiteral("-nosalt");
+}
+
 bool CredentialVault::obtainDeviceSecret(QByteArray *outSecret) const {
   if (!outSecret) return false;
   if (!cachedDeviceSecret_.isEmpty()) {
@@ -141,14 +147,75 @@ QByteArray CredentialVault::deviceSecret() const {
   return secret;
 }
 
+QString CredentialVault::canonicalKeyringId() {
+  QMutexLocker locker(&mutex_);
+  if (salt_.isEmpty() && exists() && !loadEnvelope()) return {};
+  return salt_.isEmpty() ? QString{} : vaultKeyringId();
+}
+
+bool CredentialVault::exportDeviceSecret(QByteArray *secret) {
+  QMutexLocker locker(&mutex_);
+  if (!secret) return setError(QStringLiteral("invalid-device-secret-output"));
+  secureClear(secret);
+  if (salt_.isEmpty() && exists() && !loadEnvelope()) return false;
+  if (schemaVersion_ < 3 || deviceBinding_ != QLatin1String("secret-service")) return true;
+  if (!obtainDeviceSecret(secret) || secret->size() != kKeyBytes) {
+    secureClear(secret);
+    return setError(QStringLiteral("keyring-unavailable"));
+  }
+  return true;
+}
+
 bool CredentialVault::importDeviceSecret(const QByteArray &secret) {
   QMutexLocker locker(&mutex_);
-  if (secret.isEmpty()) return false;
-  cachedDeviceSecret_ = secret;
-  if (DeviceKeyring::isAvailable()) {
-    DeviceKeyring::storeSecret(vaultKeyringId(), secret);
-    deviceBinding_ = QStringLiteral("secret-service");
+  if (secret.size() != kKeyBytes || !exists()) return false;
+  if (salt_.isEmpty() && !loadEnvelope()) return false;
+  if (salt_.size() != 16 || schemaVersion_ < 3 ||
+      deviceBinding_ != QLatin1String("secret-service") || !DeviceKeyring::isAvailable()) return false;
+  const QString keyId = vaultKeyringId();
+  if (keyId.endsWith(QLatin1String("-nosalt")) || !DeviceKeyring::storeSecret(keyId, secret)) return false;
+  QByteArray verified;
+  const bool stored = DeviceKeyring::loadSecret(keyId, &verified) && verified.size() == secret.size() &&
+      CRYPTO_memcmp(verified.constData(), secret.constData(), size_t(secret.size())) == 0;
+  secureClear(&verified);
+  if (!stored) {
+    DeviceKeyring::clearSecret(keyId);
+    return false;
   }
+  cachedDeviceSecret_ = secret;
+  return true;
+}
+
+bool CredentialVault::recoverLegacyDeviceSecret(const QString &masterPassword, QByteArray *outSecret) {
+  if (!outSecret || salt_.size() != 16 || storageId_.isEmpty() || !DeviceKeyring::isAvailable()) return false;
+  QByteArray legacySecret;
+  if (!DeviceKeyring::loadSecret(legacyNosaltKeyringId(), &legacySecret) || legacySecret.size() != kKeyBytes) {
+    secureClear(&legacySecret);
+    return false;
+  }
+  QByteArray wrapKey, verifiedKey, tag = wrappedTag_;
+  const bool authentic = deriveKey(masterPassword, salt_, legacySecret, &wrapKey) &&
+      aesGcm(false, wrapKey, wrappedNonce_, wrappedKey_, QByteArrayLiteral("dalinira-vault-key-v3"),
+             &verifiedKey, &tag) && verifiedKey.size() == kKeyBytes;
+  secureClear(&wrapKey);
+  secureClear(&verifiedKey);
+  if (!authentic || !DeviceKeyring::storeSecret(vaultKeyringId(), legacySecret)) {
+    secureClear(&legacySecret);
+    return false;
+  }
+  QByteArray canonical;
+  const bool verified = DeviceKeyring::loadSecret(vaultKeyringId(), &canonical) &&
+      canonical.size() == legacySecret.size() &&
+      CRYPTO_memcmp(canonical.constData(), legacySecret.constData(), size_t(legacySecret.size())) == 0;
+  secureClear(&canonical);
+  if (!verified) {
+    DeviceKeyring::clearSecret(vaultKeyringId());
+    secureClear(&legacySecret);
+    return false;
+  }
+  DeviceKeyring::clearSecret(legacyNosaltKeyringId());
+  *outSecret = legacySecret;
+  secureClear(&legacySecret);
   return true;
 }
 
@@ -209,6 +276,7 @@ void CredentialVault::persistSecurityState() {
 
   QSaveFile file(securityStatePath_);
   if (file.open(QIODevice::WriteOnly)) {
+    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     file.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
     if (file.commit()) {
       QFile::setPermissions(securityStatePath_, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
@@ -222,8 +290,15 @@ void CredentialVault::clearPersistedSecurityState() {
   }
 }
 
-QString CredentialVault::originHash(const QString &canonicalOrigin) {
-  return QString::fromLatin1(QCryptographicHash::hash(canonicalOrigin.toUtf8(), QCryptographicHash::Sha256).toHex());
+QString CredentialVault::originToken(const QString &canonicalOrigin) const {
+  if (dataKey_.size() != kKeyBytes || canonicalOrigin.isEmpty()) return {};
+  const QByteArray message = QByteArrayLiteral("dalinira-origin-index-v2:") + canonicalOrigin.toUtf8();
+  QByteArray digest(kKeyBytes, Qt::Uninitialized);
+  unsigned int length = 0;
+  if (!HMAC(EVP_sha256(), dataKey_.constData(), dataKey_.size(),
+            reinterpret_cast<const unsigned char *>(message.constData()), message.size(),
+            reinterpret_cast<unsigned char *>(digest.data()), &length) || length != kKeyBytes) return {};
+  return QString::fromLatin1(digest.toHex());
 }
 
 void CredentialVault::loadOriginIndex() {
@@ -232,7 +307,8 @@ void CredentialVault::loadOriginIndex() {
     return;
   }
   const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
-  const QJsonArray arr = root.value(QStringLiteral("originHashes")).toArray();
+  if (root.value(QStringLiteral("version")).toInt() != 2) return;
+  const QJsonArray arr = root.value(QStringLiteral("originTokens")).toArray();
   storedOriginHashes_.clear();
   for (const QJsonValue &v : arr) {
     const QString h = v.toString().trimmed();
@@ -249,11 +325,12 @@ void CredentialVault::persistOriginIndex() {
     arr.append(h);
   }
   QJsonObject root;
-  root.insert(QStringLiteral("version"), 1);
-  root.insert(QStringLiteral("originHashes"), arr);
+  root.insert(QStringLiteral("version"), 2);
+  root.insert(QStringLiteral("originTokens"), arr);
 
   QSaveFile file(originIndexPath_);
   if (file.open(QIODevice::WriteOnly)) {
+    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     file.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
     if (file.commit()) {
       QFile::setPermissions(originIndexPath_, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
@@ -378,7 +455,10 @@ bool CredentialVault::hasOrigin(const QString &origin) const {
     }
     return false;
   }
-  return storedOriginHashes_.contains(originHash(canonical));
+  // The v2 index is keyed by the in-memory data key. While locked, report no
+  // origin-specific fact; the manager may offer a generic unlock action and
+  // performs the exact-origin lookup only after authentication.
+  return !isLocked() && storedOriginHashes_.contains(originToken(canonical));
 }
 
 bool CredentialVault::isLocked() const { QMutexLocker locker(&mutex_); return dataKey_.isEmpty(); }
@@ -416,7 +496,7 @@ bool CredentialVault::create(const QString &masterPassword) {
     deviceBinding_ = QStringLiteral("none");
     cachedDeviceSecret_.clear();
   }
-  schemaVersion_ = 3;
+  schemaVersion_ = kCurrentSchemaVersion;
 
   QByteArray wrapKey, rawKey;
   if (!deriveKey(masterPassword, salt_, cachedDeviceSecret_, &wrapKey) ||
@@ -455,16 +535,15 @@ bool CredentialVault::create(const QString &masterPassword) {
   return true;
 }
 
-bool CredentialVault::loadEnvelope() {
-  const auto parse = [this](const QString &candidate) {
+bool CredentialVault::loadEnvelopeFromPath(const QString &candidate) {
     const QFileInfo info(candidate);
     if (!info.isFile() || info.isSymLink() || info.size() <= 0 || info.size() > kMaxVaultBytes) return false;
     QFile file(candidate);
     if (!file.open(QIODevice::ReadOnly)) return false;
     const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
     const int version = root.value(QStringLiteral("schemaVersion")).toInt();
-    if (version != 2 && version != 3) {
-      if (version > 3) {
+    if (version != 2 && version != 3 && version != 4) {
+      if (version > kCurrentSchemaVersion) {
         lastError_ = QStringLiteral("unsupported-vault-version");
       }
       return false;
@@ -478,7 +557,9 @@ bool CredentialVault::loadEnvelope() {
     const QByteArray nonce = fromB64(root.value(QStringLiteral("wrappedNonce")));
     const QByteArray tag = fromB64(root.value(QStringLiteral("wrappedTag")));
     const QJsonArray entries = root.value(QStringLiteral("records")).toArray();
-    if (salt.size() != 16 || nonce.size() != kNonceBytes || tag.size() != kTagBytes || wrapped.isEmpty() || entries.size() > kMaxRecords) return false;
+    const QByteArray collectionTag = fromB64(root.value(QStringLiteral("collectionTag")));
+    if (salt.size() != 16 || nonce.size() != kNonceBytes || tag.size() != kTagBytes || wrapped.isEmpty() ||
+        entries.size() > kMaxRecords || (version >= 4 && collectionTag.size() != kKeyBytes)) return false;
     QVector<Record> parsed;
     QSet<QString> ids;
     for (const QJsonValue &value : entries) {
@@ -497,13 +578,16 @@ bool CredentialVault::loadEnvelope() {
     wrappedKey_ = wrapped;
     wrappedNonce_ = nonce;
     wrappedTag_ = tag;
+    collectionTag_ = collectionTag;
     records_ = std::move(parsed);
     schemaVersion_ = version;
     deviceBinding_ = root.value(QStringLiteral("deviceBinding")).toString(QStringLiteral("none"));
     return true;
-  };
-  if (parse(path_)) return true;
-  if (parse(path_ + QStringLiteral(".bak"))) {
+}
+
+bool CredentialVault::loadEnvelope() {
+  if (loadEnvelopeFromPath(path_)) return true;
+  if (loadEnvelopeFromPath(path_ + QStringLiteral(".bak"))) {
     lastError_ = QStringLiteral("vault-recovered-from-backup");
     return true;
   }
@@ -518,7 +602,9 @@ bool CredentialVault::unlock(const QString &masterPassword) {
   QByteArray deviceSecret;
   if (schemaVersion_ >= 3 && deviceBinding_ == QLatin1String("secret-service")) {
     if (!obtainDeviceSecret(&deviceSecret)) {
-      return setError(QStringLiteral("keyring-unavailable"));
+      if (!recoverLegacyDeviceSecret(masterPassword, &deviceSecret)) {
+        return setError(QStringLiteral("keyring-unavailable"));
+      }
     }
   }
 
@@ -542,13 +628,46 @@ bool CredentialVault::unlock(const QString &masterPassword) {
   secureClear(&deviceSecret);
   secureClear(&dataKey_);
   dataKey_ = key;
+  bool recoveredFromBackup = false;
+  if (!validateDecryptedCollection()) {
+    secureClear(&dataKey_);
+    if (!loadEnvelopeFromPath(path_ + QStringLiteral(".bak"))) {
+      recordFailedUnlockAttempt();
+      return setError(QStringLiteral("corrupt-vault"));
+    }
+    QByteArray backupDeviceSecret;
+    if (schemaVersion_ >= 3 && deviceBinding_ == QLatin1String("secret-service") &&
+        !obtainDeviceSecret(&backupDeviceSecret)) {
+      return setError(QStringLiteral("keyring-unavailable"));
+    }
+    QByteArray backupWrapKey, backupKey;
+    const QByteArray backupAad = (schemaVersion_ >= 3 && deviceBinding_ == QLatin1String("secret-service"))
+        ? QByteArrayLiteral("dalinira-vault-key-v3") : QByteArrayLiteral("dalinira-vault-key-v2");
+    const bool backupOk = deriveKey(masterPassword, salt_, backupDeviceSecret, &backupWrapKey) &&
+        aesGcm(false, backupWrapKey, wrappedNonce_, wrappedKey_, backupAad, &backupKey, &wrappedTag_) &&
+        backupKey.size() == kKeyBytes;
+    secureClear(&backupWrapKey);
+    secureClear(&backupDeviceSecret);
+    if (!backupOk) {
+      secureClear(&backupKey);
+      recordFailedUnlockAttempt();
+      return setError(QStringLiteral("corrupt-vault"));
+    }
+    dataKey_ = backupKey;
+    if (!validateDecryptedCollection()) {
+      secureClear(&dataKey_);
+      recordFailedUnlockAttempt();
+      return setError(QStringLiteral("corrupt-vault"));
+    }
+    recoveredFromBackup = true;
+  }
   resetFailedUnlockAttempts();
   touch();
 
   storedOriginHashes_.clear();
   for (const Record &r : records_) {
     CredentialSecret s;
-    if (decryptRecord(r, &s)) storedOriginHashes_.insert(originHash(s.origin));
+    if (decryptRecord(r, &s)) storedOriginHashes_.insert(originToken(s.origin));
   }
   persistOriginIndex();
 
@@ -565,13 +684,21 @@ bool CredentialVault::unlock(const QString &masterPassword) {
         wrappedNonce_ = newNonce;
         wrappedKey_ = newCipher;
         wrappedTag_ = newTag;
-        schemaVersion_ = 3;
+        schemaVersion_ = kCurrentSchemaVersion;
         deviceBinding_ = QStringLiteral("secret-service");
         cachedDeviceSecret_ = newDevSecret;
         persist();
       }
       secureClear(&newWrapKey);
       secureClear(&newDevSecret);
+    }
+  }
+
+  if (schemaVersion_ < kCurrentSchemaVersion || recoveredFromBackup) {
+    schemaVersion_ = kCurrentSchemaVersion;
+    if (!persist()) {
+      secureClear(&dataKey_);
+      return false;
     }
   }
 
@@ -621,6 +748,40 @@ bool CredentialVault::decryptRecord(const Record &record, CredentialSecret *secr
   return true;
 }
 
+QByteArray CredentialVault::collectionAuthenticator() const {
+  if (dataKey_.size() != kKeyBytes) return {};
+  QJsonArray records;
+  for (const Record &r : records_) {
+    records.append(QJsonObject{{"id", r.id}, {"createdAt", QString::number(r.createdAt)},
+                               {"updatedAt", QString::number(r.updatedAt)},
+                               {"ciphertext", QString::fromLatin1(b64(r.encrypted))},
+                               {"nonce", QString::fromLatin1(b64(r.nonce))},
+                               {"tag", QString::fromLatin1(b64(r.tag))}});
+  }
+  const QByteArray message = QByteArrayLiteral("dalinira-vault-collection-v1:") +
+      QJsonDocument(records).toJson(QJsonDocument::Compact);
+  QByteArray digest(kKeyBytes, Qt::Uninitialized);
+  unsigned int length = 0;
+  if (!HMAC(EVP_sha256(), dataKey_.constData(), dataKey_.size(),
+            reinterpret_cast<const unsigned char *>(message.constData()), message.size(),
+            reinterpret_cast<unsigned char *>(digest.data()), &length) || length != kKeyBytes) return {};
+  return digest;
+}
+
+bool CredentialVault::validateDecryptedCollection() const {
+  if (dataKey_.size() != kKeyBytes) return false;
+  if (schemaVersion_ >= 4) {
+    const QByteArray expected = collectionAuthenticator();
+    if (expected.size() != kKeyBytes || collectionTag_.size() != kKeyBytes ||
+        CRYPTO_memcmp(expected.constData(), collectionTag_.constData(), kKeyBytes) != 0) return false;
+  }
+  for (const Record &record : records_) {
+    CredentialSecret secret;
+    if (!decryptRecord(record, &secret)) return false;
+  }
+  return true;
+}
+
 bool CredentialVault::persist() {
   QDir().mkpath(directory_);
   QFile::setPermissions(directory_, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
@@ -635,6 +796,10 @@ bool CredentialVault::persist() {
         {"tag", QString::fromLatin1(b64(r.tag))}
     });
   }
+  if (schemaVersion_ >= 4) {
+    collectionTag_ = collectionAuthenticator();
+    if (collectionTag_.size() != kKeyBytes) return setError(QStringLiteral("collection-integrity-failed"));
+  }
   const QJsonObject root{
       {"schemaVersion", schemaVersion_},
       {"kdf", "PBKDF2-HMAC-SHA256"},
@@ -644,12 +809,15 @@ bool CredentialVault::persist() {
       {"wrappedKey", QString::fromLatin1(b64(wrappedKey_))},
       {"wrappedNonce", QString::fromLatin1(b64(wrappedNonce_))},
       {"wrappedTag", QString::fromLatin1(b64(wrappedTag_))},
+      {"collectionTag", QString::fromLatin1(b64(collectionTag_))},
       {"records", records}
   };
 
   QSaveFile file(path_);
   const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
-  if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
+  if (!file.open(QIODevice::WriteOnly) ||
+      !file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) ||
+      file.write(bytes) != bytes.size() || !file.commit()) {
     return setError(QStringLiteral("write-failed"));
   }
   QFile::setPermissions(path_, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
@@ -687,7 +855,7 @@ bool CredentialVault::save(const CredentialSecret &input, bool *updated) {
   }
   target->updatedAt = now;
   if (!encryptRecord(target, {origin, username, input.password, {}}) || !persist()) return setError(QStringLiteral("write-failed"));
-  storedOriginHashes_.insert(originHash(origin));
+  storedOriginHashes_.insert(originToken(origin));
   persistOriginIndex();
   if (updated) *updated = isUpdate;
   touch();
@@ -714,7 +882,7 @@ bool CredentialVault::update(const QString &id, const CredentialSecret &input) {
   storedOriginHashes_.clear();
   for (const Record &r : records_) {
     CredentialSecret s;
-    if (decryptRecord(r, &s)) storedOriginHashes_.insert(originHash(s.origin));
+    if (decryptRecord(r, &s)) storedOriginHashes_.insert(originToken(s.origin));
   }
   persistOriginIndex();
   touch();
@@ -818,7 +986,7 @@ bool CredentialVault::remove(const QString &id) {
       storedOriginHashes_.clear();
       for (const Record &r : records_) {
         CredentialSecret s;
-        if (decryptRecord(r, &s)) storedOriginHashes_.insert(originHash(s.origin));
+        if (decryptRecord(r, &s)) storedOriginHashes_.insert(originToken(s.origin));
       }
       persistOriginIndex();
       if (!persist()) return false;

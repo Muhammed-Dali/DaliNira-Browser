@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
   const QRect tabRect(100, 100, 150, 36);
   const QString longTitle = QStringLiteral("Void Memories – Dönmedim (Official Music Video) - YouTube");
 
-  hoverCard.showForTab(longTitle, youtubeUrl, rawFavicon, &webView, {&webView}, tabRect, nullptr);
+  hoverCard.showForTab(longTitle, youtubeUrl, rawFavicon, tabRect, [] { return dalinira::TabResourceSnapshot{}; });
 
   auto *titleLabel = hoverCard.findChild<QLabel *>(QStringLiteral("hover-title"));
   if (!titleLabel || titleLabel->text() != longTitle) {
@@ -143,19 +143,10 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // Verify measureMemory error handling with invalid/null page
-  const TabMemoryInfo invalidMem =
-      TabHoverCard::measureMemory(nullptr, QVector<QWebEngineView *>{});
-  if (invalidMem.valid) {
-    std::cerr << "measureMemory on null page must return valid=false\n";
-    return 1;
-  }
-
-  // Verify measureMemory on test webView
-  const TabMemoryInfo nonRunningMem =
-      TabHoverCard::measureMemory(webView.page(), QVector<QWebEngineView *>{&webView});
-  if (nonRunningMem.valid && nonRunningMem.bytes > 0) {
-    std::cerr << "measureMemory on unrendered page must return valid=false\n";
+  // No content process (an unrendered page): nothing is measured.
+  if (dalinira::TabResourceModel::readProcessUsage(0).valid ||
+      dalinira::TabResourceModel::readProcessUsage(webView.page()->renderProcessPid()).valid) {
+    std::cerr << "an unrendered page has no measurable content process\n";
     return 1;
   }
 

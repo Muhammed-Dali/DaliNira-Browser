@@ -22,6 +22,7 @@
 #include <QUrlQuery>
 #include <QVBoxLayout>
 #include <cmath>
+#include "i18n/i18n.h"
 
 namespace {
 
@@ -285,11 +286,11 @@ PulseResultCard::PulseResultCard(const SongResult &result,
   textLayout->setContentsMargins(0, 0, 0, 0);
   textLayout->setSpacing(1);
 
-  auto *titleLabel = new QLabel(result.title.isEmpty() ? QStringLiteral("Bilinmeyen Parça") : result.title, textCol);
+  auto *titleLabel = new QLabel(result.title.isEmpty() ? I18n::text(QStringLiteral("pulse.unknown_track")) : result.title, textCol);
   titleLabel->setObjectName(QStringLiteral("pulse-card-title"));
   textLayout->addWidget(titleLabel);
 
-  auto *artistLabel = new QLabel(result.artist.isEmpty() ? QStringLiteral("Bilinmeyen Sanatçı") : result.artist, textCol);
+  auto *artistLabel = new QLabel(result.artist.isEmpty() ? I18n::text(QStringLiteral("pulse.unknown_artist")) : result.artist, textCol);
   artistLabel->setObjectName(QStringLiteral("pulse-card-artist"));
   textLayout->addWidget(artistLabel);
 
@@ -407,7 +408,7 @@ void PulseQuickPopup::setupUi() {
   settingsBtn_->setObjectName(QStringLiteral("pulse-settings-btn"));
   settingsBtn_->setIcon(BrowserIcons::icon(BrowserIcon::Settings));
   settingsBtn_->setIconSize(QSize(16, 16));
-  settingsBtn_->setToolTip(QStringLiteral("Pulse Ayarları"));
+  settingsBtn_->setToolTip(I18n::text(QStringLiteral("pulse.settings_tab_title")));
   settingsBtn_->setCursor(Qt::PointingHandCursor);
   connect(settingsBtn_, &QPushButton::clicked, this, [this]() {
     emit openSettingsRequested();
@@ -417,7 +418,7 @@ void PulseQuickPopup::setupUi() {
   rootLayout->addLayout(headerRow);
 
   // Subtitle / Status Label
-  statusLabel_ = new QLabel(QStringLiteral("Şarkı bulmaya hazır"), this);
+  statusLabel_ = new QLabel(I18n::text(QStringLiteral("pulse.ready_to_find")), this);
   statusLabel_->setObjectName(QStringLiteral("pulse-status"));
   statusLabel_->setAlignment(Qt::AlignCenter);
   statusLabel_->setFixedHeight(22);
@@ -455,7 +456,7 @@ void PulseQuickPopup::setupUi() {
   resultsLayout_->setContentsMargins(0, 0, 0, 0);
   resultsLayout_->setSpacing(6);
 
-  emptyLabel_ = new QLabel(QStringLiteral("Henüz bulunan şarkı yok."), resultsContainer_);
+  emptyLabel_ = new QLabel(I18n::text(QStringLiteral("pulse.no_found_songs")), resultsContainer_);
   emptyLabel_->setObjectName(QStringLiteral("pulse-empty-label"));
   emptyLabel_->setAlignment(Qt::AlignCenter);
   resultsLayout_->addWidget(emptyLabel_);
@@ -464,10 +465,10 @@ void PulseQuickPopup::setupUi() {
   rootLayout->addWidget(resultsScroll_);
 
   // Footer Row: "DaliNira Pulse'u aç" Button
-  openFullBtn_ = new QPushButton(QStringLiteral("DaliNira Pulse'u aç"), this);
+  openFullBtn_ = new QPushButton(I18n::text(QStringLiteral("pulse.open_pulse")), this);
   openFullBtn_->setObjectName(QStringLiteral("pulse-open-full-btn"));
   openFullBtn_->setCursor(Qt::PointingHandCursor);
-  openFullBtn_->setToolTip(QStringLiteral("Tam DaliNira Pulse sayfasını aç"));
+  openFullBtn_->setToolTip(I18n::text(QStringLiteral("pulse.open_full_page")));
   connect(openFullBtn_, &QPushButton::clicked, this, [this]() {
     handingOffToFullPage_ = true;
     emit openFullPageRequested();
@@ -521,29 +522,29 @@ void PulseQuickPopup::onServiceStateChanged(SongRecognitionService::State state,
 
   switch (state) {
     case SongRecognitionService::State::Ready:
-      statusLabel_->setText(QStringLiteral("Şarkı bulmaya hazır"));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.ready_to_find")));
       signalBar_->setValue(0);
       break;
 
     case SongRecognitionService::State::Listening:
-      statusLabel_->setText(QStringLiteral("Dinliyorum"));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.listening_title")));
       break;
 
     case SongRecognitionService::State::Recognizing:
-      statusLabel_->setText(QStringLiteral("Şarkı aranıyor"));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.searching_song")));
       break;
 
     case SongRecognitionService::State::Found:
-      statusLabel_->setText(QStringLiteral("Şarkı bulundu"));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.song_found")));
       updateResultsList();
       break;
 
     case SongRecognitionService::State::NotFound:
-      statusLabel_->setText(QStringLiteral("Şarkı bulunamadı"));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.song_not_found")));
       break;
 
     case SongRecognitionService::State::Error:
-      statusLabel_->setText(message.isEmpty() ? QStringLiteral("Ses yakalama hatası") : message);
+      statusLabel_->setText(message.isEmpty() ? I18n::text(QStringLiteral("pulse.capture_error")) : message);
       signalBar_->setValue(0);
       break;
   }
@@ -556,14 +557,14 @@ void PulseQuickPopup::onServiceVolumeChanged(double levelPercent, double bufferF
 
   if (service_ && service_->isListening()) {
     if (bufferFillPercent > 0.0 && bufferFillPercent < 70.0) {
-      statusLabel_->setText(QStringLiteral("Canlı örnek doluyor %%%1").arg(static_cast<int>(bufferFillPercent)));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.sample_filling")).arg(static_cast<int>(bufferFillPercent)));
     }
   }
 }
 
 void PulseQuickPopup::onServiceSongFound(const SongResult &result) {
   Q_UNUSED(result);
-  statusLabel_->setText(QStringLiteral("Şarkı bulundu"));
+  statusLabel_->setText(I18n::text(QStringLiteral("pulse.song_found")));
   updateResultsList();
 }
 
@@ -580,7 +581,7 @@ void PulseQuickPopup::updateResultsList() {
   }
 
   if (!service_->hasActiveResult() || !service_->activeResult().isValid()) {
-    emptyLabel_ = new QLabel(QStringLiteral("Henüz bulunan şarkı yok."), resultsContainer_);
+    emptyLabel_ = new QLabel(I18n::text(QStringLiteral("pulse.no_found_songs")), resultsContainer_);
     emptyLabel_->setObjectName(QStringLiteral("pulse-empty-label"));
     emptyLabel_->setAlignment(Qt::AlignCenter);
     resultsLayout_->addWidget(emptyLabel_);
@@ -681,7 +682,7 @@ void PulseToolbarButton::onServiceStateChanged(SongRecognitionService::State sta
     if (!animTimer_->isActive()) {
       animTimer_->start();
     }
-    setToolTip(QStringLiteral("DaliNira Pulse (Dinleniyor...)"));
+    setToolTip(I18n::text(QStringLiteral("pulse.toolbar_listening")));
   } else {
     if (animTimer_->isActive()) {
       animTimer_->stop();

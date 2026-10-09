@@ -15,11 +15,13 @@
 #include <memory>
 
 #include "browser_profile_data_provider.h"
+#include "engine/engine_download_context.h"
 
 class SearchSuggestionService;
 class QNetworkAccessManager;
 class BrowserPolicy;
 class QWebEngineDownloadRequest;
+class QWebEnginePage;
 class QWebEngineProfile;
 class QWebEngineUrlRequestInterceptor;
 class NewTabBackgroundStore;
@@ -64,6 +66,8 @@ class BrowserProfileService final : public QObject, public dalinira::core::IBrow
   GeneralDownloadManager *downloadManager() const;
 
   void handleDownload(QWebEngineDownloadRequest *download);
+  void handleDownloadRequest(const QUrl &url, const QString &suggestedName, const QString &mimeType, qint64 totalBytes);
+  void handleDownloadContext(const dalinira::engine::EngineDownloadContext &context);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
   void handlePermission(const QWebEnginePermission &permission);
   enum class OriginPolicyResult { Allow, Deny, Prompt };
@@ -107,6 +111,11 @@ class BrowserProfileService final : public QObject, public dalinira::core::IBrow
 
   // Content settings
   QString cookiePolicy() const;
+  // Gives engines that enforce cookies in their own store (WebKit) this
+  // profile's cookie policy. Called on every policy change; call it once
+  // more after registering an engine backend. Private profiles leave the
+  // shared engine policy alone.
+  void applyEngineCookiePolicy();
   void setCookiePolicy(const QString &policy);
   bool isJavascriptEnabled() const;
   void setJavascriptEnabled(bool enabled);
@@ -143,13 +152,46 @@ class BrowserProfileService final : public QObject, public dalinira::core::IBrow
   bool resetSitePermission(const QUrl &origin, QWebEnginePermission::PermissionType type);
 #endif
 
-  void recordHistory(const QUrl &url, const QString &title = QString{}, bool isTyped = false);
+  void recordHistory(const QUrl &url, const QString &title = QString{}, bool isTyped = false, const QString &engine = QString{});
+  struct HistoryImportEntry {
+    QUrl url;
+    QString title;
+    QDateTime visitedAt;
+    int visitCount = 1;
+    int typedCount = 0;
+  };
+  void importHistoryEntries(const QList<HistoryImportEntry> &entries,
+                            const QString &engine = QString{});
   bool updateHistoryTitle(const QUrl &url, const QString &title);
   QList<BrowserHistoryEntry> recentHistory() const override;
   QList<BrowserFrequentSite> frequentSites(int limit = 6) const override;
+  QList<BrowserFrequentSite> frequentSites(int limit, const QString &engine) const override;
+  QString profilePath() const override { return dataDirectory(); }
+  QStringList hiddenFrequentSites() const override;
+  QStringList hiddenFrequentSites(const QString &engine) const override;
+  bool hideFrequentSite(const QUrl &url) override;
+  bool hideFrequentSite(const QUrl &url, const QString &engine) override;
+  bool restoreHiddenFrequentSites() override;
+  bool restoreHiddenFrequentSites(const QString &engine) override;
+  bool isFrequentSiteHidden(const QUrl &url, const QString &engine = QString{}) const;
+
+  struct QuickAccessItem {
+    QUrl url;
+    QString title;
+  };
+  QList<QuickAccessItem> quickAccessItems(const QString &engine = QString{}) const;
+  QList<QUrl> quickAccess(const QString &engine = QString{}) const override;
+  bool isQuickAccess(const QUrl &url, const QString &engine = QString{}) const override;
+  bool addQuickAccess(const QUrl &url, const QString &title = QString{}, const QString &engine = QString{}) override;
+  bool removeQuickAccess(const QUrl &url, const QString &engine = QString{}) override;
+  bool toggleQuickAccess(const QUrl &url, const QString &title = QString{}, const QString &engine = QString{});
+  // Moves an entry to `toIndex` (clamped) in the engine's order; the New Tab
+  // shortcuts and the bookmark bar both follow it.
+  bool moveQuickAccess(const QUrl &url, int toIndex, const QString &engine = QString{});
   void recordSearch(const QString &query);
   QStringList recentSearches(const QString &query = QString{}, int limit = 8) const;
   bool removeSearchHistory(const QString &query);
+  bool removeSuggestion(const QString &type, const QString &text, const QUrl &url);
   void clearSearchHistory();
   void clearHistory();
 
@@ -169,6 +211,8 @@ class BrowserProfileService final : public QObject, public dalinira::core::IBrow
 
   SearchSuggestionService *searchSuggestions() const;
   void setSearchSuggestionsEnabled(bool enabled);
+  // Engine-independent: WebKit private profiles have no QWebEngineProfile.
+  bool isPrivate() const { return privateMode_; }
   QString searchEngine() const override;
   quint64 totalBlockedCount() const override;
   quint64 sessionBlockedCount() const override;
@@ -201,6 +245,12 @@ class BrowserProfileService final : public QObject, public dalinira::core::IBrow
   QString exportBookmarksToHtml() const;
   int importBookmarksFromHtml(const QString &htmlContent);
 
+  // Onboarding status
+  bool isOnboardingCompleted() const;
+  void setOnboardingCompleted(bool completed);
+  int onboardingCurrentStep() const;
+  void setOnboardingCurrentStep(int step);
+
   QString secureDnsMode() const;
   void setSecureDnsMode(const QString &mode);
   QString secureDnsTemplate() const;
@@ -208,6 +258,7 @@ class BrowserProfileService final : public QObject, public dalinira::core::IBrow
   void applySecureDnsSettings();
 
  signals:
+  void pageSaveActiveChanged(QWebEnginePage *page, bool active);
   void downloadsChanged();
   void bookmarksChanged();
   void historyChanged();
@@ -219,13 +270,17 @@ class BrowserProfileService final : public QObject, public dalinira::core::IBrow
   void closedTabsChanged();
   void secureDnsChanged();
   void adultContentProtectionChanged(bool enabled);
+  void onboardingCompletedChanged(bool completed);
 
  private:
   QString downloadDirectory() const;
   void sanitizeStoredPersistentUrls();
   void refreshCookieFilter();
+  void refreshPrivacyShield();
+  void expireSiteDataForHost(const QString &host);
 
   const BrowserPolicy *policy_ = nullptr;
+  bool privateMode_ = false;
   QString dataDirectory_;
   QSettings preferences_;
   QWebEngineProfile *profile_ = nullptr;

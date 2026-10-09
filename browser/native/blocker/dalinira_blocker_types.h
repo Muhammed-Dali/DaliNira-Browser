@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 enum class DaliNiraBlockerMode {
@@ -59,6 +60,15 @@ struct SitePolicy {
   QString cookiePolicy = QStringLiteral("third_party"); // "third_party", "allow_all", "block_all"
 };
 
+// The decision a rule takes part in. Network rules decide requests;
+// popup rules ($popup, and generated popup data) decide new windows and tabs
+// a page opens; generic-hide rules ($generichide exceptions, and generated
+// "unhide" hostnames) decide per document whether generic cosmetic filters
+// apply; urlskip rules ($urlskip, and generated urlskip data) take a top-level
+// navigation straight past a bounce-tracking redirector. All use the same
+// matching.
+enum class FilterRuleScope : quint8 { Network = 0, Popup = 1, GenericHide = 2, UrlSkip = 3 };
+
 struct FilterRule {
   qint64 id = 0;
   int priority = 1;
@@ -80,19 +90,51 @@ struct FilterRule {
   QJsonObject redirectTransform;
   QString regexSubstitution;
   bool unsupportedHeaderCondition = false;
+  // Packaged resource a "redirect" rule substitutes (redirectUrl holds its
+  // data: URL); empty for built-in stubs and URL transforms.
+  QString redirectResource;
+  // "modifierException" rules decide nothing themselves: they cancel the
+  // resource redirects ("redirect") or parameter removal ("removeparam") of
+  // the request they match, for one resource / parameter or, when
+  // exceptionValue is empty, all of them.
+  QString exceptionScope;
+  QString exceptionValue;
+  FilterRuleScope scope = FilterRuleScope::Network;
+  // "urlskip" rules: uBO's steps that extract the destination from the
+  // navigation URL ("?url", "-base64", "/re(gex)/", ...).
+  QStringList urlSkipSteps;
 };
 
 using BlockerRule = FilterRule;
 
 struct RequestDecision {
+  RequestDecision() = default;
+  RequestDecision(DaliNiraBlockerAction action, QString reason, qint64 ruleId, QString rulesetId,
+                  QString redirectUrl, QString redirectResource = {})
+      : action(action), reason(std::move(reason)), ruleId(ruleId), rulesetId(std::move(rulesetId)),
+        redirectUrl(std::move(redirectUrl)), redirectResource(std::move(redirectResource)) {}
+
   DaliNiraBlockerAction action = DaliNiraBlockerAction::Allow;
   QString reason;
   qint64 ruleId = 0;
   QString rulesetId;
   QString redirectUrl;
+  // Packaged resource a redirect substitutes (redirectUrl is its data: URL).
+  QString redirectResource;
 };
 
 using BlockerDecision = RequestDecision;
+
+// Final outcome of a network request after tracking-parameter stripping and
+// rule evaluation. Both engines apply exactly this: Chromium through its
+// QWebEngineUrlRequestInterceptor, WebKit through its web process extension.
+enum class NetworkVerdictKind { Allow, Block, Redirect };
+
+struct NetworkRequestVerdict {
+  NetworkVerdictKind kind = NetworkVerdictKind::Allow;
+  QUrl redirectUrl;
+  RequestDecision decision;  // decision.redirectResource names a packaged substitute
+};
 
 enum class DaliNiraBlockType {
   NetworkAd,
@@ -176,6 +218,26 @@ inline DaliNiraBlockerResourceType resourceTypeFromWebEngine(int type) {
     case 254: return DaliNiraBlockerResourceType::WebSocket;
     default: return DaliNiraBlockerResourceType::Other;
   }
+}
+
+// Maps a Fetch Metadata destination (the Sec-Fetch-Dest request header that
+// WebKit sets before its web process extension sees a request) to the same
+// resource types resourceTypeFromWebEngine() produces for Chromium. Workers
+// map to Other, as QWebEngineUrlRequestInfo's worker types do.
+inline DaliNiraBlockerResourceType resourceTypeFromFetchDestination(const QString &destination) {
+  const QString d = destination.trimmed().toLower();
+  if (d == QLatin1String("document")) return DaliNiraBlockerResourceType::MainFrame;
+  if (d == QLatin1String("iframe") || d == QLatin1String("frame")) return DaliNiraBlockerResourceType::SubFrame;
+  if (d == QLatin1String("style")) return DaliNiraBlockerResourceType::Stylesheet;
+  if (d == QLatin1String("script")) return DaliNiraBlockerResourceType::Script;
+  if (d == QLatin1String("image")) return DaliNiraBlockerResourceType::Image;
+  if (d == QLatin1String("font")) return DaliNiraBlockerResourceType::Font;
+  if (d == QLatin1String("object") || d == QLatin1String("embed")) return DaliNiraBlockerResourceType::Object;
+  if (d == QLatin1String("audio") || d == QLatin1String("video") || d == QLatin1String("track"))
+    return DaliNiraBlockerResourceType::Media;
+  if (d == QLatin1String("empty")) return DaliNiraBlockerResourceType::Xhr;  // fetch(), XHR, sendBeacon()
+  if (d == QLatin1String("report")) return DaliNiraBlockerResourceType::CspReport;
+  return DaliNiraBlockerResourceType::Other;
 }
 
 inline QString resourceTypeToString(DaliNiraBlockerResourceType type) {

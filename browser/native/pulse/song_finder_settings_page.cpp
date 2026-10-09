@@ -10,6 +10,7 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QVBoxLayout>
+#include "i18n/i18n.h"
 
 namespace {
 QString settingsPageStyleSheet() {
@@ -147,12 +148,12 @@ void SongFinderSettingsPage::setupUi() {
   bodyLayout->setContentsMargins(24, 24, 24, 24);
   bodyLayout->setSpacing(8);
 
-  auto *headTitle = new QLabel(QStringLiteral("Pulse Ayarları"), card);
+  auto *headTitle = new QLabel(I18n::text(QStringLiteral("pulse.settings_tab_title")), card);
   headTitle->setObjectName(QStringLiteral("sfs-head-title"));
   bodyLayout->addWidget(headTitle);
 
   // Field: Bulunan şarkıyı aç
-  auto *platformLabel = new QLabel(QStringLiteral("Bulunan şarkıyı aç"), card);
+  auto *platformLabel = new QLabel(I18n::text(QStringLiteral("pulse.open_found_song")), card);
   platformLabel->setObjectName(QStringLiteral("sfs-field-label"));
   bodyLayout->addWidget(platformLabel);
 
@@ -161,7 +162,7 @@ void SongFinderSettingsPage::setupUi() {
   platformCombo_->addItem(QStringLiteral("YouTube Music"), QStringLiteral("ytmusic"));
   bodyLayout->addWidget(platformCombo_);
 
-  auto *platformHint = new QLabel(QStringLiteral("Şarkı bulunduğunda ve Aç düğmesine bastığında seçili platformda arama yapılır (Varsayılan: YouTube)"), card);
+  auto *platformHint = new QLabel(I18n::text(QStringLiteral("pulse.settings.platform_desc")), card);
   platformHint->setObjectName(QStringLiteral("sfs-field-hint"));
   platformHint->setWordWrap(true);
   bodyLayout->addWidget(platformHint);
@@ -172,19 +173,19 @@ void SongFinderSettingsPage::setupUi() {
   bodyLayout->addWidget(div1);
 
   // Field: Tanıma hassasiyeti
-  auto *sensitivityLabel = new QLabel(QStringLiteral("Tanıma hassasiyeti"), card);
+  auto *sensitivityLabel = new QLabel(I18n::text(QStringLiteral("pulse.sensitivity")), card);
   sensitivityLabel->setObjectName(QStringLiteral("sfs-field-label"));
   bodyLayout->addWidget(sensitivityLabel);
 
   sensitivityCombo_ = new QComboBox(card);
-  sensitivityCombo_->addItem(QStringLiteral("Normal Dinleme"), QStringLiteral("normal"));
-  sensitivityCombo_->addItem(QStringLiteral("Fon müzik odaklı"), QStringLiteral("background"));
-  sensitivityCombo_->addItem(QStringLiteral("Maksimum doğruluk"), QStringLiteral("max"));
-  sensitivityCombo_->addItem(QStringLiteral("Özel"), QStringLiteral("custom"));
+  sensitivityCombo_->addItem(I18n::text(QStringLiteral("pulse.sensitivity_normal")), QStringLiteral("normal"));
+  sensitivityCombo_->addItem(I18n::text(QStringLiteral("pulse.sensitivity_background")), QStringLiteral("background"));
+  sensitivityCombo_->addItem(I18n::text(QStringLiteral("pulse.sensitivity_max")), QStringLiteral("max"));
+  sensitivityCombo_->addItem(I18n::text(QStringLiteral("common.custom")), QStringLiteral("custom"));
   connect(sensitivityCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SongFinderSettingsPage::onSensitivityModeChanged);
   bodyLayout->addWidget(sensitivityCombo_);
 
-  auto *sensitivityHint = new QLabel(QStringLiteral("Hız, örnek süresi ve eşleşme aralığı için hazır profili seçer"), card);
+  auto *sensitivityHint = new QLabel(I18n::text(QStringLiteral("pulse.settings.sensitivity_desc")), card);
   sensitivityHint->setObjectName(QStringLiteral("sfs-field-hint"));
   bodyLayout->addWidget(sensitivityHint);
 
@@ -198,7 +199,7 @@ void SongFinderSettingsPage::setupUi() {
   auto *col1Layout = new QVBoxLayout(col1);
   col1Layout->setContentsMargins(0, 0, 0, 0);
   col1Layout->setSpacing(4);
-  auto *intervalLabel = new QLabel(QStringLiteral("Shazam istek aralığı"), col1);
+  auto *intervalLabel = new QLabel(I18n::text(QStringLiteral("pulse.request_interval")), col1);
   intervalLabel->setObjectName(QStringLiteral("sfs-field-label"));
   col1Layout->addWidget(intervalLabel);
   requestIntervalSpin_ = new QSpinBox(col1);
@@ -206,7 +207,7 @@ void SongFinderSettingsPage::setupUi() {
   requestIntervalSpin_->setSuffix(QStringLiteral(" sn"));
   connect(requestIntervalSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, &SongFinderSettingsPage::onIntervalOrBufferChanged);
   col1Layout->addWidget(requestIntervalSpin_);
-  auto *intervalHint = new QLabel(QStringLiteral("Shazam istekleri arasında beklenecek saniye"), col1);
+  auto *intervalHint = new QLabel(I18n::text(QStringLiteral("pulse.settings.interval_desc")), col1);
   intervalHint->setObjectName(QStringLiteral("sfs-field-hint"));
   col1Layout->addWidget(intervalHint);
   numLayout->addWidget(col1);
@@ -215,7 +216,7 @@ void SongFinderSettingsPage::setupUi() {
   auto *col2Layout = new QVBoxLayout(col2);
   col2Layout->setContentsMargins(0, 0, 0, 0);
   col2Layout->setSpacing(4);
-  auto *bufferLabel = new QLabel(QStringLiteral("Shazam arabellek boyutu"), col2);
+  auto *bufferLabel = new QLabel(I18n::text(QStringLiteral("pulse.buffer_size")), col2);
   bufferLabel->setObjectName(QStringLiteral("sfs-field-label"));
   col2Layout->addWidget(bufferLabel);
   bufferSizeSpin_ = new QSpinBox(col2);
@@ -223,7 +224,7 @@ void SongFinderSettingsPage::setupUi() {
   bufferSizeSpin_->setSuffix(QStringLiteral(" sn"));
   connect(bufferSizeSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, &SongFinderSettingsPage::onIntervalOrBufferChanged);
   col2Layout->addWidget(bufferSizeSpin_);
-  auto *bufferHint = new QLabel(QStringLiteral("Tanıma için tutulacak canlı ses arabelleği"), col2);
+  auto *bufferHint = new QLabel(I18n::text(QStringLiteral("pulse.settings.buffer_desc")), col2);
   bufferHint->setObjectName(QStringLiteral("sfs-field-hint"));
   col2Layout->addWidget(bufferHint);
   numLayout->addWidget(col2);
@@ -236,23 +237,23 @@ void SongFinderSettingsPage::setupUi() {
   bodyLayout->addWidget(div2);
 
   // Checkboxes
-  noDuplicatesCheck_ = new QCheckBox(QStringLiteral("Aynı şarkıyı tekrar listeleme"), card);
+  noDuplicatesCheck_ = new QCheckBox(I18n::text(QStringLiteral("pulse.skip_duplicates")), card);
   bodyLayout->addWidget(noDuplicatesCheck_);
 
-  webFallbackCheck_ = new QCheckBox(QStringLiteral("Shazam bulamazsa web'de çalan parçanın bilgisini kullan"), card);
+  webFallbackCheck_ = new QCheckBox(I18n::text(QStringLiteral("pulse.settings.fallback_desc")), card);
   bodyLayout->addWidget(webFallbackCheck_);
 
-  autoStopCheck_ = new QCheckBox(QStringLiteral("Şarkı bulununca dinlemeyi durdur"), card);
+  autoStopCheck_ = new QCheckBox(I18n::text(QStringLiteral("pulse.stop_on_found")), card);
   bodyLayout->addWidget(autoStopCheck_);
 
-  autoOpenCheck_ = new QCheckBox(QStringLiteral("Şarkı bulununca seçili platformda otomatik ara"), card);
+  autoOpenCheck_ = new QCheckBox(I18n::text(QStringLiteral("pulse.settings.auto_search_desc")), card);
   bodyLayout->addWidget(autoOpenCheck_);
 
-  rememberDeviceCheck_ = new QCheckBox(QStringLiteral("Seçili ses kaynağını hatırla"), card);
+  rememberDeviceCheck_ = new QCheckBox(I18n::text(QStringLiteral("pulse.remember_source")), card);
   bodyLayout->addWidget(rememberDeviceCheck_);
 
   auto *noteLabel = new QLabel(
-      QStringLiteral("Hızlı Dinle düğmesi ana ayarlardaki davranışı kullanır; bu tercihler tanıma motoru ve Dinle sekmesiyle ortaktır."),
+      I18n::text(QStringLiteral("pulse.settings.footer")),
       card);
   noteLabel->setObjectName(QStringLiteral("sfs-note"));
   noteLabel->setWordWrap(true);
@@ -265,17 +266,17 @@ void SongFinderSettingsPage::setupUi() {
   actionsLayout->setSpacing(10);
   actionsLayout->addStretch(1);
 
-  cancelBtn_ = new QPushButton(QStringLiteral("Vazgeç"), actionsRow);
+  cancelBtn_ = new QPushButton(I18n::text(QStringLiteral("common.cancel_action")), actionsRow);
   cancelBtn_->setCursor(Qt::PointingHandCursor);
   connect(cancelBtn_, &QPushButton::clicked, this, &SongFinderSettingsPage::onCancelClicked);
   actionsLayout->addWidget(cancelBtn_);
 
-  defaultsBtn_ = new QPushButton(QStringLiteral("Varsayılan"), actionsRow);
+  defaultsBtn_ = new QPushButton(I18n::text(QStringLiteral("common.default")), actionsRow);
   defaultsBtn_->setCursor(Qt::PointingHandCursor);
   connect(defaultsBtn_, &QPushButton::clicked, this, &SongFinderSettingsPage::onDefaultsClicked);
   actionsLayout->addWidget(defaultsBtn_);
 
-  saveBtn_ = new QPushButton(QStringLiteral("Kaydet"), actionsRow);
+  saveBtn_ = new QPushButton(I18n::text(QStringLiteral("common.save")), actionsRow);
   saveBtn_->setObjectName(QStringLiteral("sfs-save-btn"));
   saveBtn_->setCursor(Qt::PointingHandCursor);
   connect(saveBtn_, &QPushButton::clicked, this, &SongFinderSettingsPage::onSaveClicked);

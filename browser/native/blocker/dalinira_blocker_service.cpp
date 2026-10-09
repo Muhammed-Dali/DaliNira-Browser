@@ -1,4 +1,5 @@
 #include "cosmetic_runtime.h"
+#include "privacy_shield_runtime.h"
 #include "dalinira_blocker_service.h"
 
 #include <QDate>
@@ -9,19 +10,43 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QMutexLocker>
+#include <QRandomGenerator>
 #include <QSettings>
 #include <QUrlQuery>
 #include <QtConcurrent>
 #include <algorithm>
 #include <chrono>
+#include "i18n/i18n.h"
+
+NetworkRequestVerdict DaliNiraBlockerNetworkGate::decide(const QUrl &requestUrl,
+                                                         DaliNiraBlockerResourceType resourceType,
+                                                         const QUrl &firstPartyUrl, quint64 tabId,
+                                                         const QString &requestMethod) {
+  QReadLocker locker(&lock_);
+  if (!service_) return {};
+  return service_->decideNetworkRequest(requestUrl, resourceType, firstPartyUrl, tabId, requestMethod);
+}
+
+void DaliNiraBlockerNetworkGate::close() {
+  QWriteLocker locker(&lock_);
+  service_ = nullptr;
+}
 
 DaliNiraBlockerService::DaliNiraBlockerService(const QString &dataDir, QObject *parent)
-    : QObject(parent), dataDir_(dataDir) {
+    : QObject(parent), dataDir_(dataDir), networkGate_(std::make_shared<DaliNiraBlockerNetworkGate>(this)) {
   settings_ = new DaliNiraBlockerSettings(dataDir + QStringLiteral("/adblock-settings.ini"), this);
   QFile::setPermissions(dataDir + QStringLiteral("/adblock-settings.ini"), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
   filterEngine_ = new DaliNiraBlockerEngine();
   listManager_ = new DaliNiraBlockerListManager(dataDir, this);
   interceptor_ = new DaliNiraBlockerRequestInterceptor(this, this);
+  {
+    QByteArray token(16, Qt::Uninitialized);
+    QRandomGenerator::system()->generate(reinterpret_cast<quint32 *>(token.data()),
+                                         reinterpret_cast<quint32 *>(token.data() + token.size()));
+    resourceSchemeToken_ = QString::fromLatin1(token.toHex());
+  }
+  resourceSchemeHandler_ =
+      new DaliNiraBlockerResourceSchemeHandler(listManager_->redirectResources(), resourceSchemeToken_, this);
 
   statsPersistTimer_.setSingleShot(true);
   statsPersistTimer_.setInterval(5000);
@@ -45,12 +70,26 @@ DaliNiraBlockerService::DaliNiraBlockerService(const QString &dataDir, QObject *
     if (settings_->autoReloadOnModeChange()) emit autoReloadRequested();
   });
   reloadRules();
+
+  automaticUpdateTimer_.setSingleShot(true);
+  connect(&automaticUpdateTimer_, &QTimer::timeout, this, [this]() { startFilterUpdate(true); });
+  connect(settings_, &DaliNiraBlockerSettings::settingsChanged, this,
+          &DaliNiraBlockerService::scheduleAutomaticFilterUpdate);
+  scheduleAutomaticFilterUpdate();
 }
 
 DaliNiraBlockerService::~DaliNiraBlockerService() {
-  // The worker captures listManager_.  Finish it before QObject child
-  // destruction so closing the browser during a refresh cannot dereference a
-  // deleted manager. This wait is only on shutdown, never in the UI workflow.
+  // Off-thread engine adapters must not start or finish a decision while the
+  // members they use are destroyed.
+  networkGate_->close();
+  automaticUpdateTimer_.stop();
+  if (filterFetcher_) filterFetcher_->cancel();
+  // The workers capture listManager_ and its filter store.  Finish them
+  // before QObject child destruction so closing the browser during a refresh
+  // cannot dereference a deleted manager. This wait is only on shutdown,
+  // never in the UI workflow.
+  if (remoteWorkWatcher_ && !remoteWorkWatcher_->isFinished())
+    remoteWorkWatcher_->waitForFinished();
   if (filterUpdateWatcher_ && !filterUpdateWatcher_->isFinished())
     filterUpdateWatcher_->waitForFinished();
   persistStats();
@@ -76,40 +115,160 @@ void DaliNiraBlockerService::reloadRules() {
   const QStringList customLines = settings_->customFilters();
 
   const bool selectionConfigured = true;
+  QSet<QString> badfilters;
   QList<FilterRule> rules = listManager_->loadRulesForModeAndSelection(
-      mode, enabledIds, selectionConfigured, settings_->strictBlock());
+      mode, enabledIds, selectionConfigured, settings_->strictBlock(), customLines, &badfilters);
   const QString listCosmeticCss = listManager_->loadCosmeticCssForSelection(enabledIds, selectionConfigured);
 
   filterEngine_->applyCompiledPlan(DaliNiraBlockerEngine::compilePlan(
-      std::move(rules), listCosmeticCss, customLines));
+      std::move(rules), listCosmeticCss, customLines, {listManager_->redirectResources(), &badfilters}));
   if (qEnvironmentVariableIntValue("DALINIRA_FEATURE_DIAGNOSTICS") == 1) {
     qInfo().noquote() << "[BLOCKER] filters loaded";
   }
 }
 
-void DaliNiraBlockerService::updateFiltersAsync() {
+void DaliNiraBlockerService::updateFiltersAsync() { startFilterUpdate(false); }
+
+QStringList DaliNiraBlockerService::remoteUpdateTargets(bool onlyDue) const {
+  const DaliNiraBlockerFilterStore *store = listManager_->filterStore();
+  if (!store) return {};
+  // Disabled lists are not downloaded; they keep whatever copy they have.
+  const QStringList active = activeRulesetIds();
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  QStringList targets;
+  for (const FilterUpdateSource &source : store->sources()) {
+    if (!active.contains(source.listId)) continue;
+    if (onlyDue && store->nextCheckDue(source.listId) > now) continue;
+    targets.append(source.listId);
+  }
+  targets.sort();
+  return targets;
+}
+
+void DaliNiraBlockerService::startFilterUpdate(bool automatic) {
   if (filterUpdateInProgress_) return;
+  const QStringList targets = remoteUpdateTargets(automatic);
+  if (automatic && targets.isEmpty()) {
+    scheduleAutomaticFilterUpdate();
+    return;
+  }
+  automaticUpdateTimer_.stop();
   filterUpdateInProgress_ = true;
+  automaticRun_ = automatic;
+  remoteQueue_ = targets;
+  remoteTotal_ = static_cast<int>(targets.size());
+  remoteDone_ = remoteUpdated_ = remoteUpToDate_ = remoteFailed_ = 0;
+  emit filterUpdateStarted();
+  emit filterUpdateProgress(0, remoteTotal_ + 3, QStringLiteral("prepare"));
+  fetchNextRemoteList();
+}
+
+void DaliNiraBlockerService::fetchNextRemoteList() {
+  DaliNiraBlockerFilterStore *store = listManager_->filterStore();
+  if (remoteQueue_.isEmpty() || !store) {
+    // A background check that found nothing new does not recompile.
+    if (automaticRun_ && remoteUpdated_ == 0) finishFilterUpdate(remoteFailed_ == 0, remoteUpdateSummary());
+    else rebuildAfterFilterUpdate();
+    return;
+  }
+  remoteCurrentId_ = remoteQueue_.takeFirst();
+  const std::optional<FilterUpdateSource> source = store->source(remoteCurrentId_);
+  const FilterListUpdateState state = store->state(remoteCurrentId_);
+  // Conditional headers describe the current copy; only send them while that
+  // copy is intact and came from this URL, so a 304 never leaves us without data.
+  QString etag;
+  QString lastModified;
+  if (state.sourceUrl == source->url.toString() && store->activeSource(remoteCurrentId_) == QLatin1String("remote")) {
+    etag = state.etag;
+    lastModified = state.lastModified;
+  }
+  emit filterUpdateProgress(remoteDone_, remoteTotal_ + 3, QStringLiteral("download"));
+  if (!filterFetcher_) {
+    filterFetcher_ = new DaliNiraBlockerFilterFetcher(this);
+    connect(filterFetcher_, &DaliNiraBlockerFilterFetcher::finished, this,
+            [this](const FilterFetchResult &result) { storeFetchResult(remoteCurrentId_, result); });
+  }
+  filterFetcher_->setPolicy(filterFetchPolicy_);
+  filterFetcher_->fetch(source->url, source->maximumBytes, etag, lastModified);
+}
+
+void DaliNiraBlockerService::storeFetchResult(const QString &listId, const FilterFetchResult &result) {
+  DaliNiraBlockerFilterStore *store = listManager_->filterStore();
+  const FilterUpdateSource source = *store->source(listId);
+  const FilterListCopy current = store->state(listId).current;
+  // Validation compiles the whole list, and storage writes it: off the GUI thread.
+  const DaliNiraBlockerRedirectResources *resources = listManager_->redirectResources();
+  auto future = QtConcurrent::run([store, resources, source, current, result]() -> int {
+    FilterUpdateFailure failure = result.failure;
+    int networkRules = 0;
+    RemoteListOutcome outcome = RemoteListOutcome::Failed;
+    if (result.kind == FilterFetchResult::Kind::NotModified) {
+      store->recordNotModified(source.listId);
+      outcome = RemoteListOutcome::UpToDate;
+    } else if (result.kind == FilterFetchResult::Kind::Downloaded) {
+      const FilterListValidation validation =
+          validateFilterListDownload(result.body, result.contentType, source, current.networkRules, resources);
+      failure = validation.failure;
+      networkRules = validation.copy.networkRules;
+      if (failure == FilterUpdateFailure::None &&
+          !store->commitValidatedCopy(source.listId, result.body, validation.copy, source.url.toString(),
+                                      result.etag, result.lastModified))
+        failure = FilterUpdateFailure::Storage;
+      if (failure == FilterUpdateFailure::None)
+        outcome = validation.copy.sha256 == current.sha256 ? RemoteListOutcome::UpToDate : RemoteListOutcome::Updated;
+    }
+    if (outcome == RemoteListOutcome::Failed) {
+      if (failure == FilterUpdateFailure::Cancelled) return static_cast<int>(RemoteListOutcome::Skipped);
+      store->recordFailure(source.listId, failure);
+    }
+    if (qEnvironmentVariableIntValue("DALINIRA_FEATURE_DIAGNOSTICS") == 1) {
+      static const char *const kOutcomeNames[] = {"updated", "up-to-date", "failed", "skipped"};
+      qInfo().noquote() << "[BLOCKER] filter list" << source.listId << "host=" + source.url.host()
+                        << "http=" + QString::number(result.httpStatus)
+                        << "result=" + QString::fromLatin1(kOutcomeNames[static_cast<int>(outcome)])
+                        << (failure == FilterUpdateFailure::None ? QString()
+                                                                 : "failure=" + filterUpdateFailureName(failure))
+                        << (networkRules > 0 ? "rules=" + QString::number(networkRules) : QString());
+    }
+    return static_cast<int>(outcome);
+  });
+  auto *watcher = new QFutureWatcher<int>(this);
+  remoteWorkWatcher_ = watcher;
+  connect(watcher, &QFutureWatcher<int>::finished, this, [this, watcher]() {
+    const auto outcome = static_cast<RemoteListOutcome>(watcher->result());
+    watcher->deleteLater();
+    if (remoteWorkWatcher_ == watcher) remoteWorkWatcher_ = nullptr;
+    if (outcome == RemoteListOutcome::Updated) ++remoteUpdated_;
+    else if (outcome == RemoteListOutcome::UpToDate) ++remoteUpToDate_;
+    else if (outcome == RemoteListOutcome::Failed) ++remoteFailed_;
+    ++remoteDone_;
+    fetchNextRemoteList();
+  });
+  watcher->setFuture(future);
+}
+
+void DaliNiraBlockerService::rebuildAfterFilterUpdate() {
+  // Captured here, after the downloads: settings changed while they ran
+  // already rebuilt the plan and are read afresh below.
   const quint64 generation = ++planGeneration_;
+  const int offset = remoteTotal_;
   const DaliNiraBlockerMode mode = settings_->mode();
   const QStringList enabledIds = activeRulesetIds();
   constexpr bool selectionConfigured = true;
   const bool strictBlock = settings_->strictBlock();
   const QStringList customLines = settings_->customFilters();
   listManager_->invalidateCaches();
-  emit filterUpdateStarted();
-  emit filterUpdateProgress(0, 3, QStringLiteral("prepare"));
 
-  auto progress = [this, generation](int completed, const QString &stage) {
-    QMetaObject::invokeMethod(this, [this, generation, completed, stage]() {
+  auto progress = [this, generation, offset](int completed, const QString &stage) {
+    QMetaObject::invokeMethod(this, [this, generation, offset, completed, stage]() {
       if (filterUpdateInProgress_ && generation == planGeneration_)
-        emit filterUpdateProgress(completed, 3, stage);
+        emit filterUpdateProgress(offset + completed, offset + 3, stage);
     }, Qt::QueuedConnection);
   };
   auto future = QtConcurrent::run([this, mode, enabledIds, strictBlock, customLines, progress]() {
     const QString baseDir = listManager_->rulesetDir();
     if (baseDir.isEmpty() || !QFileInfo::exists(baseDir + QStringLiteral("/ruleset-details.json"))) {
-      return FilterUpdateResult{false, QStringLiteral("Bundled filtre paketi bulunamadı."), {}};
+      return FilterUpdateResult{false, I18n::text(QStringLiteral("blocker.bundled_pack_missing")), {}};
     }
     auto validJsonArray = [](const QString &path) {
       QFile file(path);
@@ -122,45 +281,105 @@ void DaliNiraBlockerService::updateFiltersAsync() {
       const QString mainPath = baseDir + QStringLiteral("/main/") + id + QStringLiteral(".json");
       if (!validJsonArray(mainPath)) {
         return FilterUpdateResult{false,
-            QStringLiteral("Filtre paketi doğrulanamadı: %1").arg(id), {}};
+            I18n::text(QStringLiteral("blocker.filter_pack_unverified")).arg(id), {}};
       }
       const QString regexPath = baseDir + QStringLiteral("/regex/") + id + QStringLiteral(".json");
       if (QFileInfo::exists(regexPath) && !validJsonArray(regexPath)) {
         return FilterUpdateResult{false,
-            QStringLiteral("Regex paketi doğrulanamadı: %1").arg(id), {}};
+            I18n::text(QStringLiteral("blocker.regex_pack_unverified")).arg(id), {}};
       }
     }
+    QSet<QString> badfilters;
     QList<FilterRule> rules = listManager_->loadRulesForModeAndSelection(
-        mode, enabledIds, selectionConfigured, strictBlock);
+        mode, enabledIds, selectionConfigured, strictBlock, customLines, &badfilters);
     progress(1, QStringLiteral("parse"));
     const QString css = listManager_->loadCosmeticCssForSelection(enabledIds, selectionConfigured);
     progress(2, QStringLiteral("cosmetic"));
-    return FilterUpdateResult{true, QStringLiteral("Yerel filtreler doğrulandı ve yeniden derlendi."),
-        DaliNiraBlockerEngine::compilePlan(std::move(rules), css, customLines)};
+    return FilterUpdateResult{true, I18n::text(QStringLiteral("blocker.local_filters_verified")),
+        DaliNiraBlockerEngine::compilePlan(std::move(rules), css, customLines,
+                                           {listManager_->redirectResources(), &badfilters})};
   });
 
   auto *watcher = new QFutureWatcher<FilterUpdateResult>(this);
   filterUpdateWatcher_ = watcher;
-  connect(watcher, &QFutureWatcher<FilterUpdateResult>::finished, this, [this, watcher, generation]() {
+  connect(watcher, &QFutureWatcher<FilterUpdateResult>::finished, this, [this, watcher, generation, offset]() {
     const bool current = generation == planGeneration_;
     FilterUpdateResult result = watcher->result();
+    // One swap under the engine lock: requests see the old plan or the new
+    // one, never a mix, whichever engine asks.
     if (current && result.success) filterEngine_->applyCompiledPlan(std::move(result.plan));
     watcher->deleteLater();
     if (filterUpdateWatcher_ == watcher) filterUpdateWatcher_ = nullptr;
-    filterUpdateInProgress_ = false;
     if (!current) {
-      emit filterUpdateFinished(false, QStringLiteral("Ayarlar değişti; eski güncelleme sonucu kullanılmadı."));
+      finishFilterUpdate(false, I18n::text(QStringLiteral("blocker.settings_changed_stale")));
       return;
     }
     if (!result.success) {
-      emit filterUpdateFinished(false, result.message);
+      finishFilterUpdate(false, result.message);
       return;
     }
-    emit filterUpdateProgress(3, 3, QStringLiteral("swap"));
-    emit filterUpdateFinished(true, result.message);
-    if (settings_->autoReloadOnModeChange()) emit autoReloadRequested();
+    emit filterUpdateProgress(offset + 3, offset + 3, QStringLiteral("swap"));
+    const bool manual = !automaticRun_;
+    finishFilterUpdate(remoteFailed_ == 0, remoteTotal_ == 0 ? result.message : remoteUpdateSummary());
+    // Background updates never reload the user's pages.
+    if (manual && settings_->autoReloadOnModeChange()) emit autoReloadRequested();
   });
   watcher->setFuture(future);
+}
+
+QString DaliNiraBlockerService::remoteUpdateSummary() const {
+  QString message = I18n::text(QStringLiteral("blocker.filters_update_summary"))
+                        .arg(remoteUpdated_).arg(remoteUpToDate_).arg(remoteFailed_);
+  if (remoteFailed_ > 0) message += QLatin1Char(' ') + I18n::text(QStringLiteral("blocker.filters_update_kept_previous"));
+  return message;
+}
+
+void DaliNiraBlockerService::finishFilterUpdate(bool success, const QString &message) {
+  filterUpdateInProgress_ = false;
+  automaticRun_ = false;
+  remoteQueue_.clear();
+  emit filterUpdateFinished(success, message);
+  scheduleAutomaticFilterUpdate();
+}
+
+void DaliNiraBlockerService::scheduleAutomaticFilterUpdate() {
+  if (!settings_->autoUpdateRulesets()) {
+    automaticUpdateTimer_.stop();
+    return;
+  }
+  if (filterUpdateInProgress_) return;  // rescheduled when it finishes
+  const DaliNiraBlockerFilterStore *store = listManager_->filterStore();
+  const QStringList targets = remoteUpdateTargets(false);
+  if (!store || targets.isEmpty()) {
+    automaticUpdateTimer_.stop();
+    return;
+  }
+  QDateTime earliest;
+  for (const QString &id : targets) {
+    const QDateTime due = store->nextCheckDue(id);
+    if (!earliest.isValid() || due < earliest) earliest = due;
+  }
+  constexpr qint64 kMaximumTimerMs = 24LL * 3600 * 1000;  // re-evaluated when it fires
+  const qint64 delay = qBound<qint64>(automaticUpdateFloorMs_,
+                                      QDateTime::currentDateTimeUtc().msecsTo(earliest), kMaximumTimerMs);
+  // Frequent settings changes must not keep postponing a pending check.
+  if (automaticUpdateTimer_.isActive() && automaticUpdateTimer_.remainingTime() <= delay) return;
+  automaticUpdateTimer_.start(static_cast<int>(delay));
+}
+
+QDateTime DaliNiraBlockerService::nextAutomaticFilterUpdate() const {
+  if (!automaticUpdateTimer_.isActive()) return {};
+  return QDateTime::currentDateTime().addMSecs(automaticUpdateTimer_.remainingTime());
+}
+
+void DaliNiraBlockerService::setFilterFetchPolicyForTesting(const DaliNiraBlockerFilterFetcher::Policy &policy) {
+  filterFetchPolicy_ = policy;
+}
+
+void DaliNiraBlockerService::setAutomaticUpdateDelayFloorForTesting(int milliseconds) {
+  automaticUpdateFloorMs_ = qMax(0, milliseconds);
+  automaticUpdateTimer_.stop();
+  scheduleAutomaticFilterUpdate();
 }
 
 bool DaliNiraBlockerService::isUpdatingFilters() const { return filterUpdateInProgress_; }
@@ -183,9 +402,15 @@ void DaliNiraBlockerService::registerTab(quint64 tabId, const QUrl &url) {
 void DaliNiraBlockerService::unregisterTab(quint64 tabId) {
   if (tabId == 0) return;
   QString closedHost;
+  QString temporaryHost;
   {
     QMutexLocker locker(&tabRegistryMutex_);
-    closedHost = DaliNiraBlockerSettings::normalizeSiteHost(tabRegistry_.value(tabId).currentHost);
+    const TabRequestContext context = tabRegistry_.value(tabId);
+    closedHost = DaliNiraBlockerSettings::normalizeSiteHost(context.currentHost);
+    temporaryHost = context.temporaryStorageHost;
+    if (!temporaryHost.isEmpty() &&
+        QDateTime::currentMSecsSinceEpoch() - context.temporaryStorageStartedAt <= 10000)
+      pendingTemporarySiteExpiry_.insert(temporaryHost);
     tabRegistry_.remove(tabId);
     for (const auto &context : std::as_const(tabRegistry_)) {
       if (DaliNiraBlockerSettings::normalizeSiteHost(context.currentHost) == closedHost) { closedHost.clear(); break; }
@@ -196,10 +421,21 @@ void DaliNiraBlockerService::unregisterTab(quint64 tabId) {
   }
   clearTabStats(tabId);
   if (!closedHost.isEmpty()) emit siteClosed(closedHost);
+  if (!temporaryHost.isEmpty()) {
+    QMutexLocker locker(&tabRegistryMutex_);
+    const bool stillOpen = std::any_of(tabRegistry_.cbegin(), tabRegistry_.cend(), [&temporaryHost](const auto &context) {
+      return DaliNiraBlockerEngine::siteForHost(context.currentHost) == temporaryHost;
+    });
+    if (!stillOpen && pendingTemporarySiteExpiry_.remove(temporaryHost)) {
+      locker.unlock();
+      emit temporarySiteDataExpired(temporaryHost);
+    }
+  }
 }
 
 void DaliNiraBlockerService::updateTabUrl(quint64 tabId, const QUrl &url) {
   if (tabId == 0) return;
+  QString expiredHost;
   QMutexLocker locker(&tabRegistryMutex_);
   if (!tabRegistry_.contains(tabId)) {
     TabRequestContext ctx;
@@ -220,16 +456,93 @@ void DaliNiraBlockerService::updateTabUrl(quint64 tabId, const QUrl &url) {
                              scheme == QLatin1String("file"));
   const QString oldNorm = DaliNiraBlockerSettings::normalizeSiteHost(ctx.currentHost);
   const QString newNorm = DaliNiraBlockerSettings::normalizeSiteHost(newHost);
+  const QString oldSite = DaliNiraBlockerEngine::siteForHost(ctx.currentHost);
+  const QString newSite = DaliNiraBlockerEngine::siteForHost(newHost);
   const bool hostChanged = (!oldNorm.isEmpty() && !newNorm.isEmpty() && oldNorm != newNorm);
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+
+  if ((oldSite != newSite || wentInternal) && ctx.temporaryStorageHost == oldSite) {
+    if (now - ctx.temporaryStorageStartedAt <= 10000)
+      pendingTemporarySiteExpiry_.insert(oldSite);
+    ctx.temporaryStorageHost.clear();
+    ctx.temporaryStorageStartedAt = 0;
+  }
 
   ctx.currentUrl = url;
   ctx.currentHost = newHost;
-  ctx.lastActiveTimestamp = QDateTime::currentMSecsSinceEpoch();
+  ctx.lastActiveTimestamp = now;
+
+  if (!oldSite.isEmpty() && oldSite != newSite && isTemporaryBounceCandidate(url, oldSite)) {
+    ctx.temporaryStorageHost = newSite;
+    ctx.temporaryStorageStartedAt = now;
+  }
+
+  if (!oldSite.isEmpty() && pendingTemporarySiteExpiry_.contains(oldSite)) {
+    const bool stillOpen = std::any_of(tabRegistry_.cbegin(), tabRegistry_.cend(), [&oldSite](const auto &context) {
+      return DaliNiraBlockerEngine::siteForHost(context.currentHost) == oldSite;
+    });
+    if (!stillOpen) {
+      pendingTemporarySiteExpiry_.remove(oldSite);
+      expiredHost = oldSite;
+    }
+  }
 
   if (hostChanged || wentInternal) {
     locker.unlock();
     clearTabStats(tabId);
+    if (!expiredHost.isEmpty()) emit temporarySiteDataExpired(expiredHost);
   }
+}
+
+bool DaliNiraBlockerService::isTemporaryBounceCandidate(const QUrl &url, const QString &sourceSite) const {
+  const QString site = DaliNiraBlockerEngine::siteForHost(url.host());
+  if (site.isEmpty() || sourceSite.isEmpty() || site == sourceSite || !settings_->protectionEnabled()) return false;
+  const SitePolicy sourcePolicy = settings_->sitePolicy(sourceSite);
+  const SitePolicy targetPolicy = settings_->sitePolicy(site);
+  if (!sourcePolicy.trackerProtection || sourcePolicy.whitelisted || targetPolicy.whitelisted ||
+      sourcePolicy.temporaryDisabledUntil > QDateTime::currentMSecsSinceEpoch()) return false;
+
+  // Authentication and checkout redirects deliberately carry short-lived
+  // first-party state. Never make them ephemeral merely because a broad list
+  // also classifies one of their resources as tracking.
+  const QString compatibilityKey = (url.host() + url.path()).toLower();
+  static const QStringList compatibilityTokens = {
+      QStringLiteral("account"), QStringLiteral("auth"), QStringLiteral("login"), QStringLiteral("oauth"),
+      QStringLiteral("signin"), QStringLiteral("sso"), QStringLiteral("checkout"), QStringLiteral("payment"),
+      QStringLiteral("billing"), QStringLiteral("paypal"), QStringLiteral("3ds"), QStringLiteral("securepay")};
+  for (const QString &token : compatibilityTokens)
+    if (compatibilityKey.contains(token)) return false;
+
+  const DaliNiraBlockerMode mode = sourcePolicy.perSiteMode >= 0
+      ? static_cast<DaliNiraBlockerMode>(sourcePolicy.perSiteMode) : settings_->mode();
+  // Ask the already-compiled filter plan how this exact URL is treated as a
+  // third-party resource. A first-party navigation itself is intentionally
+  // allowed by many privacy lists; the third-party verdict is the tracker
+  // classification signal, not a second independent hostname list.
+  const RequestDecision classified = filterEngine_->evaluate(
+      url, DaliNiraBlockerResourceType::Other, sourceSite, mode, sourcePolicy, QStringLiteral("get"));
+  return classified.action == DaliNiraBlockerAction::Block;
+}
+
+QString DaliNiraBlockerService::temporaryStorageCleanupScript(quint64 tabId, const QUrl &url) const {
+  const QString site = DaliNiraBlockerEngine::siteForHost(url.host());
+  {
+    QMutexLocker locker(&tabRegistryMutex_);
+    const auto it = tabRegistry_.constFind(tabId);
+    if (it == tabRegistry_.cend() || it->temporaryStorageHost != site) return {};
+  }
+  return QStringLiteral(R"JS((()=>{
+    if(window.__daliniraTemporaryBounceStorage)return;
+    Object.defineProperty(window,'__daliniraTemporaryBounceStorage',{value:true});
+    const started=performance.now();
+    addEventListener('pagehide',()=>{
+      if(performance.now()-started>10000)return;
+      try{localStorage.clear();sessionStorage.clear()}catch(_){}
+      try{indexedDB.databases().then(list=>list.slice(0,256).forEach(db=>indexedDB.deleteDatabase(db.name))).catch(()=>{})}catch(_){}
+      try{caches.keys().then(keys=>keys.slice(0,256).forEach(key=>caches.delete(key))).catch(()=>{})}catch(_){}
+      try{navigator.serviceWorker.getRegistrations().then(list=>list.slice(0,256).forEach(reg=>reg.unregister())).catch(()=>{})}catch(_){}
+    },{once:true});
+  })())JS");
 }
 
 void DaliNiraBlockerService::setActiveTabId(quint64 tabId) {
@@ -319,13 +632,142 @@ bool DaliNiraBlockerService::isStrictBypassActive(const QString &host) const {
 
 // ---------------- Request Evaluation ----------------
 
+bool DaliNiraBlockerService::stripTrackingParameters(QUrl &url) {
+  if (!url.hasQuery()) return false;
+  // Keep untouched query components byte-for-byte: decoding/re-encoding can
+  // invalidate signatures and change the meaning of encoded delimiters.
+  const QStringList items = url.query(QUrl::FullyEncoded).split(QLatin1Char('&'));
+  QStringList kept;
+  bool changed = false;
+  // Brave's query-filter list (brave-core query_filter.cc), plus mc_cid and
+  // _hsmi; names are compared lower-cased.
+  static const QSet<QString> trackingKeys = {
+      QStringLiteral("__hsfp"), QStringLiteral("__hssc"), QStringLiteral("__hstc"), QStringLiteral("__s"),
+      QStringLiteral("_bhlid"), QStringLiteral("_branch_match_id"), QStringLiteral("_branch_referrer"),
+      QStringLiteral("_gl"), QStringLiteral("_hsenc"), QStringLiteral("_hsmi"), QStringLiteral("_kx"),
+      QStringLiteral("_openstat"), QStringLiteral("at_recipient_id"), QStringLiteral("at_recipient_list"),
+      QStringLiteral("bbeml"), QStringLiteral("bsft_clkid"), QStringLiteral("bsft_uid"), QStringLiteral("dclid"),
+      QStringLiteral("et_rid"), QStringLiteral("fb_action_ids"), QStringLiteral("fb_comment_id"),
+      QStringLiteral("fbclid"), QStringLiteral("gbraid"), QStringLiteral("gclid"), QStringLiteral("guce_referrer"),
+      QStringLiteral("guce_referrer_sig"), QStringLiteral("hsctatracking"), QStringLiteral("igshid"),
+      QStringLiteral("irclickid"), QStringLiteral("mc_cid"), QStringLiteral("mc_eid"), QStringLiteral("mkt_tok"),
+      QStringLiteral("ml_subscriber"), QStringLiteral("ml_subscriber_hash"), QStringLiteral("msclkid"),
+      QStringLiteral("mtm_cid"), QStringLiteral("oft_c"), QStringLiteral("oft_ck"), QStringLiteral("oft_d"),
+      QStringLiteral("oft_id"), QStringLiteral("oft_ids"), QStringLiteral("oft_k"), QStringLiteral("oft_lk"),
+      QStringLiteral("oft_sk"), QStringLiteral("oly_anon_id"), QStringLiteral("oly_enc_id"),
+      QStringLiteral("pk_cid"), QStringLiteral("rb_clickid"), QStringLiteral("s_cid"),
+      QStringLiteral("sc_customer"), QStringLiteral("sc_eh"), QStringLiteral("sc_uid"), QStringLiteral("srsltid"),
+      QStringLiteral("ss_email_id"), QStringLiteral("twclid"), QStringLiteral("unicorn_click_id"),
+      QStringLiteral("vero_conv"), QStringLiteral("vero_id"), QStringLiteral("vgo_ee"), QStringLiteral("wbraid"),
+      QStringLiteral("wickedid"), QStringLiteral("yclid"), QStringLiteral("ymclid"), QStringLiteral("ysclid")};
+  // Marketo unsubscribe links need their token (Brave keeps it there too).
+  const bool unsubscribe = url.path().contains(QLatin1String("unsubscribe"), Qt::CaseInsensitive);
+  for (const QString &item : items) {
+    const QString key = QUrl::fromPercentEncoding(item.section(QLatin1Char('='), 0, 0).toUtf8()).toLower();
+    // Signed/authentication navigations must retain their complete query.
+    if (key == QLatin1String("sig") || key == QLatin1String("signature") ||
+        key == QLatin1String("token") || key == QLatin1String("state") ||
+        key.startsWith(QLatin1String("x-amz-")) || key.startsWith(QLatin1String("x-goog-"))) return false;
+    const bool tracking = (trackingKeys.contains(key) && !(unsubscribe && key == QLatin1String("mkt_tok"))) ||
+                          key.startsWith(QLatin1String("utm_"));
+    if (tracking) changed = true;
+    else kept.append(item);
+  }
+  if (changed) url.setQuery(kept.isEmpty() ? QString() : kept.join(QLatin1Char('&')), QUrl::StrictMode);
+  return changed;
+}
+
+NetworkRequestVerdict DaliNiraBlockerService::decideNetworkRequest(const QUrl &requestUrl,
+                                                                   DaliNiraBlockerResourceType resourceType,
+                                                                   const QUrl &firstPartyUrl, quint64 tabId,
+                                                                   const QString &requestMethod) {
+  NetworkRequestVerdict verdict;
+  const QString scheme = requestUrl.scheme().toLower();
+  if (!requestUrl.isValid() || (scheme != QLatin1String("http") && scheme != QLatin1String("https")))
+    return verdict;
+
+  QUrl url = requestUrl;
+  const bool stripped = linkCleanupApplies(url, firstPartyUrl, resourceType, requestMethod) &&
+                        stripTrackingParameters(url);
+  // The rules see the URL without the built-in list's parameters; their own
+  // $removeparam rules then all apply in this same evaluation.
+  verdict.decision = evaluateRequest(url, resourceType, firstPartyUrl, tabId, requestMethod);
+  if (verdict.decision.action == DaliNiraBlockerAction::Block) {
+    verdict.kind = NetworkVerdictKind::Block;
+  } else if (verdict.decision.action == DaliNiraBlockerAction::Redirect && !verdict.decision.redirectUrl.isEmpty()) {
+    verdict.kind = NetworkVerdictKind::Redirect;
+    verdict.redirectUrl = QUrl(verdict.decision.redirectUrl);
+    // A debounced destination is cleaned here too: Chromium would otherwise
+    // clean it on a second round trip and WebKit (which rewrites the request
+    // in place) not at all.
+    if (verdict.decision.reason == QLatin1String("urlskip-debounce"))
+      verdict.redirectUrl = cleanedNavigationUrl(verdict.redirectUrl, requestMethod);
+  } else if (stripped) {
+    verdict.kind = NetworkVerdictKind::Redirect;
+    verdict.redirectUrl = url;
+  }
+  return verdict;
+}
+
+QUrl DaliNiraBlockerService::httpsUpgradeFallback(const QUrl &failedUrl) {
+  const QString host = failedUrl.host().toLower();
+  if (host.isEmpty()) return {};
+  QMutexLocker locker(&httpsMutex_);
+  const auto pending = httpsUpgrades_.constFind(host);
+  if (pending == httpsUpgrades_.constEnd() ||
+      QDateTime::currentMSecsSinceEpoch() - pending->second > 60000)
+    return {};
+  const QUrl original = pending->first;
+  httpsUpgrades_.remove(host);
+  httpsFallbackHosts_.insert(host);
+  return original;
+}
+
+void DaliNiraBlockerService::noteHttpsLoadSucceeded(const QUrl &url) {
+  if (url.scheme().compare(QLatin1String("https"), Qt::CaseInsensitive) != 0) return;
+  QMutexLocker locker(&httpsMutex_);
+  httpsUpgrades_.remove(url.host().toLower());
+}
+
+bool DaliNiraBlockerService::linkCleanupApplies(const QUrl &url, const QUrl &firstPartyUrl,
+                                                DaliNiraBlockerResourceType resourceType,
+                                                const QString &requestMethod) const {
+  const QString policyHost = firstPartyUrl.host().isEmpty() ? url.host() : firstPartyUrl.host();
+  const SitePolicy policy = settings_->sitePolicy(policyHost);
+  return stripTrackingEnabled_.load() && settings_->protectionEnabled() && policy.trackerProtection &&
+         !policy.whitelisted && policy.temporaryDisabledUntil <= QDateTime::currentMSecsSinceEpoch() &&
+         !settings_->sitePolicy(url.host()).whitelisted && resourceType == DaliNiraBlockerResourceType::MainFrame &&
+         requestMethod.trimmed().compare(QLatin1String("get"), Qt::CaseInsensitive) == 0;
+}
+
+QUrl DaliNiraBlockerService::cleanedNavigationUrl(const QUrl &url, const QString &requestMethod) const {
+  QUrl cleaned = url;
+  if (!linkCleanupApplies(cleaned, cleaned, DaliNiraBlockerResourceType::MainFrame, requestMethod)) return cleaned;
+  stripTrackingParameters(cleaned);
+  const SitePolicy policy = settings_->sitePolicy(cleaned.host());
+  const DaliNiraBlockerMode mode = (policy.perSiteMode >= 0) ? static_cast<DaliNiraBlockerMode>(policy.perSiteMode)
+                                                             : settings_->mode();
+  const RequestDecision rules = filterEngine_->evaluate(cleaned, DaliNiraBlockerResourceType::MainFrame,
+                                                        cleaned.host().toLower(), mode, policy, requestMethod);
+  if (rules.action == DaliNiraBlockerAction::Redirect && rules.reason == QLatin1String("dnr-remove-param"))
+    cleaned = QUrl(rules.redirectUrl);
+  return cleaned;
+}
+
 RequestDecision DaliNiraBlockerService::evaluateRequest(const QUrl &requestUrl, int resourceTypeInt,
                                                 const QUrl &firstPartyUrl, quint64 tabId,
                                                 const QString &requestMethod) {
+  return evaluateRequest(requestUrl, resourceTypeFromWebEngine(resourceTypeInt), firstPartyUrl, tabId,
+                         requestMethod);
+}
+
+RequestDecision DaliNiraBlockerService::evaluateRequest(const QUrl &requestUrl,
+                                                        DaliNiraBlockerResourceType resType,
+                                                        const QUrl &firstPartyUrl, quint64 tabId,
+                                                        const QString &requestMethod) {
   const auto start = std::chrono::high_resolution_clock::now();
 
   const quint64 resolvedTab = (tabId > 0) ? tabId : resolveTabId(firstPartyUrl, requestUrl);
-  const DaliNiraBlockerResourceType resType = resourceTypeFromWebEngine(resourceTypeInt);
   const QString initiatorHost = firstPartyUrl.host().toLower();
   const QString siteHost = requestUrl.host().toLower();
   SitePolicy policy = settings_->sitePolicy(initiatorHost.isEmpty() ? siteHost : initiatorHost);
@@ -375,6 +817,58 @@ RequestDecision DaliNiraBlockerService::evaluateRequest(const QUrl &requestUrl, 
         static_cast<DaliNiraBlockerMode>(policy.perSiteMode) : settings_->mode();
     decision = filterEngine_->evaluate(
         requestUrl, resType, initiatorHost, activeMode, policy, requestMethod);
+  }
+
+  // Debouncing: a top-level GET navigation to a bounce-tracking redirector
+  // (a $urlskip rule) goes straight to the destination it forwards to. Both
+  // engines apply this one verdict. A destination the filters would block is
+  // not skipped to: the redirector's own response then leads there, and that
+  // navigation is decided like any other.
+  if (resType == DaliNiraBlockerResourceType::MainFrame && settings_->protectionEnabled() &&
+      policy.trackerProtection && !policy.whitelisted &&
+      policy.temporaryDisabledUntil <= QDateTime::currentMSecsSinceEpoch() &&
+      requestMethod.trimmed().compare(QLatin1String("get"), Qt::CaseInsensitive) == 0) {
+    QString urlSkipRuleset;
+    const QUrl target = filterEngine_->urlSkipTarget(requestUrl, decision.action == DaliNiraBlockerAction::Block,
+                                                     &urlSkipRuleset);
+    if (target.isValid()) {
+      const SitePolicy targetPolicy = settings_->sitePolicy(target.host());
+      const DaliNiraBlockerMode targetMode = (targetPolicy.perSiteMode >= 0) ?
+          static_cast<DaliNiraBlockerMode>(targetPolicy.perSiteMode) : settings_->mode();
+      const RequestDecision targetDecision = filterEngine_->evaluate(
+          target, DaliNiraBlockerResourceType::MainFrame, target.host().toLower(), targetMode, targetPolicy,
+          requestMethod);
+      if (targetDecision.action != DaliNiraBlockerAction::Block)
+        decision = RequestDecision{DaliNiraBlockerAction::Redirect, QStringLiteral("urlskip-debounce"), 0,
+                                   urlSkipRuleset, target.toString(QUrl::FullyEncoded)};
+    }
+  }
+
+  // HTTPS by default: a top-level GET navigation to a public http:// host on
+  // the default port goes to https:// (Brave's standard behavior). A failed
+  // HTTPS load falls back to http:// once (httpsUpgradeFallback); a site
+  // that redirects the upgraded navigation back to http:// within seconds
+  // falls back at once instead of looping.
+  if (decision.action == DaliNiraBlockerAction::Allow && resType == DaliNiraBlockerResourceType::MainFrame &&
+      reqScheme == QLatin1String("http") && !isLocal && requestUrl.port(80) == 80 && settings_->protectionEnabled() &&
+      settings_->httpsByDefault() && !policy.whitelisted &&
+      policy.temporaryDisabledUntil <= QDateTime::currentMSecsSinceEpoch() &&
+      requestMethod.trimmed().compare(QLatin1String("get"), Qt::CaseInsensitive) == 0) {
+    const QString host = requestUrl.host().toLower();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    QMutexLocker locker(&httpsMutex_);
+    const auto pending = httpsUpgrades_.constFind(host);
+    if (pending != httpsUpgrades_.constEnd() && now - pending->second < 10000) {
+      httpsUpgrades_.remove(host);
+      httpsFallbackHosts_.insert(host);  // the site sent us back to http://
+    } else if (!httpsFallbackHosts_.contains(host)) {
+      QUrl upgraded = requestUrl;
+      upgraded.setScheme(QStringLiteral("https"));
+      upgraded.setPort(-1);
+      httpsUpgrades_.insert(host, {requestUrl, now});
+      decision = RequestDecision{DaliNiraBlockerAction::Redirect, QStringLiteral("https-upgrade-by-default"), 0,
+                                 QStringLiteral("dalinira-https-upgrade"), upgraded.toString(QUrl::FullyEncoded)};
+    }
   }
 
   // Strict blocking redirection logic for dangerous/strict-block matches
@@ -782,9 +1276,45 @@ QList<QPair<QString, quint64>> DaliNiraBlockerService::topMatchedRulesets(int li
   return list;
 }
 
-QString DaliNiraBlockerService::cosmeticCssForHost(const QString &host) const {
+bool DaliNiraBlockerService::genericCosmeticsDisabled(const QString &host, const QUrl &pageUrl) const {
+  const QUrl document = pageUrl.isValid() && !pageUrl.host().isEmpty()
+                            ? pageUrl
+                            : QUrl(QStringLiteral("https://") + host.trimmed().toLower() + QLatin1Char('/'));
+  return filterEngine_->genericCosmeticsDisabled(document);
+}
+
+RequestDecision DaliNiraBlockerService::decidePopup(const QUrl &targetUrl, const QUrl &openerUrl, quint64 tabId) {
+  const QString openerScheme = openerUrl.scheme().toLower();
+  // Windows the browser opens itself (New Tab, internal pages) are not popups.
+  if (!settings_->protectionEnabled() ||
+      (openerScheme != QLatin1String("http") && openerScheme != QLatin1String("https")))
+    return RequestDecision{DaliNiraBlockerAction::Allow, QStringLiteral("not-filtered"), 0, QString(), QString()};
+  const QString openerHost = openerUrl.host().toLower();
+  const RequestDecision decision = filterEngine_->evaluatePopup(targetUrl, openerHost, settings_->sitePolicy(openerHost));
+  if (decision.action == DaliNiraBlockerAction::Block)
+    reportBlockedEvent(tabId, DaliNiraBlockType::NetworkAd, 1, decision.rulesetId);
+
+  NetworkLogEntry entry;
+  entry.timestamp = QDateTime::currentDateTime();
+  entry.tabId = tabId;
+  entry.siteHost = targetUrl.host().toLower();
+  entry.requestHost = entry.siteHost;
+  entry.initiatorHost = openerHost;
+  entry.topLevelSite = openerHost;
+  entry.requestMethod = QStringLiteral("GET");
+  entry.resourceTypeStr = QStringLiteral("popup");
+  entry.requestUrl = targetUrl.adjusted(QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment).toString();
+  entry.action = decision.action;
+  entry.reason = decision.reason;
+  entry.rulesetId = decision.rulesetId;
+  entry.ruleId = decision.ruleId;
+  logEntry(entry);
+  return decision;
+}
+
+QString DaliNiraBlockerService::cosmeticCssForHost(const QString &host, const QUrl &pageUrl) const {
   if (!settings_->protectionEnabled()) return {};
-  QString css = filterEngine_->cosmeticCssForHost(host);
+  QString css = filterEngine_->cosmeticCssForHost(host, !genericCosmeticsDisabled(host, pageUrl));
   if (listManager_) {
     const QString specificCss = listManager_->loadSpecificCosmeticCssForHost(
         host, activeRulesetIds(), true);
@@ -793,7 +1323,7 @@ QString DaliNiraBlockerService::cosmeticCssForHost(const QString &host) const {
   return filterEngine_->applyCosmeticExceptions(host, css);
 }
 
-QWebEngineScript DaliNiraBlockerService::createCosmeticScriptForHost(const QString &host) const {
+QWebEngineScript DaliNiraBlockerService::createCosmeticScriptForHost(const QString &host, const QUrl &pageUrl) const {
   QWebEngineScript script;
   script.setName(QStringLiteral("dalinira-adblock-cosmetic"));
   script.setInjectionPoint(QWebEngineScript::DocumentCreation);
@@ -811,7 +1341,7 @@ QWebEngineScript DaliNiraBlockerService::createCosmeticScriptForHost(const QStri
       policy.temporaryDisabledUntil > QDateTime::currentMSecsSinceEpoch()) {
     return script;
   }
-  const QString css = cosmeticCssForHost(host);
+  const QString css = cosmeticCssForHost(host, pageUrl);
 
   // CSS automatically re-evaluates recycled nodes, including attribute/text
   // replacement; no sticky per-node hidden flag or destructive inline style.
@@ -826,10 +1356,35 @@ QWebEngineScript DaliNiraBlockerService::createCosmeticScriptForHost(const QStri
   return script;
 }
 
-QList<QWebEngineScript> DaliNiraBlockerService::createScriptingScriptsForHost(const QString &host) const {
+QString DaliNiraBlockerService::privacyShieldScript() const {
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  QJsonArray exempt;
+  const QHash<QString, SitePolicy> policies = settings_->sitePolicies();
+  for (auto it = policies.cbegin(); it != policies.cend(); ++it)
+    if (it.value().whitelisted || it.value().temporaryDisabledUntil > now)
+      exempt.append(QString::fromLatin1(QUrl::toAce(it.key().trimmed().toLower())));
+  const bool farble = settings_->protectionEnabled() && settings_->fingerprintProtection();
+  return QString::fromUtf8(kDaliNiraPrivacyShield)
+      .replace(QStringLiteral("__DN_KEY__"), sessionKey_)
+      .replace(QStringLiteral("__DN_EXEMPT__"), QString::fromUtf8(QJsonDocument(exempt).toJson(QJsonDocument::Compact)))
+      .replace(QStringLiteral("__DN_FARBLE__"), farble ? QStringLiteral("true") : QStringLiteral("false"));
+}
+
+QStringList DaliNiraBlockerService::cosmeticDocumentScriptsForHost(const QString &host, const QUrl &pageUrl) const {
+  QStringList sources;
+  for (const QWebEngineScript &script : createScriptingScriptsForHost(host, pageUrl)) {
+    if (script.name() == QLatin1String("dalinira-adblock-cosmetic") ||
+        script.name() == QLatin1String("dalinira-adblock-procedural"))
+      sources.append(script.sourceCode());
+  }
+  return sources;
+}
+
+QList<QWebEngineScript> DaliNiraBlockerService::createScriptingScriptsForHost(const QString &host, const QUrl &pageUrl) const {
   QList<QWebEngineScript> scripts;
   if (!settings_->protectionEnabled()) return scripts;
-  const QWebEngineScript cosmetic = createCosmeticScriptForHost(host);
+  const bool includeGeneric = !genericCosmeticsDisabled(host, pageUrl);
+  const QWebEngineScript cosmetic = createCosmeticScriptForHost(host, pageUrl);
   if (!cosmetic.sourceCode().isEmpty()) scripts.append(cosmetic);
 
   const SitePolicy policy = settings_->sitePolicy(host);
@@ -860,7 +1415,7 @@ QList<QWebEngineScript> DaliNiraBlockerService::createScriptingScriptsForHost(co
   }
 
   for (const auto &asset : listManager_->loadScriptingSourcesForHost(
-      host, activeRulesetIds(), true)) {
+      host, activeRulesetIds(), true, includeGeneric)) {
     QWebEngineScript script;
     const bool mainWorld = asset.first == QLatin1String("main");
     script.setName(mainWorld ? QStringLiteral("dalinira-adblock-scriptlets-main")
@@ -882,7 +1437,7 @@ QList<QWebEngineScript> DaliNiraBlockerService::createScriptingScriptsForHost(co
 
   if (!isYouTubeHost) {
     QJsonArray proceduralRules = listManager_->loadProceduralRulesForHost(host, activeRulesetIds(), true);
-    const QJsonArray customProcedural = filterEngine_->customProceduralRulesForHost(host);
+    const QJsonArray customProcedural = filterEngine_->customProceduralRulesForHost(host, includeGeneric);
     for (const QJsonValue &rule : customProcedural) proceduralRules.append(rule);
     if (!proceduralRules.isEmpty()) {
       const QString json = QString::fromUtf8(QJsonDocument(proceduralRules).toJson(QJsonDocument::Compact));

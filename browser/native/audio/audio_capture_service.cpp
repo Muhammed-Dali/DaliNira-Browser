@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include "i18n/i18n.h"
 
 AudioCaptureService::AudioCaptureService(QObject *parent)
     : QObject(parent), systemBuffer_(16000, 12), micBuffer_(16000, 12) {
@@ -35,12 +36,12 @@ QString AudioCaptureService::activeSourceName() const {
     return currentDeviceId_;
   }
   if (activeSourceType_ == ActiveSourceType::SystemAudio) {
-    return QStringLiteral("Sistem sesi");
+    return I18n::text(QStringLiteral("audio.system_audio_label"));
   }
   if (activeSourceType_ == ActiveSourceType::Microphone) {
-    return QStringLiteral("Mikrofon");
+    return I18n::text(QStringLiteral("settings.site.microphone"));
   }
-  return QStringLiteral("Otomatik");
+  return I18n::text(QStringLiteral("common.automatic"));
 }
 
 SlidingPcmBuffer &AudioCaptureService::activeBuffer() {
@@ -59,7 +60,7 @@ const SlidingPcmBuffer &AudioCaptureService::activeBuffer() const {
 
 QProcess *AudioCaptureService::spawnFfmpegProcess(const QString &deviceId) {
   if (deviceId.isEmpty() || ffmpegPath_.isEmpty()) {
-    if (ffmpegPath_.isEmpty()) emit errorOccurred(QStringLiteral("Güvenilir ffmpeg executable bulunamadı."));
+    if (ffmpegPath_.isEmpty()) emit errorOccurred(I18n::text(QStringLiteral("pulse.ffmpeg_not_found")));
     return nullptr;
   }
 
@@ -80,7 +81,7 @@ QProcess *AudioCaptureService::spawnFfmpegProcess(const QString &deviceId) {
   if (!proc->waitForStarted(2000)) {
     const QString err = proc->errorString();
     proc->deleteLater();
-    emit errorOccurred(QStringLiteral("Ses yakalama başlatılamadı (%1): %2").arg(deviceId, err));
+    emit errorOccurred(I18n::text(QStringLiteral("pulse.capture_start_failed_detail")).arg(deviceId, err));
     return nullptr;
   }
   return proc;
@@ -157,7 +158,7 @@ bool AudioCaptureService::startAuto(const QString &systemMonitorId, const QStrin
   }
 
   if (!systemProcess_ && !micProcess_) {
-    emit errorOccurred(QStringLiteral("Hiçbir ses kaynağı başlatılamadı."));
+    emit errorOccurred(I18n::text(QStringLiteral("pulse.no_source_started")));
     return false;
   }
 
@@ -204,7 +205,7 @@ void AudioCaptureService::stop() {
   microphoneId_.clear();
   isAutoMode_ = false;
 
-  emit volumeChanged(0.0, 0.0, ActiveSourceType::SystemAudio, QStringLiteral("Hazır"));
+  emit volumeChanged(0.0, 0.0, ActiveSourceType::SystemAudio, I18n::text(QStringLiteral("common.ready")));
   emit stopped();
 }
 

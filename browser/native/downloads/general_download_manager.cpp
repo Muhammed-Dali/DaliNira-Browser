@@ -1,4 +1,5 @@
 #include "general_download_manager.h"
+#include "i18n/i18n.h"
 
 #include "security_utils.h"
 
@@ -182,6 +183,9 @@ GeneralDownloadManager::GeneralDownloadManager(const QString &historyPath,
     : QObject(parent), historyPath_(QFileInfo(historyPath).absoluteFilePath()), network_(network) {
   if (!network_) {
     network_ = new QNetworkAccessManager(this);
+    network_->setCookieJar(new QNetworkCookieJar(network_));
+  } else if (!network_->cookieJar()) {
+    network_->setCookieJar(new QNetworkCookieJar(network_));
   }
   load();
   speedTimer_ = new QTimer(this);
@@ -190,6 +194,13 @@ GeneralDownloadManager::GeneralDownloadManager(const QString &historyPath,
     for (Task *task : std::as_const(tasks_)) updateProgress(task);
   });
   speedTimer_->start();
+  // Status texts are cached in the UI language; re-express them after a live
+  // language switch so views built later never show the previous language.
+  connect(&dalinira::i18n::LanguageManager::instance(), &dalinira::i18n::LanguageManager::languageChanged,
+          this, [this] {
+            for (auto &job : jobs_) job.statusText = I18n::retranslated(job.statusText);
+            emit jobsChanged();
+          });
 }
 
 GeneralDownloadManager::~GeneralDownloadManager() {
@@ -217,13 +228,13 @@ int GeneralDownloadManager::normalizedConnectionCount(int requested) {
 
 QString GeneralDownloadManager::stateText(GeneralDownloadState state) {
   switch (state) {
-    case GeneralDownloadState::Queued: return QStringLiteral("Sırada");
-    case GeneralDownloadState::Probing: return QStringLiteral("Sunucu kontrol ediliyor");
-    case GeneralDownloadState::Downloading: return QStringLiteral("İndiriliyor");
-    case GeneralDownloadState::Paused: return QStringLiteral("Duraklatıldı");
-    case GeneralDownloadState::Completed: return QStringLiteral("Tamamlandı");
-    case GeneralDownloadState::Failed: return QStringLiteral("Başarısız");
-    case GeneralDownloadState::Cancelled: return QStringLiteral("İptal edildi");
+    case GeneralDownloadState::Queued: return I18n::text(QStringLiteral("downloads.state_queued"));
+    case GeneralDownloadState::Probing: return I18n::text(QStringLiteral("downloads.probing_server"));
+    case GeneralDownloadState::Downloading: return I18n::text(QStringLiteral("downloads.state_downloading"));
+    case GeneralDownloadState::Paused: return I18n::text(QStringLiteral("downloads.state_paused"));
+    case GeneralDownloadState::Completed: return I18n::text(QStringLiteral("downloads.state_completed"));
+    case GeneralDownloadState::Failed: return I18n::text(QStringLiteral("common.failed"));
+    case GeneralDownloadState::Cancelled: return I18n::text(QStringLiteral("downloads.state_cancelled"));
   }
   return {};
 }
@@ -313,6 +324,7 @@ QUuid GeneralDownloadManager::enqueue(const GeneralDownloadRequest &candidate) {
   job.id = QUuid::createUuid();
   job.url = request.url;
   job.fileName = request.suggestedFileName;
+  job.sourceEngine = request.sourceEngine;
   const QString exactTarget = QDir(request.targetDirectory).absoluteFilePath(job.fileName);
   const bool exactTargetActive = std::any_of(jobs_.cbegin(), jobs_.cend(), [&exactTarget](const auto &existing) {
     return !terminal(existing.state) && existing.targetPath == exactTarget;
@@ -375,7 +387,7 @@ bool GeneralDownloadManager::resume(const QUuid &id) {
   const int index = indexOf(id);
   if (index < 0 || jobs_[index].state != GeneralDownloadState::Paused || tasks_.contains(id)) return false;
   jobs_[index].state = GeneralDownloadState::Queued;
-  jobs_[index].statusText = QStringLiteral("Devam ettiriliyor");
+  jobs_[index].statusText = I18n::text(QStringLiteral("downloads.resuming"));
   emit jobsChanged();
   QTimer::singleShot(0, this, [this, id] { begin(id); });
   return true;
@@ -468,7 +480,7 @@ void GeneralDownloadManager::begin(const QUuid &id) {
     queueOrder_.append(id);
   }
   jobs_[index].state = GeneralDownloadState::Queued;
-  jobs_[index].statusText = QStringLiteral("Bağlantı bekleniyor");
+  jobs_[index].statusText = I18n::text(QStringLiteral("downloads.waiting_connection"));
   jobs_[index].errorText.clear();
   jobs_[index].updatedAt = QDateTime::currentDateTimeUtc();
   emit jobsChanged();
@@ -576,7 +588,7 @@ void GeneralDownloadManager::scheduleQueue() {
 
     if (task->phase == TaskPhase::PendingProbe) {
       newState = GeneralDownloadState::Queued;
-      newStatus = QStringLiteral("Bağlantı bekleniyor");
+      newStatus = I18n::text(QStringLiteral("downloads.waiting_connection"));
     } else if (task->phase == TaskPhase::Probing) {
       newState = GeneralDownloadState::Probing;
       newStatus = stateText(GeneralDownloadState::Probing);
@@ -592,17 +604,17 @@ void GeneralDownloadManager::scheduleQueue() {
         if (task->adaptiveEnabled) {
           job.connections = task->targetConnections;
           if (task->targetConnections == 1) {
-            newStatus = QStringLiteral("1 bağlantı • hız ölçülüyor");
+            newStatus = I18n::text(QStringLiteral("downloads.one_connection_measuring"));
           } else {
-            newStatus = QStringLiteral("%1 bağlantı • otomatik").arg(task->targetConnections);
+            newStatus = I18n::text(QStringLiteral("downloads.connections_auto")).arg(task->targetConnections);
           }
         } else {
           job.connections = 1;
-          newStatus = QStringLiteral("İndiriliyor");
+          newStatus = I18n::text(QStringLiteral("downloads.state_downloading"));
         }
       } else if (retryingParts == 0) {
         newState = GeneralDownloadState::Queued;
-        newStatus = QStringLiteral("Bağlantı bekleniyor");
+        newStatus = I18n::text(QStringLiteral("downloads.waiting_connection"));
       }
     }
 
@@ -678,7 +690,7 @@ void GeneralDownloadManager::finishProbe(Task *task, bool rangeSupported, qint64
   if (changed) {
     cleanupParts(task->id);
     job.downloadedBytes = 0;
-    job.statusText = QStringLiteral("Sunucudaki dosya değişti; yeniden başlatılıyor");
+    job.statusText = I18n::text(QStringLiteral("downloads.server_file_changed"));
   }
   if (totalBytes > 0) job.totalBytes = totalBytes;
   job.etag = etag;
@@ -724,7 +736,7 @@ void GeneralDownloadManager::prepareParallel(Task *task) {
     if (!task->targetFile->open(QIODevice::ReadWrite)) {
       delete task->targetFile;
       task->targetFile = nullptr;
-      finish(task, GeneralDownloadState::Failed, QStringLiteral("Geçici indirme dosyası açılamadı."));
+      finish(task, GeneralDownloadState::Failed, I18n::text(QStringLiteral("downloads.temp_open_failed")));
       return;
     }
   }
@@ -734,7 +746,7 @@ void GeneralDownloadManager::prepareParallel(Task *task) {
       task->targetFile->close();
       delete task->targetFile;
       task->targetFile = nullptr;
-      finish(task, GeneralDownloadState::Failed, QStringLiteral("Hedef dosya boyutu ayrılamadı."));
+      finish(task, GeneralDownloadState::Failed, I18n::text(QStringLiteral("downloads.allocate_failed")));
       return;
     }
   }
@@ -777,7 +789,7 @@ void GeneralDownloadManager::prepareParallel(Task *task) {
       if (task->targetFile->isOpen()) task->targetFile->close();
       delete task->targetFile;
       task->targetFile = nullptr;
-      finish(task, GeneralDownloadState::Failed, QStringLiteral("Geçici indirme dosyası yeniden hazırlanamadı."));
+      finish(task, GeneralDownloadState::Failed, I18n::text(QStringLiteral("downloads.temp_reprepare_failed")));
       return;
     }
   }
@@ -874,7 +886,7 @@ void GeneralDownloadManager::prepareSingle(Task *task, bool resumeExisting) {
     if (!task->targetFile->open(mode)) {
       delete task->targetFile;
       task->targetFile = nullptr;
-      finish(task, GeneralDownloadState::Failed, QStringLiteral("Geçici indirme dosyası açılamadı."));
+      finish(task, GeneralDownloadState::Failed, I18n::text(QStringLiteral("downloads.temp_open_failed")));
       return;
     }
   }
@@ -978,11 +990,11 @@ void GeneralDownloadManager::consumePart(Task *task, int partIndex) {
   if (data.isEmpty()) return;
   const qint64 offset = part.start + part.written;
   if (!task->targetFile->seek(offset)) {
-    finish(task, GeneralDownloadState::Failed, QStringLiteral("Dosya konumu ayarlanamadı."));
+    finish(task, GeneralDownloadState::Failed, I18n::text(QStringLiteral("downloads.seek_failed")));
     return;
   }
   if (task->targetFile->write(data) != data.size()) {
-    finish(task, GeneralDownloadState::Failed, QStringLiteral("İndirilen veri diske yazılamadı."));
+    finish(task, GeneralDownloadState::Failed, I18n::text(QStringLiteral("downloads.write_failed")));
     return;
   }
   part.written += data.size();
@@ -1023,7 +1035,7 @@ void GeneralDownloadManager::schedulePartRetry(Task *task, int partIndex) {
 
   const int index = indexOf(task->id);
   if (index >= 0) {
-    jobs_[index].statusText = QStringLiteral("Bağlantı %1 yeniden deneniyor (%2/%3)...")
+    jobs_[index].statusText = I18n::text(QStringLiteral("downloads.retrying_connection"))
         .arg(partIndex + 1).arg(part.retryCount).arg(kMaxPartRetries);
     emit jobsChanged();
   }
@@ -1055,7 +1067,7 @@ void GeneralDownloadManager::finishPart(Task *task, int partIndex) {
   if (tasks_.value(id) != task) { if (reply) reply->deleteLater(); scheduleQueue(); return; }
   const QNetworkReply::NetworkError networkError = reply ? reply->error() : QNetworkReply::UnknownNetworkError;
   const int statusCode = reply ? reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() : 0;
-  const QString errorText = reply ? reply->errorString() : QStringLiteral("Ağ yanıtı alınamadı");
+  const QString errorText = reply ? reply->errorString() : I18n::text(QStringLiteral("downloads.no_network_reply"));
   part.reply = nullptr;
   if (reply) reply->deleteLater();
 
@@ -1122,7 +1134,7 @@ void GeneralDownloadManager::finishPart(Task *task, int partIndex) {
       return;
     }
     const QString finalError = prematureEof
-        ? QStringLiteral("Sunucu beklenen byte aralığını tamamlamadı.")
+        ? I18n::text(QStringLiteral("downloads.range_incomplete"))
         : errorText;
     finish(task, GeneralDownloadState::Failed, finalError);
     return;
@@ -1156,7 +1168,7 @@ void GeneralDownloadManager::fallbackToSingle(Task *task) {
     jobs_[index].rangeSupported = false;
     jobs_[index].connections = 1;
     jobs_[index].downloadedBytes = 0;
-    jobs_[index].statusText = QStringLiteral("Tek bağlantıyla devam ediliyor");
+    jobs_[index].statusText = I18n::text(QStringLiteral("downloads.continuing_single"));
     emit jobsChanged();
   }
   if (tasks_.value(id) != task) return;
@@ -1178,16 +1190,16 @@ bool GeneralDownloadManager::finalizeDownload(Task *task, QString *error) {
   const QString tempPath = tempDownloadPath(task->id);
   const QString targetPath = jobs_[index].targetPath;
   if (!QFile::exists(tempPath)) {
-    if (error) *error = QStringLiteral("Geçici indirme dosyası bulunamadı.");
+    if (error) *error = I18n::text(QStringLiteral("downloads.temp_not_found"));
     return false;
   }
   const qint64 total = jobs_[index].totalBytes;
   if (total > 0 && QFileInfo(tempPath).size() != total) {
-    if (error) *error = QStringLiteral("Geçici indirme dosyasının boyutu beklenen değerle eşleşmiyor.");
+    if (error) *error = I18n::text(QStringLiteral("downloads.temp_size_mismatch"));
     return false;
   }
   if (!atomicReplaceFile(tempPath, targetPath)) {
-    if (error) *error = QStringLiteral("İndirilen dosya hedef konuma taşınamadı.");
+    if (error) *error = I18n::text(QStringLiteral("downloads.move_failed"));
     return false;
   }
   QFile::remove(statePath(task->id));
@@ -1509,9 +1521,9 @@ void GeneralDownloadManager::scaleConnections(Task *task, int newTarget) {
   if (jobIndex >= 0) {
     jobs_[jobIndex].connections = newTarget;
     if (newTarget == 1) {
-      jobs_[jobIndex].statusText = QStringLiteral("1 bağlantı • hız ölçülüyor");
+      jobs_[jobIndex].statusText = I18n::text(QStringLiteral("downloads.one_connection_measuring"));
     } else {
-      jobs_[jobIndex].statusText = QStringLiteral("%1 bağlantı • otomatik").arg(newTarget);
+      jobs_[jobIndex].statusText = I18n::text(QStringLiteral("downloads.connections_auto")).arg(newTarget);
     }
     emit jobsChanged();
   }
@@ -1877,10 +1889,19 @@ void GeneralDownloadManager::applyRequestHeaders(QNetworkRequest *request,
                         QNetworkRequest::NoLessSafeRedirectPolicy);
   if (!source.userAgent.isEmpty()) request->setRawHeader(QByteArrayLiteral("User-Agent"), source.userAgent);
   if (!source.referrer.isEmpty()) request->setRawHeader(QByteArrayLiteral("Referer"), source.referrer);
-  // Let the cookie jar enforce domain/path/secure rules across redirects instead
-  // of forwarding a raw Cookie header to a potentially different host.
-  if (!source.cookies.isEmpty() && network_->cookieJar())
-    network_->cookieJar()->setCookiesFromUrl(source.cookies, source.url);
+  // Directly attach the source context's scoped cookies to this request.
+  // This guarantees strict engine and request isolation without polluting
+  // the shared network manager's cookie jar across distinct downloads.
+  if (!source.cookies.isEmpty()) {
+    QByteArray cookieHeader;
+    for (const QNetworkCookie &cookie : source.cookies) {
+      if (!cookieHeader.isEmpty()) cookieHeader.append("; ");
+      cookieHeader.append(cookie.toRawForm(QNetworkCookie::NameAndValueOnly));
+    }
+    if (!cookieHeader.isEmpty()) {
+      request->setRawHeader(QByteArrayLiteral("Cookie"), cookieHeader);
+    }
+  }
 }
 
 void GeneralDownloadManager::updateProgress(Task *task) {
@@ -1986,7 +2007,9 @@ void GeneralDownloadManager::load() {
     job.targetPath = QFileInfo(object.value(QStringLiteral("targetPath")).toString()).absoluteFilePath();
     job.mimeType = object.value(QStringLiteral("mimeType")).toString();
     job.state = static_cast<GeneralDownloadState>(object.value(QStringLiteral("state")).toInt());
-    job.statusText = object.value(QStringLiteral("status")).toString();
+    // History stores the status as it was shown, in the UI language of that
+    // session; show it in the current language.
+    job.statusText = I18n::retranslated(object.value(QStringLiteral("status")).toString());
     job.errorText = object.value(QStringLiteral("error")).toString();
     job.totalBytes = static_cast<qint64>(object.value(QStringLiteral("total")).toDouble(-1));
     job.downloadedBytes = static_cast<qint64>(object.value(QStringLiteral("downloaded")).toDouble(0));
@@ -1999,7 +2022,7 @@ void GeneralDownloadManager::load() {
     if (job.id.isNull() || !canHandleUrl(job.url) || job.targetPath.isEmpty()) continue;
     if (!terminal(job.state)) {
       job.state = GeneralDownloadState::Paused;
-      job.statusText = QStringLiteral("Tarayıcı yeniden başlatıldı; devam ettirilebilir");
+      job.statusText = I18n::text(QStringLiteral("downloads.browser_restarted_resumable"));
       job.bytesPerSecond = 0;
       job.etaSeconds = -1;
     }

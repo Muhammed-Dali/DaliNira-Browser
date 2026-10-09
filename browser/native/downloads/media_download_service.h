@@ -163,6 +163,8 @@ class MediaDownloadService final : public QObject {
   void processDownloadOutput(QByteArray *buffer, const QByteArray &chunk);
   void processDownloadLine(const QString &line);
   void finishCurrent(MediaDownloadState state, const QString &error = {});
+  QString resolveCompletedFilePath(const MediaDownloadJob &job) const;
+  static QString extractMediaId(const QUrl &url);
   void persistHistory() const;
   void loadHistory();
   static QString categorizedError(const QByteArray &stderrOutput, int exitCode);

@@ -76,6 +76,7 @@ struct TabGeometry {
   qreal visualOpacity = 1.0;
   bool isAudible = false;
   bool isLoading = false;
+  bool isSleeping = false;
   QString title;
   QIcon icon;
 };

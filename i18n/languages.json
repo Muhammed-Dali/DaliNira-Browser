@@ -18,6 +18,12 @@
       "name": "Arabic",
       "nativeName": "العربية",
       "direction": "rtl"
+    },
+    {
+      "code": "fr",
+      "name": "French",
+      "nativeName": "Français",
+      "direction": "ltr"
     }
   ]
 }

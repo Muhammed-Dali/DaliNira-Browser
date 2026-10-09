@@ -10,6 +10,7 @@
 #include <QUrl>
 #include <QUuid>
 #include <QVector>
+#include "engine/engine_type.h"
 
 class QNetworkAccessManager;
 class QNetworkRequest;
@@ -38,6 +39,12 @@ struct GeneralDownloadRequest {
   bool allowParallel = true;
   bool allowWorkStealing = true;
   bool overwriteExisting = false;
+  dalinira::engine::EngineType sourceEngine = dalinira::engine::EngineType::Chromium;
+  uint64_t sourceTabId = 0;
+  QUrl pageUrl;
+  QUrl originalUrl;
+  bool isPrivate = false;
+  quint64 navigationGeneration = 0;
 };
 
 struct GeneralDownloadJob {
@@ -59,6 +66,7 @@ struct GeneralDownloadJob {
   QByteArray lastModified;
   QDateTime createdAt;
   QDateTime updatedAt;
+  dalinira::engine::EngineType sourceEngine = dalinira::engine::EngineType::Chromium;
 };
 
 class GeneralDownloadManager final : public QObject {

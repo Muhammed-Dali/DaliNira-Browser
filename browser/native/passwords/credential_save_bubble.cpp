@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QStyleOption>
+#include "i18n/i18n.h"
 
 CredentialSaveBubble::CredentialSaveBubble(QWidget *parent) : QFrame(parent) {
   setAttribute(Qt::WA_DeleteOnClose, false);
@@ -55,7 +56,7 @@ void CredentialSaveBubble::initializeUi() {
   closeBtn_ = new QToolButton(this);
   closeBtn_->setText(QStringLiteral("✕"));
   closeBtn_->setCursor(Qt::PointingHandCursor);
-  closeBtn_->setToolTip(QStringLiteral("Kapat"));
+  closeBtn_->setToolTip(I18n::text(QStringLiteral("common.close")));
   closeBtn_->setStyleSheet(QStringLiteral(
       "QToolButton {"
       "  color: #94a3b8;"
@@ -117,7 +118,7 @@ void CredentialSaveBubble::initializeUi() {
   btnLayout->setContentsMargins(0, 4, 0, 0);
   btnLayout->setSpacing(8);
 
-  secondaryBtn_ = new QPushButton(QStringLiteral("Şimdi Değil"), this);
+  secondaryBtn_ = new QPushButton(I18n::text(QStringLiteral("passwords.not_now")), this);
   secondaryBtn_->setObjectName(QStringLiteral("credential-save-secondary"));
   secondaryBtn_->setCursor(Qt::PointingHandCursor);
   secondaryBtn_->setStyleSheet(QStringLiteral(
@@ -183,36 +184,36 @@ void CredentialSaveBubble::setupPrompt(CredentialSaveMode mode, const QString &o
 
   switch (mode_) {
     case CredentialSaveMode::Verifying:
-      titleLabel_->setText(QStringLiteral("Bu giriş bilgisini kaydetmek ister misiniz?"));
-      descriptionLabel_->setText(QStringLiteral("Giriş doğrulanıyor…"));
+      titleLabel_->setText(I18n::text(QStringLiteral("passwords.save_prompt_new")));
+      descriptionLabel_->setText(I18n::text(QStringLiteral("passwords.verifying")));
       descriptionLabel_->show();
-      primaryBtn_->setText(QStringLiteral("Kaydet"));
+      primaryBtn_->setText(I18n::text(QStringLiteral("common.save")));
       primaryBtn_->setEnabled(false);
-      secondaryBtn_->setText(QStringLiteral("Şimdi Değil"));
+      secondaryBtn_->setText(I18n::text(QStringLiteral("passwords.not_now")));
       break;
 
     case CredentialSaveMode::ReadyNew:
-      titleLabel_->setText(QStringLiteral("Bu giriş bilgisini kaydetmek ister misiniz?"));
+      titleLabel_->setText(I18n::text(QStringLiteral("passwords.save_prompt_new")));
       descriptionLabel_->hide();
-      primaryBtn_->setText(QStringLiteral("Kaydet"));
+      primaryBtn_->setText(I18n::text(QStringLiteral("common.save")));
       primaryBtn_->setEnabled(true);
-      secondaryBtn_->setText(QStringLiteral("Şimdi Değil"));
+      secondaryBtn_->setText(I18n::text(QStringLiteral("passwords.not_now")));
       break;
 
     case CredentialSaveMode::ReadyUpdate:
-      titleLabel_->setText(QStringLiteral("Kayıtlı şifre güncellensin mi?"));
+      titleLabel_->setText(I18n::text(QStringLiteral("passwords.save_prompt_update")));
       descriptionLabel_->hide();
-      primaryBtn_->setText(QStringLiteral("Şifreyi Güncelle"));
+      primaryBtn_->setText(I18n::text(QStringLiteral("passwords.update")));
       primaryBtn_->setEnabled(true);
-      secondaryBtn_->setText(QStringLiteral("Şimdi Değil"));
+      secondaryBtn_->setText(I18n::text(QStringLiteral("passwords.not_now")));
       break;
 
     case CredentialSaveMode::Cancelled:
-      descriptionLabel_->setText(QStringLiteral("Giriş doğrulanamadı."));
+      descriptionLabel_->setText(I18n::text(QStringLiteral("passwords.failed")));
       descriptionLabel_->show();
-      primaryBtn_->setText(QStringLiteral("Kaydet"));
+      primaryBtn_->setText(I18n::text(QStringLiteral("common.save")));
       primaryBtn_->setEnabled(false);
-      secondaryBtn_->setText(QStringLiteral("Kapat"));
+      secondaryBtn_->setText(I18n::text(QStringLiteral("common.close")));
       break;
   }
 

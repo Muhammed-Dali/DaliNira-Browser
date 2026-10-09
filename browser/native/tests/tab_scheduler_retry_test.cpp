@@ -50,15 +50,18 @@ int main(int argc, char *argv[]) {
   assert(scheduledDelay > 0);
   assert(scheduledDelay <= dalinira::TabPerformanceManager::kMinimumDeadlineRetryMs + 200);
 
+  // Once the page may sleep, one pass asks it about unsaved input and one
+  // more (after the answer) freezes it: never more than that, however long
+  // loading took.
   const quint64 checksBefore = performance->deadlineCheckCount();
   QElapsedTimer shortWindow;
   shortWindow.start();
   while (shortWindow.elapsed() < 150) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-  assert(performance->deadlineCheckCount() <= checksBefore + 1);
+  assert(performance->deadlineCheckCount() <= checksBefore + 2);
 
   // Once loading settles, the bounded retry performs the original transition.
   assert(processUntil([&] { return performance->isTabFrozen(backgroundId); }, 4000));
-  assert(performance->deadlineCheckCount() <= checksBefore + 3);
+  assert(performance->deadlineCheckCount() <= checksBefore + 4);
 
   manager.remove(backgroundId);
   manager.remove(activeId);

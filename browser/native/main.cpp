@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QPointer>
 #include <QIcon>
 #include <QPalette>
 #include <QStyleFactory>
@@ -12,18 +13,43 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QSettings>
+#include <QElapsedTimer>
+#include <QThread>
 #include <QTimer>
+
+#if defined(Q_OS_UNIX)
+#include <cerrno>
+#include <csignal>
+#endif
 
 #include "browser_window.h"
 #include "core/application_identity.h"
 #include "core/browser_icons.h"
+#include "core/default_browser_integration.h"
 #include "core/performance_diagnostics.h"
 #include "core/web_engine_hardware_acceleration.h"
 #include "core/web_engine_memory_policy.h"
 #include "desktop_tabs/tab_drag_controller.h"
+#include "engine/engine_backend.h"
+#include "engine/engine_storage_manager.h"
+#include "engine/engine_resolver.h"
+#include "engine/display_platform.h"
+#include "layout/browser_layout.h"
+#include "engine/chromium/chromium_backend.h"
+#if defined(DALINIRA_BUILD_WEBKIT)
+#include "engine/webkit/webkit_backend.h"
+#include "engine/webkit/webkit_media_runtime.h"
+#include <cstdio>
+#endif
 #include "i18n/i18n.h"
 #include "i18n/language_manager.h"
+#include "i18n/widget_i18n.h"
 #include "newtab/new_tab_scheme.h"
+#include "blocker/dalinira_blocker_request_interceptor.h"
+#include "onboarding/onboarding_manager.h"
+#include "onboarding/onboarding_window.h"
+#include "onboarding/onboarding_adapters.h"
 
 namespace {
 
@@ -39,63 +65,35 @@ void openDefaultApplicationsSettings(QWidget *parent) {
     return;
   }
 #endif
-  QMessageBox::information(parent, QStringLiteral("Varsayılan tarayıcı"),
-      QStringLiteral("Sistem Ayarları > Öntanımlı Uygulamalar bölümünden "
-                     "web tarayıcısı olarak DaliNira'yi seçin."));
-}
-
-void verifyDefaultBrowser(QWidget *parent) {
-  auto *verify = new QProcess(parent);
-  verify->setProgram(QStringLiteral("/usr/bin/xdg-settings"));
-  verify->setArguments({QStringLiteral("get"), QStringLiteral("default-web-browser")});
-  QObject::connect(verify, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), parent,
-                   [parent, verify](int exitCode, QProcess::ExitStatus exitStatus) {
-    const QString desktopFile = QString::fromUtf8(verify->readAllStandardOutput()).trimmed();
-    const bool accepted = exitStatus == QProcess::NormalExit && exitCode == 0
-        && desktopFile == QString::fromLatin1(kDaliNiraDesktopFile);
-    verify->deleteLater();
-    if (accepted) {
-      QSettings settings;
-      settings.remove(QString::fromLatin1(kDefaultBrowserPromptDisabled));
-      settings.remove(QString::fromLatin1(kDefaultBrowserLastPromptUtc));
-      QMessageBox::information(parent, QStringLiteral("Varsayılan tarayıcı"),
-          QStringLiteral("DaliNira varsayılan web tarayıcısı yapıldı."));
-    } else {
-      openDefaultApplicationsSettings(parent);
-    }
-  });
-  verify->start();
+  QMessageBox::information(parent, I18n::text(QStringLiteral("app.default_browser_title")),
+      I18n::text(QStringLiteral("app.default_browser_manual")));
 }
 
 void requestDefaultBrowser(QWidget *parent) {
-  auto *setDefault = new QProcess(parent);
-  setDefault->setProgram(QStringLiteral("/usr/bin/xdg-settings"));
-  setDefault->setArguments({QStringLiteral("set"), QStringLiteral("default-web-browser"),
-                            QString::fromLatin1(kDaliNiraDesktopFile)});
-  QObject::connect(setDefault, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), parent,
-                   [parent, setDefault](int exitCode, QProcess::ExitStatus exitStatus) {
-    const bool commandSucceeded = exitStatus == QProcess::NormalExit && exitCode == 0;
-    setDefault->deleteLater();
-    if (commandSucceeded) verifyDefaultBrowser(parent);
-    else openDefaultApplicationsSettings(parent);
+  auto *integration = new dalinira::core::SystemDefaultBrowserIntegration(parent);
+  integration->requestDefaultBrowser([parent, integration](dalinira::core::DefaultBrowserResult result) {
+    integration->deleteLater();
+    if (result == dalinira::core::DefaultBrowserResult::Success
+        || result == dalinira::core::DefaultBrowserResult::AlreadyDefault) {
+      QSettings settings;
+      settings.remove(QString::fromLatin1(kDefaultBrowserPromptDisabled));
+      settings.remove(QString::fromLatin1(kDefaultBrowserLastPromptUtc));
+      QMessageBox::information(parent, I18n::text(QStringLiteral("app.default_browser_title")),
+          I18n::text(QStringLiteral("app.default_browser_done")));
+      return;
+    }
+    openDefaultApplicationsSettings(parent);
   });
-  QObject::connect(setDefault, &QProcess::errorOccurred, parent,
-                   [parent](QProcess::ProcessError error) {
-    if (error == QProcess::FailedToStart) openDefaultApplicationsSettings(parent);
-  });
-  setDefault->start();
 }
 
 void showDefaultBrowserPrompt(QWidget *parent) {
   auto *dialog = new QMessageBox(QMessageBox::Question,
-      QStringLiteral("DaliNira'yi varsayılan tarayıcı yap"),
-      QStringLiteral("Web bağlantıları DaliNira ile açılsın mı?\n\n"
-                     "Bu seçim yalnızca web bağlantılarını etkiler; müzik, video ve PDF "
-                     "uygulamalarınız değiştirilmez."),
+      I18n::text(QStringLiteral("app.make_default_title")),
+      I18n::text(QStringLiteral("app.make_default_prompt")),
       QMessageBox::NoButton, parent);
-  QPushButton *makeDefault = dialog->addButton(QStringLiteral("Varsayılan yap"), QMessageBox::AcceptRole);
-  QPushButton *later = dialog->addButton(QStringLiteral("Şimdi değil"), QMessageBox::RejectRole);
-  QPushButton *never = dialog->addButton(QStringLiteral("Bir daha sorma"), QMessageBox::DestructiveRole);
+  QPushButton *makeDefault = dialog->addButton(I18n::text(QStringLiteral("app.make_default")), QMessageBox::AcceptRole);
+  QPushButton *later = dialog->addButton(I18n::text(QStringLiteral("passwords.not_now")), QMessageBox::RejectRole);
+  QPushButton *never = dialog->addButton(I18n::text(QStringLiteral("app.dont_ask_again")), QMessageBox::DestructiveRole);
   dialog->setDefaultButton(makeDefault);
   dialog->setEscapeButton(later);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -141,26 +139,149 @@ void checkDefaultBrowser(QWidget *parent) {
 #endif
 }
 
+QStringList normalRelaunchArguments() {
+  const QStringList current = qApp->arguments().mid(1);
+  QStringList cleaned;
+  for (int i = 0; i < current.size(); ++i) {
+    if (current[i] == QLatin1String("--engine") ||
+        current[i] == QLatin1String("--wait-for-pid")) {
+      ++i;
+      continue;
+    }
+    if (current[i] == QLatin1String("--onboarding")) continue;
+    cleaned.append(current[i]);
+  }
+  return cleaned;
+}
+
+bool startDetachedQuietly(const QString &program, const QStringList &arguments) {
+  QProcess process;
+  process.setProgram(program);
+  process.setArguments(arguments);
+  process.setStandardOutputFile(QProcess::nullDevice());
+  process.setStandardErrorFile(QProcess::nullDevice());
+  return process.startDetached();
+}
+
+#if defined(DALINIRA_BUILD_WEBKIT)
+// `dalinira-browser --check-media-runtime`: reports whether the GStreamer
+// runtime WebKit's HTML5 media needs is installed (docs/webkit-media-runtime.md).
+// Needs no display, so package installation tests can run it. Exit status:
+// 0 complete, 2 playable but some formats missing, 1 media disabled.
+int checkMediaRuntime() {
+  const auto report = dalinira::engine::WebKitMediaRuntime::probe();
+  for (const auto &gap : report.missing) {
+    std::printf("missing %s (GStreamer plugin %s, %s): %s%s\n", qPrintable(gap.element), qPrintable(gap.plugin),
+                qPrintable(gap.module), qPrintable(gap.purpose), gap.fatal ? " [media disabled]" : "");
+  }
+  if (!report.playbackAvailable) {
+    std::printf("WebKit media runtime: INCOMPLETE, HTML5 audio/video is disabled\n");
+    return 1;
+  }
+  std::printf("WebKit media runtime: %s\n", report.missing.isEmpty() ? "complete" : "playable, some formats unsupported");
+  return report.missing.isEmpty() ? 0 : 2;
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char *argv[]) {
-  // Ensure Wayland / XWayland coordinate parity for window moves and tab dragging
-  if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM") &&
-      qEnvironmentVariableIsSet("DISPLAY") &&
-      qgetenv("XDG_SESSION_TYPE") == "wayland") {
-    qputenv("QT_QPA_PLATFORM", "xcb");
+  // Set application and organization names early so QSettings resolves the correct configuration paths
+  dalinira::application_identity::apply();
+  bool forceStandaloneOnboarding = false;
+  qint64 waitForProcessId = 0;
+  for (int i = 1; i < argc; ++i) {
+    // Package smoke test: the dynamic loader resolved every linked library.
+    if (qstrcmp(argv[i], "--version") == 0) {
+      std::printf("DaliNira Browser %s\n", DALINIRA_BROWSER_VERSION);
+      return 0;
+    }
+#if defined(DALINIRA_BUILD_WEBKIT)
+    if (qstrcmp(argv[i], "--check-media-runtime") == 0) return checkMediaRuntime();
+#endif
+    if (qstrcmp(argv[i], "--onboarding") == 0) {
+      forceStandaloneOnboarding = true;
+    } else if (qstrcmp(argv[i], "--wait-for-pid") == 0 && i + 1 < argc) {
+      waitForProcessId = QString::fromLocal8Bit(argv[++i]).toLongLong();
+    }
   }
 
-  // Configure WebEngine subprocess allocator policy (MALLOC_ARENA_MAX=2, MALLOC_TRIM_THRESHOLD=128KB)
-  // before QtWebEngine process is spawned.
-  const QString appDir = QFileInfo(QString::fromLocal8Bit(argv[0])).dir().absolutePath();
-  dalinira::WebEngineMemoryPolicy::configureSubprocessLauncher(appDir);
+#if defined(Q_OS_UNIX)
+  if (waitForProcessId > 1) {
+    QElapsedTimer waitTimer;
+    waitTimer.start();
+    while (::kill(static_cast<pid_t>(waitForProcessId), 0) == 0 || errno == EPERM) {
+      if (waitTimer.elapsed() >= 30000) {
+        qCritical() << "Previous DaliNira process did not exit; standalone onboarding aborted"
+                    << waitForProcessId;
+        return 1;
+      }
+      QThread::msleep(25);
+    }
+  }
+#else
+  Q_UNUSED(waitForProcessId);
+#endif
 
-  // Initialize hardware video decoding and GPU flags early before QApplication / QtWebEngine init
-  dalinira::WebEngineHardwareAcceleration::initializeEarlyRuntime();
+  // Development-only override for isolated local GStreamer plugin testing
+  if (qEnvironmentVariableIntValue("DALINIRA_DEV_GST_FALLBACK") == 1) {
+    const QString localGstPath = QDir::homePath() + QStringLiteral("/.local/usr/lib/gstreamer-1.0");
+    if (QDir(localGstPath).exists()) {
+      const QByteArray currentGstPath = qgetenv("GST_PLUGIN_PATH_1_0");
+      if (currentGstPath.isEmpty()) {
+        qputenv("GST_PLUGIN_PATH_1_0", localGstPath.toUtf8() + ":/usr/lib/gstreamer-1.0");
+      } else if (!currentGstPath.contains(localGstPath.toUtf8())) {
+        qputenv("GST_PLUGIN_PATH_1_0", localGstPath.toUtf8() + ":" + currentGstPath);
+      }
+    }
+  }
 
-  // Register dalinira:// URL scheme before QGuiApplication
-  registerDaliNiraUrlSchemes();
+  // Authoritative single-engine resolution: CLI override > persisted settings > Chromium default
+  QStringList cmdArgs;
+  cmdArgs.reserve(argc);
+  for (int i = 0; i < argc; ++i) {
+    cmdArgs.append(QString::fromLocal8Bit(argv[i]));
+  }
+  const auto resolution = dalinira::engine::EngineResolver::resolve(cmdArgs);
+  auto initialEngine = resolution.engine;
+
+  // Windowing backend per engine and session (X11, XWayland, native Wayland);
+  // Qt and GDK read it only at start-up. See engine/display_platform.h.
+  const auto displayEnvironment = dalinira::engine::DisplayEnvironment::fromProcess();
+  auto displayPlan = dalinira::engine::planDisplay(initialEngine, displayEnvironment);
+  if (!displayPlan.engineSupported) {
+    qWarning().noquote() << displayPlan.note << "Starting with Chromium for this run.";
+    initialEngine = dalinira::engine::EngineType::Chromium;
+    displayPlan = dalinira::engine::planDisplay(initialEngine, displayEnvironment);
+  } else if (!displayPlan.note.isEmpty()) {
+    qWarning().noquote() << displayPlan.note;
+  }
+  dalinira::engine::applyDisplayPlan(displayPlan);
+  dalinira::engine::EngineBackend::setSelectedEngineType(initialEngine);
+
+  if (initialEngine == dalinira::engine::EngineType::Chromium) {
+    // Configure WebEngine subprocess allocator policy (MALLOC_ARENA_MAX=2, MALLOC_TRIM_THRESHOLD=128KB)
+    // before QtWebEngine process is spawned.
+    const QString appDir = QFileInfo(QString::fromLocal8Bit(argv[0])).dir().absolutePath();
+    dalinira::WebEngineMemoryPolicy::configureSubprocessLauncher(appDir);
+
+    // Initialize hardware video decoding and GPU flags early before QApplication / QtWebEngine init
+    dalinira::WebEngineHardwareAcceleration::initializeEarlyRuntime();
+    // Cache and connection partitioning by top-level site.
+    dalinira::WebEngineHardwareAcceleration::applyPrivacyFlags();
+
+    // Register dalinira:// URL scheme before QGuiApplication
+    registerDaliNiraUrlSchemes();
+    // ... and the blocker's packaged redirect substitutes.
+    DaliNiraBlockerRequestInterceptor::registerResourceScheme();
+  } else {
+    // Do not set WEBKIT_DISABLE_DMABUF_RENDERER: WebKitGTK 2.52 then creates no
+    // AcceleratedBackingStore, and a page entering compositing mode crashes the
+    // UI process (AcceleratedBackingStore::update with a null store).
+    // Each WebKit tab is a native X11 child window (see WebKitEngineView).
+    // Keep its siblings (Settings and other internal Qt pages) alien.
+    QCoreApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+  }
 
   QApplication app(argc, argv);
   dalinira::application_identity::apply();
@@ -168,29 +289,19 @@ int main(int argc, char *argv[]) {
 
   // Initialize central i18n / multi-language system
   dalinira::i18n::LanguageManager::instance().initialize();
+  // One shared catalog drives both engines; a live switch refreshes every
+  // open window without recreating tabs.
+  dalinira::i18n::installApplicationRetranslator();
 
   const QIcon appIcon = BrowserIcons::appIcon();
   if (!appIcon.isNull()) {
     app.setWindowIcon(appIcon);
   }
 
-  // Apply dark palette theme
+  // The persisted appearance is shared by Chromium and WebKit browser chrome.
   app.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
-  QPalette darkPalette;
-  darkPalette.setColor(QPalette::Window, QColor(0x20, 0x21, 0x24));
-  darkPalette.setColor(QPalette::WindowText, QColor(0xf1, 0xf3, 0xf4));
-  darkPalette.setColor(QPalette::Base, QColor(0x18, 0x19, 0x1c));
-  darkPalette.setColor(QPalette::AlternateBase, QColor(0x2b, 0x2a, 0x33));
-  darkPalette.setColor(QPalette::ToolTipBase, QColor(0x2b, 0x2a, 0x33));
-  darkPalette.setColor(QPalette::ToolTipText, QColor(0xf1, 0xf3, 0xf4));
-  darkPalette.setColor(QPalette::Text, QColor(0xf1, 0xf3, 0xf4));
-  darkPalette.setColor(QPalette::Button, QColor(0x2b, 0x2a, 0x33));
-  darkPalette.setColor(QPalette::ButtonText, QColor(0xf1, 0xf3, 0xf4));
-  darkPalette.setColor(QPalette::BrightText, Qt::red);
-  darkPalette.setColor(QPalette::Link, QColor(0x8a, 0xb4, 0xf8));
-  darkPalette.setColor(QPalette::Highlight, QColor(0x8a, 0xb4, 0xf8));
-  darkPalette.setColor(QPalette::HighlightedText, QColor(0x20, 0x21, 0x24));
-  app.setPalette(darkPalette);
+  dalinira::layout::applyApplicationTheme(
+      &app, dalinira::layout::currentAppearanceTheme());
 
   // Load browser policy
   QString policyError;
@@ -205,8 +316,41 @@ int main(int argc, char *argv[]) {
 
   // Initialize Core Services
   BrowserProfileService profileService(dataDir, &policy, &app);
+
+  dalinira::engine::EngineStorageManager engineStorage(dataDir);
+
+  // Initialize ONLY the selected backend (single active engine per process)
+  if (initialEngine == dalinira::engine::EngineType::Chromium) {
+    auto chromiumBackend = std::make_unique<dalinira::engine::ChromiumBackend>(profileService.profile(), &app);
+    chromiumBackend->initialize(engineStorage);
+    dalinira::engine::EngineBackend::registerBackend(dalinira::engine::EngineType::Chromium, std::move(chromiumBackend));
+  }
+#if defined(DALINIRA_BUILD_WEBKIT)
+  else if (initialEngine == dalinira::engine::EngineType::WebKit) {
+    auto webkitBackend = std::make_unique<dalinira::engine::WebKitBackend>(&app);
+    webkitBackend->initialize(engineStorage);
+    // Network ad/tracker blocking through DaliNira's web process extension.
+    // It must be running before any web process starts.
+    if (!webkitBackend->enableNetworkFiltering())
+      qWarning() << "WebKit network filtering is unavailable; only cosmetic filtering will run.";
+    if (webkitBackend->webKitProfile()) {
+      QObject::connect(webkitBackend->webKitProfile(), &dalinira::engine::WebKitEngineProfile::downloadContextRequested,
+                       &profileService, &BrowserProfileService::handleDownloadContext);
+    }
+    dalinira::engine::EngineBackend::registerBackend(dalinira::engine::EngineType::WebKit, std::move(webkitBackend));
+    // WebKit's cookie store enforces the profile's cookie policy itself.
+    profileService.applyEngineCookiePolicy();
+  }
+#endif
+
   TabManager tabManager(&app);
-  SessionStore sessionStore(dataDir + "/tabs.session.json");
+  const QString initialEngineScope = (initialEngine == dalinira::engine::EngineType::WebKit)
+      ? QStringLiteral("webkit") : QStringLiteral("chromium");
+  // Chromium and WebKit are separate browsing workspaces with their own tabs.
+  // The session saved before workspaces existed becomes Chromium's, once;
+  // WebKit starts with a fresh New Tab.
+  SessionStore::migrateLegacySessionIfNeeded(dataDir);
+  SessionStore sessionStore(dataDir, initialEngineScope);
   auto *audioEffects = new WebAudioEffectsController(&app);
   auto *eqPresetRepo = new EqPresetRepository;
   auto *songFinderSettings = new SongFinderSettings(&app);
@@ -264,56 +408,147 @@ int main(int argc, char *argv[]) {
         bw->moveTab(fromIndex, toIndex);
       });
 
-  // Launch initial browser window
-  auto *window = new BrowserWindow(services);
-  const QByteArray savedWindowGeometry =
-      QSettings().value(QStringLiteral("browser/mainWindowGeometry")).toByteArray();
-  if (!savedWindowGeometry.isEmpty()) {
-    window->restoreGeometry(savedWindowGeometry);
-  }
-
-  // Restore session or ensure initial tab
-  bool restored = false;
-  if (policy.allowsSessionRestore() && QSettings().value(QStringLiteral("browser/restoreSession"), true).toBool()) {
-    const auto savedTabs = sessionStore.load();
-    if (!savedTabs.isEmpty()) {
-      window->restoreSession(savedTabs);
-      restored = true;
-    }
-  }
-  if (!restored) {
-    window->ensureInitialTab();
-  }
-
-  // Handle command line startup URL
+  // Parse command line startup URL if provided
+  QUrl startupUrl;
   for (int i = 1; i < argc; ++i) {
     const QString argument = QString::fromLocal8Bit(argv[i]).trimmed();
+    if (argument == QLatin1String("--engine") ||
+        argument == QLatin1String("--wait-for-pid")) {
+      ++i;
+      continue;
+    }
     if (argument.startsWith(QLatin1Char('-'))) continue;
     const QUrl candidate = QUrl::fromUserInput(argument);
     const QString scheme = candidate.scheme().toLower();
     if (candidate.isValid() && (scheme == QLatin1String("http") || scheme == QLatin1String("https")
                                 || scheme == QLatin1String("dalinira"))) {
-      window->openStartupUrl(candidate);
+      startupUrl = candidate;
       break;
     }
   }
 
-  QObject::connect(&app, &QCoreApplication::aboutToQuit, window, [window] {
-    window->saveSessionNow();
-    QSettings settings;
-    settings.setValue(QStringLiteral("browser/mainWindowGeometry"), window->saveGeometry());
-    settings.sync();
+  QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [] {
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+      if (auto *bw = qobject_cast<BrowserWindow *>(widget)) {
+        if (!bw->isMinimized()) {
+          bw->saveSessionNow();
+          QSettings settings;
+          settings.setValue(QStringLiteral("browser/mainWindowGeometry"), bw->saveGeometry());
+          settings.sync();
+          break;
+        }
+      }
+    }
   });
 
-  window->show();
-  QTimer::singleShot(1200, window, [window] { checkDefaultBrowser(window); });
+  const bool onboardingNeeded = forceStandaloneOnboarding ||
+      dalinira::onboarding::OnboardingManager::shouldShow();
+  if (onboardingNeeded && startupUrl.isEmpty()) {
+    // Show ONLY the dedicated standalone setup window (like Zen Browser)
+    auto *receiver = new dalinira::onboarding::ProfileDataReceiverAdapter(&profileService, &app);
+    auto *searchPrivacy = new dalinira::onboarding::ProfileSearchPrivacyAdapter(&profileService, &app);
+    auto *defaultIntegration = new dalinira::core::SystemDefaultBrowserIntegration(&app);
+
+    auto *onboardingWindow = new dalinira::onboarding::OnboardingWindow(
+        receiver, searchPrivacy, defaultIntegration);
+
+    QObject::connect(onboardingWindow, &dalinira::onboarding::OnboardingWindow::onboardingFinished,
+                     [services, initialEngine] {
+      // Check if user selected a different engine during onboarding
+      const QString preferredEngine = dalinira::onboarding::OnboardingManager::instance().selectedEngine();
+      const QString runningEngine = (initialEngine == dalinira::engine::EngineType::WebKit)
+          ? QStringLiteral("webkit") : QStringLiteral("chromium");
+
+      if (!preferredEngine.isEmpty() && preferredEngine != runningEngine) {
+        dalinira::engine::EngineResolver::setPersistedEngine(preferredEngine);
+
+        const QString program = QCoreApplication::applicationFilePath();
+        startDetachedQuietly(program, normalRelaunchArguments());
+        qApp->quit();
+        return;
+      }
+
+      // Apply selected layout and appearance theme
+      const QString preferredLayout = dalinira::onboarding::OnboardingManager::instance().selectedLayout();
+      const auto layoutMode = dalinira::layout::layoutModeFromString(
+          preferredLayout, dalinira::layout::BrowserLayoutMode::Classic);
+      dalinira::layout::setPersistedLayoutMode(layoutMode);
+
+      const QString preferredTheme = dalinira::onboarding::OnboardingManager::instance().selectedTheme();
+      const auto theme = dalinira::layout::appearanceThemeFromString(preferredTheme);
+      dalinira::layout::applyApplicationTheme(qobject_cast<QApplication *>(qApp), theme);
+
+      // Launch main browser window now that onboarding is completed
+      auto *mainWindow = new BrowserWindow(services);
+      const QByteArray savedWindowGeometry =
+          QSettings().value(QStringLiteral("browser/mainWindowGeometry")).toByteArray();
+      if (!savedWindowGeometry.isEmpty()) {
+        mainWindow->restoreGeometry(savedWindowGeometry);
+      }
+      mainWindow->addNewTab(QUrl(QStringLiteral("dalinira://newtab/")));
+      mainWindow->setAttribute(Qt::WA_DeleteOnClose);
+      mainWindow->show();
+      // No default-browser prompt on this run: setup just offered the choice
+      // (or the user skipped setup); the regular check runs from next start.
+    });
+
+    QObject::connect(onboardingWindow, &dalinira::onboarding::OnboardingWindow::onboardingDismissed,
+                     [&app] {
+      app.quit();
+    });
+
+    onboardingWindow->setAttribute(Qt::WA_DeleteOnClose);
+    onboardingWindow->show();
+  } else {
+    // Normal browser launch (or URL provided via command line)
+    auto *window = new BrowserWindow(services);
+    const QByteArray savedWindowGeometry =
+        QSettings().value(QStringLiteral("browser/mainWindowGeometry")).toByteArray();
+    if (!savedWindowGeometry.isEmpty()) {
+      window->restoreGeometry(savedWindowGeometry);
+    }
+
+    bool restored = false;
+    if (startupUrl.isEmpty() && policy.allowsSessionRestore() && QSettings().value(QStringLiteral("browser/restoreSession"), true).toBool()) {
+      const auto savedTabs = sessionStore.load(initialEngineScope);
+      if (!savedTabs.isEmpty()) {
+        window->restoreSession(savedTabs);
+        restored = true;
+      }
+    }
+    if (!restored) {
+      if (!startupUrl.isEmpty()) {
+        window->openStartupUrl(startupUrl);
+      } else {
+        window->ensureInitialTab();
+      }
+    }
+
+    window->setAttribute(Qt::WA_DeleteOnClose);
+    window->show();
+    QTimer::singleShot(1200, window, [window] { checkDefaultBrowser(window); });
+  }
 
   const int exitCode = app.exec();
-  const auto topLevelWidgets = QApplication::topLevelWidgets();
-  for (QWidget *w : topLevelWidgets) {
-    if (auto *bw = qobject_cast<BrowserWindow *>(w)) {
-      delete bw;
-    }
+
+  // A WebKitGTK view is a foreign native child window. Tear down every browser
+  // window first, then the selected backend, before QApplication dismantles
+  // the X11/GLib platform integration.
+  // Collect the windows first: deleting one also deletes top-level widgets
+  // it owns, which a raw list of top-level widgets would still hold.
+  QList<QPointer<BrowserWindow>> browserWindows;
+  for (QWidget *widget : QApplication::topLevelWidgets()) {
+    if (auto *browserWindow = qobject_cast<BrowserWindow *>(widget)) browserWindows.append(browserWindow);
   }
+  for (const QPointer<BrowserWindow> &browserWindow : std::as_const(browserWindows)) {
+    delete browserWindow.data();  // null once an earlier deletion took it
+  }
+  dalinira::engine::EngineBackend::shutdown();
+#if defined(DALINIRA_BUILD_WEBKIT)
+  // The windows are gone; a web process WebKit still keeps for a service
+  // worker must end before this process does.
+  if (initialEngine == dalinira::engine::EngineType::WebKit)
+    dalinira::engine::WebKitBackend::waitForRetainedWebProcesses();
+#endif
   return exitCode;
 }

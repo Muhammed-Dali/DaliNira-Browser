@@ -21,6 +21,14 @@ class WebAudioEffectsController;
 class LocalMediaPlayerPage final : public QWidget {
   Q_OBJECT
  public:
+  static QString playerHtml(const LocalMediaOpenRequest &request,
+                            const QUrl &mediaUrl,
+                            bool includeHeader = false,
+                            const QString &resolvedArtworkUrl = QString{},
+                            bool customControls = false);
+  static QString createOrUpdateWebKitPlayerHtml(const LocalMediaOpenRequest &request,
+                                                const QString &ffmpegPath = QString{});
+
   LocalMediaPlayerPage(const LocalMediaOpenRequest &request,
                        QWebEngineProfile *profile,
                        WebAudioEffectsController *audioEffects,

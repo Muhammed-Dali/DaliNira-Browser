@@ -6,8 +6,8 @@ DaliNira Browser actively maintains and patches the latest stable release line.
 
 | Version | Supported          | Notes |
 | ------- | ------------------ | ----- |
-| 7.2.x   | :white_check_mark: | Current stable branch |
-| < 7.2.1 | :x:                | Unsupported; please update to the latest release |
+| 8.0.x   | :white_check_mark: | Current stable branch |
+| < 8.0.0 | :x:                | Unsupported; please update to the latest release |
 
 ## Security Architecture Overview
 

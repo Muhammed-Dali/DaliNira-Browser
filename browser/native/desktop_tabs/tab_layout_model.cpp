@@ -96,6 +96,7 @@ QVector<TabGeometry> TabLayoutModel::computeLayout(
     geom.isPinned = items[i].isPinned;
     geom.isAudible = items[i].isAudible;
     geom.isLoading = items[i].isLoading;
+    geom.isSleeping = items[i].isSleeping;
     geom.isActive = (i == activeIndex);
     geom.isDragged = (i == draggedIndex);
 

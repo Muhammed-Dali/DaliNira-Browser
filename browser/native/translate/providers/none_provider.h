@@ -1,6 +1,7 @@
 #pragma once
 
 #include "translation_provider.h"
+#include "i18n/i18n.h"
 
 class NoneProvider final : public ITranslationProvider {
  public:
@@ -8,7 +9,7 @@ class NoneProvider final : public ITranslationProvider {
   ~NoneProvider() override = default;
 
   QString id() const override { return QStringLiteral("none"); }
-  QString displayName() const override { return QStringLiteral("Yapılandırılmamış"); }
+  QString displayName() const override { return I18n::text(QStringLiteral("translate.provider_not_configured")); }
   bool requiresApiKey() const override { return false; }
   bool isConfigured() const override { return false; }
 
@@ -22,7 +23,7 @@ class NoneProvider final : public ITranslationProvider {
     Q_UNUSED(sourceLang);
     Q_UNUSED(targetLang);
     if (callback) {
-      callback({false, {}, TranslationError::NotConfigured, QStringLiteral("Çeviri sağlayıcısı yapılandırılmamış.")});
+      callback({false, {}, TranslationError::NotConfigured, I18n::text(QStringLiteral("translate.provider_not_configured_error"))});
     }
   }
 };

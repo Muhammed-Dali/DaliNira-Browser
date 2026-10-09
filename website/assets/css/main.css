@@ -517,7 +517,7 @@ img, svg {
    ========================================================================== */
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 1.5rem;
 }
 
@@ -709,7 +709,7 @@ img, svg {
 
 .privacy-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: 2rem;
   margin-top: 2.5rem;
 }
@@ -850,7 +850,7 @@ img, svg {
    ========================================================================== */
 .download-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
   gap: 2rem;
 }
 
@@ -1196,6 +1196,18 @@ html[dir="rtl"] .spotlight-row.reverse > * {
     padding: 1.75rem;
   }
 
+  /* Longer Turkish and Arabic button labels must wrap instead of widening
+     the single column past the screen. */
+  .open-source-card {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 1.75rem;
+  }
+
+  .open-source-content .btn {
+    white-space: normal;
+    text-align: center;
+  }
+
   .footer-top {
     grid-template-columns: 1fr;
     gap: 2rem;
@@ -1212,4 +1224,14 @@ html[dir="rtl"] .spotlight-row.reverse > * {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Full-width call to action inside download cards (no inline styles: CSP). */
+.btn-block {
+  width: 100%;
+}
+
+/* Package list in the download card, styled like the spotlight bullets. */
+.download-list {
+  margin: 0.25rem 0 1.5rem;
 }

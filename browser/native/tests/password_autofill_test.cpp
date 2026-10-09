@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
   const QString fbOrigin = QStringLiteral("https://www.facebook.com");
   CredentialSecret fbSecret;
   fbSecret.origin = fbOrigin;
-  fbSecret.username = QStringLiteral("muhammeddali1453@gmail.com");
+  fbSecret.username = QStringLiteral("user@example.com");
   fbSecret.password = QStringLiteral("MySuperSecretFbPassword#2026");
   fbSecret.iconPngBase64 = QStringLiteral("ZmF2aWNvbg==");
   bool updated = false;
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
   const QString genericOrigin = QStringLiteral("https://accounts.example.org");
   CredentialSecret genericSecret;
   genericSecret.origin = genericOrigin;
-  genericSecret.username = QStringLiteral("user@example.org");
+  genericSecret.username = QStringLiteral("user@example.com");
   genericSecret.password = QStringLiteral("ExampleSecret#2026");
   assert(vaultManager.save(genericSecret, &updated));
 
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
     const auto records = vaultManager.forOrigin(QUrl(QStringLiteral("https://www.facebook.com/login/")));
     assert(records.size() == 1);
     assert(records.front().origin == fbOrigin);
-    assert(records.front().username == QStringLiteral("muhammeddali1453@gmail.com"));
+    assert(records.front().username == QStringLiteral("user@example.com"));
     std::cout << "[PASS] TEST 4: Vault unlocked credential lookup" << std::endl;
   }
 
@@ -102,11 +102,11 @@ int main(int argc, char **argv) {
     std::cout << "[RUN] TEST 5: Correct origin credential returned" << std::endl;
     const auto fbRecords = vaultManager.forOrigin(QUrl(QStringLiteral("https://www.facebook.com/")));
     assert(fbRecords.size() == 1);
-    assert(fbRecords.front().username == QStringLiteral("muhammeddali1453@gmail.com"));
+    assert(fbRecords.front().username == QStringLiteral("user@example.com"));
 
     const auto genRecords = vaultManager.forOrigin(QUrl(QStringLiteral("https://accounts.example.org/signin")));
     assert(genRecords.size() == 1);
-    assert(genRecords.front().username == QStringLiteral("user@example.org"));
+    assert(genRecords.front().username == QStringLiteral("user@example.com"));
     std::cout << "[PASS] TEST 5: Correct origin credential returned" << std::endl;
   }
 
@@ -306,11 +306,11 @@ int main(int argc, char **argv) {
     std::cout << "[RUN] TEST 18: Password not logged and cleared from memory" << std::endl;
     auto *view = reinterpret_cast<QWebEngineView *>(0x9999);
     controller.clearAllSensitiveData();
-    assert(!controller.isCandidatePending(view, fbOrigin, QStringLiteral("muhammeddali1453@gmail.com")));
+    assert(!controller.isCandidatePending(view, fbOrigin, QStringLiteral("user@example.com")));
 
     // When vault locks, all sensitive candidate data is cleared
     controller.onVaultLocked();
-    assert(!controller.isCandidatePending(view, fbOrigin, QStringLiteral("muhammeddali1453@gmail.com")));
+    assert(!controller.isCandidatePending(view, fbOrigin, QStringLiteral("user@example.com")));
     std::cout << "[PASS] TEST 18: Password not logged and cleared from memory" << std::endl;
   }
 
@@ -323,13 +323,13 @@ int main(int argc, char **argv) {
     std::cout << "[PASS] SECURITY TEST: Synthetic click cannot trigger fill" << std::endl;
   }
 
-  // SECURITY TEST 2 (Requirement 10.2): fake console prefix cannot trigger fill
+  // SECURITY TEST 2 (Requirement 10.2): an unbound bridge message cannot trigger fill
   {
-    std::cout << "[RUN] SECURITY TEST: Fake console prefix cannot trigger fill" << std::endl;
-    // Calling handleConsoleMessage with empty or mismatched token or fake origin must fail safely
-    const QString fakeMsg = QStringLiteral("DALINIRA_CREDENTIAL_FILL_REQUEST:{\"origin\":\"https://www.facebook.com\",\"token\":\"fake-token-attempt\"}");
-    assert(controller.handleConsoleMessage(nullptr, fakeMsg)); // Routed to handler, but rejected internally without crashing or filling
-    std::cout << "[PASS] SECURITY TEST: Fake console prefix cannot trigger fill" << std::endl;
+    std::cout << "[RUN] SECURITY TEST: Unbound bridge message cannot trigger fill" << std::endl;
+    // A bridge message without the BrowserWebPage identity must fail closed.
+    const QString fakeMsg = QStringLiteral("fill:{\"origin\":\"https://www.facebook.com\",\"token\":\"fake-token-attempt\"}");
+    assert(!controller.handleBridgeMessage(nullptr, fakeMsg));
+    std::cout << "[PASS] SECURITY TEST: Unbound bridge message cannot trigger fill" << std::endl;
   }
 
   // SECURITY TEST 3 (Requirement 10.3): wrong token rejected
@@ -369,6 +369,24 @@ int main(int argc, char **argv) {
     assert(!script.contains("console.info"));
     assert(!script.contains("console.warn"));
     assert(!script.contains("console.error"));
+    const QString captureScript = CredentialAutofillController::candidateCaptureScript().sourceCode();
+    assert(captureScript.contains("QWebChannel"));
+    assert(captureScript.contains("daliniraCredentials"));
+    assert(captureScript.contains("__daliniraCredentialSend"));
+    assert(!captureScript.contains("DALINIRA_CREDENTIAL"));
+    const qsizetype captureStart = captureScript.indexOf(QStringLiteral("(() => {\n    if (window.top"));
+    assert(captureStart >= 0);
+    const QString daliniraCaptureSource = captureScript.mid(captureStart);
+    assert(!daliniraCaptureSource.contains("console.log"));
+    assert(!daliniraCaptureSource.contains("console.info"));
+    assert(!daliniraCaptureSource.contains("console.warn"));
+    assert(!daliniraCaptureSource.contains("console.error"));
+    const QString webKitCapture = CredentialAutofillController::webKitCandidateCaptureSource();
+    assert(webKitCapture.contains("window.webkit.messageHandlers.daliniraCredentials"));
+    assert(webKitCapture.contains("window.top !== window"));
+    assert(webKitCapture.contains("event.isTrusted"));
+    assert(!webKitCapture.contains("QWebChannel"));
+    assert(!webKitCapture.contains("console."));
     std::cout << "[PASS] SECURITY TEST: Password never appears in log output" << std::endl;
   }
 
@@ -382,7 +400,7 @@ int main(int argc, char **argv) {
     assert(!buttonScript.contains("CredentialSecret"));
     assert(!buttonScript.contains(fbSecret.username));
     assert(!buttonScript.contains(fbSecret.password));
-    assert(!buttonScript.contains("muhammeddali1453@gmail.com"));
+    assert(!buttonScript.contains("user@example.com"));
     assert(!buttonScript.contains("MySuperSecretFbPassword#2026"));
     assert(!buttonScript.contains("data-username"));
     assert(!buttonScript.contains("data-password"));
@@ -1259,7 +1277,7 @@ int main(int argc, char **argv) {
     // Save credential ONLY for accounts.google.com
     CredentialSecret googleSecret;
     googleSecret.origin = QStringLiteral("https://accounts.google.com");
-    googleSecret.username = QStringLiteral("user@google.com");
+    googleSecret.username = QStringLiteral("user@example.com");
     googleSecret.password = QStringLiteral("GoogleSecret#2026");
     bool updated = false;
     assert(manager62.save(googleSecret, &updated));
@@ -1290,7 +1308,7 @@ int main(int argc, char **argv) {
     // Save credential for Facebook
     CredentialSecret fbSecret63;
     fbSecret63.origin = QStringLiteral("https://www.facebook.com");
-    fbSecret63.username = QStringLiteral("user@facebook.com");
+    fbSecret63.username = QStringLiteral("user@example.com");
     fbSecret63.password = QStringLiteral("FbSecret#2026");
     bool updated = false;
     assert(manager63.save(fbSecret63, &updated));
@@ -1328,7 +1346,7 @@ int main(int argc, char **argv) {
 
     CredentialSecret fbSecret64;
     fbSecret64.origin = QStringLiteral("https://www.facebook.com");
-    fbSecret64.username = QStringLiteral("user@facebook.com");
+    fbSecret64.username = QStringLiteral("user@example.com");
     fbSecret64.password = QStringLiteral("FbSecret#2026");
     bool updated = false;
     assert(manager64.save(fbSecret64, &updated));
@@ -1358,7 +1376,7 @@ int main(int argc, char **argv) {
 
     CredentialSecret fbSecret65;
     fbSecret65.origin = QStringLiteral("https://www.facebook.com");
-    fbSecret65.username = QStringLiteral("user@facebook.com");
+    fbSecret65.username = QStringLiteral("user@example.com");
     fbSecret65.password = QStringLiteral("FbSecret#2026");
     bool updated = false;
     assert(manager65.save(fbSecret65, &updated));
@@ -1394,7 +1412,7 @@ int main(int argc, char **argv) {
 
     CredentialSecret fbSecret66;
     fbSecret66.origin = QStringLiteral("https://www.facebook.com");
-    fbSecret66.username = QStringLiteral("user@facebook.com");
+    fbSecret66.username = QStringLiteral("user@example.com");
     fbSecret66.password = QStringLiteral("FbSecret#2026");
     bool updated = false;
     assert(manager66.save(fbSecret66, &updated));
@@ -1472,11 +1490,11 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"muhammet@gmail.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
-    assert(controller68.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
+    assert(controller68.handleBridgeMessage(testView->page(), candMsg));
 
-    const QString successMsg = QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}");
-    assert(controller68.handleConsoleMessage(testView->page(), successMsg));
+    const QString successMsg = QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}");
+    assert(controller68.handleBridgeMessage(testView->page(), successMsg));
 
     // When no vault exists, system must be completely silent: no bubble, no pending credentials
     assert(controller68.activeSaveBubble() == nullptr);
@@ -1499,8 +1517,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"muhammet@gmail.com\",\"password\":\"WrongPassword\"}");
-    assert(controller69.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"WrongPassword\"}");
+    assert(controller69.handleBridgeMessage(testView->page(), candMsg));
 
     // Login failed: no success hint sent, and page reloaded same login URL
     controller69.onPageLoadFinished(testView, true);
@@ -1525,9 +1543,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"muhammet@gmail.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
-    controller70.handleConsoleMessage(testView->page(), candMsg);
-    controller70.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
+    controller70.handleBridgeMessage(testView->page(), candMsg);
+    controller70.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     // No bubble, candidate count is zero
     assert(controller70.activeSaveBubble() == nullptr);
@@ -1550,9 +1568,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"muhammet@gmail.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
-    controller71.handleConsoleMessage(testView->page(), candMsg);
-    controller71.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
+    controller71.handleBridgeMessage(testView->page(), candMsg);
+    controller71.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     assert(controller71.activeSaveBubble() == nullptr);
     assert(controller71.pendingCandidateCount() == 0);
@@ -1583,9 +1601,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"muhammet@gmail.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
-    controller72.handleConsoleMessage(testView->page(), candMsg);
-    controller72.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
+    controller72.handleBridgeMessage(testView->page(), candMsg);
+    controller72.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     assert(controller72.activeSaveBubble() == nullptr);
     assert(controller72.pendingCandidateCount() == 0);
@@ -1610,9 +1628,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"muhammet@gmail.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
-    controller73.handleConsoleMessage(testView->page(), candMsg);
-    controller73.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
+    controller73.handleBridgeMessage(testView->page(), candMsg);
+    controller73.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     assert(controller73.activeSaveBubble() == nullptr);
     assert(controller73.pendingCandidateCount() == 0);
@@ -1634,10 +1652,10 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"SecretPass123\"}");
-    controller74.handleConsoleMessage(testView->page(), candMsg);
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"SecretPass123\"}");
+    controller74.handleBridgeMessage(testView->page(), candMsg);
 
-    const QString key = controller74.candidateKey(testView, QStringLiteral("https://www.facebook.com"), QStringLiteral("user@facebook.com"));
+    const QString key = controller74.candidateKey(testView, QStringLiteral("https://www.facebook.com"), QStringLiteral("user@example.com"));
     assert(controller74.hasPendingCandidate(key));
 
     // Clear sensitive data / simulate timeout
@@ -1662,9 +1680,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"SecretPass123\",\"submitted\":true}");
-    controller75.handleConsoleMessage(testView->page(), candMsg);
-    controller75.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"SecretPass123\",\"submitted\":true}");
+    controller75.handleBridgeMessage(testView->page(), candMsg);
+    controller75.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
     assert(controller75.activeSaveBubble() != nullptr);
 
     // Tab closes
@@ -1688,12 +1706,12 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"SecretPass123\",\"submitted\":true}");
-    controller76.handleConsoleMessage(testView->page(), candMsg);
-    controller76.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"SecretPass123\",\"submitted\":true}");
+    controller76.handleBridgeMessage(testView->page(), candMsg);
+    controller76.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
     assert(controller76.activeSaveBubble() != nullptr);
     assert(controller76.activeSaveBubble()->origin() == QStringLiteral("https://www.facebook.com"));
-    assert(controller76.activeSaveBubble()->username() == QStringLiteral("user@facebook.com"));
+    assert(controller76.activeSaveBubble()->username() == QStringLiteral("user@example.com"));
 
     // User navigates / page redirects to another site or path
     testView->setUrl(QUrl(QStringLiteral("https://accounts.example.net/success")));
@@ -1705,7 +1723,7 @@ int main(int argc, char **argv) {
     assert(controller76.pendingCandidateCount() == 1);
     // Origin is NOT mutated to the redirect destination!
     assert(controller76.activeSaveBubble()->origin() == QStringLiteral("https://www.facebook.com"));
-    assert(controller76.activeSaveBubble()->username() == QStringLiteral("user@facebook.com"));
+    assert(controller76.activeSaveBubble()->username() == QStringLiteral("user@example.com"));
     assert(controller76.activeSaveBubble()->isPrimaryButtonEnabled());
 
     // Explicit Save resolves it
@@ -1716,7 +1734,7 @@ int main(int argc, char **argv) {
     // Verify it was saved under the ORIGINAL origin in the vault
     const auto records = manager76.forOrigin(QUrl(QStringLiteral("https://www.facebook.com")));
     assert(records.size() == 1);
-    assert(records[0].username == QStringLiteral("user@facebook.com"));
+    assert(records[0].username == QStringLiteral("user@example.com"));
 
     // And verify NOTHING was saved under the redirect destination
     const auto redirectRecords = manager76.forOrigin(QUrl(QStringLiteral("https://accounts.example.net")));
@@ -1740,9 +1758,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://github.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://github.com\",\"username\":\"octocat\",\"password\":\"GithubSecret#2026\",\"submitted\":true}");
-    controller77.handleConsoleMessage(testView->page(), candMsg);
-    controller77.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://github.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://github.com\",\"username\":\"octocat\",\"password\":\"GithubSecret#2026\",\"submitted\":true}");
+    controller77.handleBridgeMessage(testView->page(), candMsg);
+    controller77.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://github.com\"}"));
 
     assert(controller77.activeSaveBubble() != nullptr);
     assert(controller77.activeSaveBubble()->mode() == CredentialSaveMode::NewCredential);
@@ -1774,9 +1792,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://github.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://github.com\",\"username\":\"octocat\",\"password\":\"GithubSecret#2026\",\"submitted\":true}");
-    controller78.handleConsoleMessage(testView->page(), candMsg);
-    controller78.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://github.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://github.com\",\"username\":\"octocat\",\"password\":\"GithubSecret#2026\",\"submitted\":true}");
+    controller78.handleBridgeMessage(testView->page(), candMsg);
+    controller78.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://github.com\"}"));
 
     assert(controller78.activeSaveBubble() != nullptr);
     controller78.activeSaveBubble()->clickPrimary();
@@ -1807,9 +1825,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://github.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://github.com\",\"username\":\"octocat\",\"password\":\"GithubSecret#2026\",\"submitted\":true}");
-    controller79.handleConsoleMessage(testView->page(), candMsg);
-    controller79.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://github.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://github.com\",\"username\":\"octocat\",\"password\":\"GithubSecret#2026\",\"submitted\":true}");
+    controller79.handleBridgeMessage(testView->page(), candMsg);
+    controller79.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://github.com\"}"));
 
     assert(controller79.activeSaveBubble() != nullptr);
     controller79.activeSaveBubble()->clickSecondary();
@@ -1832,7 +1850,7 @@ int main(int argc, char **argv) {
 
     CredentialSecret oldSecret;
     oldSecret.origin = QStringLiteral("https://www.facebook.com");
-    oldSecret.username = QStringLiteral("muhammet@gmail.com");
+    oldSecret.username = QStringLiteral("user@example.com");
     oldSecret.password = QStringLiteral("OldSecret#2026");
     bool updated = false;
     assert(manager80.save(oldSecret, &updated));
@@ -1842,15 +1860,15 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     // First verify: if password is identical, NO prompt is shown!
-    const QString sameCand = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"muhammet@gmail.com\",\"password\":\"OldSecret#2026\",\"submitted\":true}");
-    controller80.handleConsoleMessage(testView->page(), sameCand);
-    controller80.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString sameCand = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"OldSecret#2026\",\"submitted\":true}");
+    controller80.handleBridgeMessage(testView->page(), sameCand);
+    controller80.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
     assert(controller80.activeSaveBubble() == nullptr);
 
     // Now user changed password
-    const QString changedCand = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"muhammet@gmail.com\",\"password\":\"BrandNewSecret#2026\",\"submitted\":true}");
-    controller80.handleConsoleMessage(testView->page(), changedCand);
-    controller80.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString changedCand = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"BrandNewSecret#2026\",\"submitted\":true}");
+    controller80.handleBridgeMessage(testView->page(), changedCand);
+    controller80.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     assert(controller80.activeSaveBubble() != nullptr);
     assert(controller80.activeSaveBubble()->mode() == CredentialSaveMode::UpdatePassword);
@@ -1872,7 +1890,7 @@ int main(int argc, char **argv) {
 
     CredentialSecret oldSecret;
     oldSecret.origin = QStringLiteral("https://www.facebook.com");
-    oldSecret.username = QStringLiteral("muhammet@gmail.com");
+    oldSecret.username = QStringLiteral("user@example.com");
     oldSecret.password = QStringLiteral("OldSecret#2026");
     bool updated = false;
     assert(manager81.save(oldSecret, &updated));
@@ -1881,9 +1899,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString changedCand = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"muhammet@gmail.com\",\"password\":\"BrandNewSecret#2026\",\"submitted\":true}");
-    controller81.handleConsoleMessage(testView->page(), changedCand);
-    controller81.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString changedCand = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"BrandNewSecret#2026\",\"submitted\":true}");
+    controller81.handleBridgeMessage(testView->page(), changedCand);
+    controller81.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     assert(controller81.activeSaveBubble() != nullptr);
     controller81.activeSaveBubble()->clickPrimary();
@@ -1911,7 +1929,7 @@ int main(int argc, char **argv) {
 
     CredentialSecret user1Secret;
     user1Secret.origin = QStringLiteral("https://www.facebook.com");
-    user1Secret.username = QStringLiteral("user1@gmail.com");
+    user1Secret.username = QStringLiteral("user1@example.com");
     user1Secret.password = QStringLiteral("Secret1#2026");
     bool updated = false;
     assert(manager82.save(user1Secret, &updated));
@@ -1920,9 +1938,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString user2Cand = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user2@gmail.com\",\"password\":\"Secret2#2026\",\"submitted\":true}");
-    controller82.handleConsoleMessage(testView->page(), user2Cand);
-    controller82.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString user2Cand = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user2@example.com\",\"password\":\"Secret2#2026\",\"submitted\":true}");
+    controller82.handleBridgeMessage(testView->page(), user2Cand);
+    controller82.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     assert(controller82.activeSaveBubble() != nullptr);
     assert(controller82.activeSaveBubble()->mode() == CredentialSaveMode::NewCredential);
@@ -1950,9 +1968,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.reddit.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.reddit.com\",\"username\":\"redditor\",\"password\":\"RedditSecret#2026\",\"submitted\":true}");
-    controller83.handleConsoleMessage(testView->page(), candMsg);
-    controller83.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.reddit.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.reddit.com\",\"username\":\"redditor\",\"password\":\"RedditSecret#2026\",\"submitted\":true}");
+    controller83.handleBridgeMessage(testView->page(), candMsg);
+    controller83.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.reddit.com\"}"));
 
     assert(controller83.activeSaveBubble() != nullptr);
     controller83.activeSaveBubble()->clickPrimary();
@@ -1980,9 +1998,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.reddit.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.reddit.com\",\"username\":\"redditor\",\"password\":\"RedditSecret#2026\",\"submitted\":true}");
-    controller84.handleConsoleMessage(testView->page(), candMsg);
-    controller84.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.reddit.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.reddit.com\",\"username\":\"redditor\",\"password\":\"RedditSecret#2026\",\"submitted\":true}");
+    controller84.handleBridgeMessage(testView->page(), candMsg);
+    controller84.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.reddit.com\"}"));
 
     assert(controller84.activeSaveBubble() != nullptr);
     controller84.activeSaveBubble()->clickPrimary();
@@ -2021,9 +2039,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.reddit.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.reddit.com\",\"username\":\"redditor\",\"password\":\"RedditSecret#2026\",\"submitted\":true}");
-    controller85.handleConsoleMessage(testView->page(), candMsg);
-    controller85.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.reddit.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.reddit.com\",\"username\":\"redditor\",\"password\":\"RedditSecret#2026\",\"submitted\":true}");
+    controller85.handleBridgeMessage(testView->page(), candMsg);
+    controller85.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.reddit.com\"}"));
 
     controller85.activeSaveBubble()->clickPrimary();
     assert(controller85.activeUnlockDialog() != nullptr);
@@ -2050,9 +2068,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.reddit.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.reddit.com\",\"username\":\"redditor\",\"password\":\"RedditSecret#2026\",\"submitted\":true}");
-    controller86.handleConsoleMessage(testView->page(), candMsg);
-    controller86.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.reddit.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.reddit.com\",\"username\":\"redditor\",\"password\":\"RedditSecret#2026\",\"submitted\":true}");
+    controller86.handleBridgeMessage(testView->page(), candMsg);
+    controller86.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.reddit.com\"}"));
 
     controller86.activeSaveBubble()->clickPrimary();
     assert(controller86.activeUnlockDialog() != nullptr);
@@ -2079,15 +2097,15 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://app.spa.example/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://app.spa.example\",\"username\":\"spauser\",\"password\":\"SpaSecret#2026\",\"submitted\":true}");
-    controller87.handleConsoleMessage(testView->page(), candMsg);
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://app.spa.example\",\"username\":\"spauser\",\"password\":\"SpaSecret#2026\",\"submitted\":true}");
+    controller87.handleBridgeMessage(testView->page(), candMsg);
 
     // Two success signals fired in rapid succession by SPA mutations
-    controller87.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://app.spa.example\"}"));
+    controller87.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://app.spa.example\"}"));
     auto *firstBubble = controller87.activeSaveBubble();
     assert(firstBubble != nullptr);
 
-    controller87.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://app.spa.example\"}"));
+    controller87.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://app.spa.example\"}"));
     auto *secondBubble = controller87.activeSaveBubble();
     assert(firstBubble == secondBubble); // Reused / deduped, no duplicate bubble
 
@@ -2108,9 +2126,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@fb.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
-    controller88.handleConsoleMessage(testView->page(), candMsg);
-    controller88.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
+    controller88.handleBridgeMessage(testView->page(), candMsg);
+    controller88.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
     assert(controller88.activeSaveBubble() != nullptr);
 
     // Tab switch occurs
@@ -2134,9 +2152,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@fb.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
-    controller89.handleConsoleMessage(testView->page(), candMsg);
-    controller89.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"FbSecret#2026\",\"submitted\":true}");
+    controller89.handleBridgeMessage(testView->page(), candMsg);
+    controller89.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
     assert(controller89.activeSaveBubble() != nullptr);
     assert(controller89.activeSaveBubble()->origin() == QStringLiteral("https://www.facebook.com"));
 
@@ -2147,7 +2165,7 @@ int main(int argc, char **argv) {
     // Prompt MUST NOT be silently dismissed, AND origin MUST NOT be hijacked by evil.com
     assert(controller89.activeSaveBubble() != nullptr);
     assert(controller89.activeSaveBubble()->origin() == QStringLiteral("https://www.facebook.com"));
-    assert(controller89.activeSaveBubble()->username() == QStringLiteral("user@fb.com"));
+    assert(controller89.activeSaveBubble()->username() == QStringLiteral("user@example.com"));
 
     // User chooses to save
     controller89.activeSaveBubble()->clickPrimary();
@@ -2178,9 +2196,9 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://trusted.example/page")));
 
     // Subframe candidate with mismatched origin
-    const QString subframeCand = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://iframe.untrusted.com\",\"username\":\"victim\",\"password\":\"StolenPass\",\"submitted\":true}");
-    controller90.handleConsoleMessage(testView->page(), subframeCand);
-    controller90.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://iframe.untrusted.com\"}"));
+    const QString subframeCand = QStringLiteral("candidate:{\"origin\":\"https://iframe.untrusted.com\",\"username\":\"victim\",\"password\":\"StolenPass\",\"submitted\":true}");
+    controller90.handleBridgeMessage(testView->page(), subframeCand);
+    controller90.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://iframe.untrusted.com\"}"));
 
     // Prompt MUST NOT be shown for mismatched origin
     assert(controller90.activeSaveBubble() == nullptr);
@@ -2203,8 +2221,8 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://site.example/login")));
 
     // Synthetic console message trying to call save action
-    const QString evilMsg = QStringLiteral("DALINIRA_CREDENTIAL_SAVE_ACTION:{\"origin\":\"https://site.example\"}");
-    assert(!controller91.handleConsoleMessage(testView->page(), evilMsg));
+    const QString evilMsg = QStringLiteral("save-action:{\"origin\":\"https://site.example\"}");
+    assert(!controller91.handleBridgeMessage(testView->page(), evilMsg));
 
     controller91.onViewClosed(testView);
     delete testView;
@@ -2223,9 +2241,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret#2026\",\"submitted\":true}");
-    controller92.handleConsoleMessage(testView->page(), candMsg);
-    controller92.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret#2026\",\"submitted\":true}");
+    controller92.handleBridgeMessage(testView->page(), candMsg);
+    controller92.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     assert(controller92.activeSaveBubble() != nullptr);
     controller92.activeSaveBubble()->clickPrimary();
@@ -2234,7 +2252,7 @@ int main(int argc, char **argv) {
     const auto allRecords = manager92.list();
     assert(allRecords.size() == 1);
     assert(allRecords.front().origin == QStringLiteral("https://www.facebook.com"));
-    assert(allRecords.front().username == QStringLiteral("user@facebook.com"));
+    assert(allRecords.front().username == QStringLiteral("user@example.com"));
     assert(manager92.hasMatchingCredential(testView->url()));
 
     controller92.onViewClosed(testView);
@@ -2254,9 +2272,9 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret#2026\",\"submitted\":true}");
-    controller93.handleConsoleMessage(testView->page(), candMsg);
-    controller93.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret#2026\",\"submitted\":true}");
+    controller93.handleBridgeMessage(testView->page(), candMsg);
+    controller93.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     assert(controller93.activeSaveBubble() != nullptr);
 
@@ -2307,9 +2325,9 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     const QString sensitivePassword = QStringLiteral("SuperSecretPasswordNeverOnDisk#9999");
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"%1\",\"submitted\":true}").arg(sensitivePassword);
-    controller95.handleConsoleMessage(testView->page(), candMsg);
-    controller95.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"%1\",\"submitted\":true}").arg(sensitivePassword);
+    controller95.handleBridgeMessage(testView->page(), candMsg);
+    controller95.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     // Check all files in directory: NO file must contain sensitivePassword
     QDir dir(dir95.path());
@@ -2339,9 +2357,9 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     const QString secretPass = QStringLiteral("EncryptedOnlyPassphrase#2026");
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"%1\",\"submitted\":true}").arg(secretPass);
-    controller96.handleConsoleMessage(testView->page(), candMsg);
-    controller96.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"%1\",\"submitted\":true}").arg(secretPass);
+    controller96.handleBridgeMessage(testView->page(), candMsg);
+    controller96.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
 
     controller96.activeSaveBubble()->clickPrimary();
 
@@ -2381,7 +2399,7 @@ int main(int argc, char **argv) {
     // 3. Credential added -> key icon available
     CredentialSecret secret;
     secret.origin = QStringLiteral("https://www.facebook.com");
-    secret.username = QStringLiteral("user@facebook.com");
+    secret.username = QStringLiteral("user@example.com");
     secret.password = QStringLiteral("FbSecret#2026");
     bool updated = false;
     assert(manager97.save(secret, &updated));
@@ -2408,8 +2426,8 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     // Site eye button clicked: user typed credentials, candidate captured without submit
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret123\",\"submitted\":false}");
-    assert(controller98.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret123\",\"submitted\":false}");
+    assert(controller98.handleBridgeMessage(testView->page(), candMsg));
 
     // No submit attempt must be registered
     assert(!controller98.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
@@ -2435,8 +2453,8 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     // Candidate staged/captured without submit
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret123\",\"submitted\":false}");
-    assert(controller99.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret123\",\"submitted\":false}");
+    assert(controller99.handleBridgeMessage(testView->page(), candMsg));
 
     // Eye toggle changes input type password -> text (DOM mutation occurs, but no submit)
     assert(!controller99.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
@@ -2459,8 +2477,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret123\",\"submitted\":false}");
-    assert(controller100.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret123\",\"submitted\":false}");
+    assert(controller100.handleBridgeMessage(testView->page(), candMsg));
 
     // Eye toggle changes back text -> password
     assert(!controller100.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
@@ -2483,8 +2501,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret123\",\"submitted\":false}");
-    assert(controller101.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret123\",\"submitted\":false}");
+    assert(controller101.handleBridgeMessage(testView->page(), candMsg));
 
     // Page DOM mutated (e.g. tooltip, dropdown, re-render)
     assert(!controller101.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
@@ -2507,12 +2525,12 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret123\",\"submitted\":false}");
-    assert(controller102.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret123\",\"submitted\":false}");
+    assert(controller102.handleBridgeMessage(testView->page(), candMsg));
 
     // Spurious or malicious success hint emitted without submit
-    const QString hintMsg = QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}");
-    assert(controller102.handleConsoleMessage(testView->page(), hintMsg));
+    const QString hintMsg = QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}");
+    assert(controller102.handleBridgeMessage(testView->page(), hintMsg));
 
     // Gated! No save bubble!
     assert(controller102.activeSaveBubble() == nullptr);
@@ -2535,17 +2553,17 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     // 1. Candidate captured
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret123\",\"submitted\":false}");
-    assert(controller103.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret123\",\"submitted\":false}");
+    assert(controller103.handleBridgeMessage(testView->page(), candMsg));
 
     // 2. Submit event occurs
-    const QString submitMsg = QStringLiteral("DALINIRA_CREDENTIAL_SUBMIT:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\"}");
-    assert(controller103.handleConsoleMessage(testView->page(), submitMsg));
+    const QString submitMsg = QStringLiteral("submit:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\"}");
+    assert(controller103.handleBridgeMessage(testView->page(), submitMsg));
     assert(controller103.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
 
     // 3. Success hint emitted
-    const QString hintMsg = QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}");
-    assert(controller103.handleConsoleMessage(testView->page(), hintMsg));
+    const QString hintMsg = QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}");
+    assert(controller103.handleBridgeMessage(testView->page(), hintMsg));
 
     // Bubble shown!
     assert(controller103.activeSaveBubble() != nullptr);
@@ -2568,8 +2586,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret123\",\"submitted\":true}");
-    assert(controller104.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret123\",\"submitted\":true}");
+    assert(controller104.handleBridgeMessage(testView->page(), candMsg));
     assert(controller104.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
 
     // Navigation occurs to dashboard/feed
@@ -2595,8 +2613,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"WrongPass123\",\"submitted\":true}");
-    assert(controller105.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"WrongPass123\",\"submitted\":true}");
+    assert(controller105.handleBridgeMessage(testView->page(), candMsg));
 
     // Login fails: page reloaded / stays on login page with error message, no success hint
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login?error=invalid_password")));
@@ -2623,19 +2641,19 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     // Double-submit occurs (user clicks quickly or Enter + click)
-    const QString submit1 = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Pass#2026\",\"submitted\":true,\"nonce\":\"nonce1\"}");
-    const QString submit2 = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Pass#2026\",\"submitted\":true,\"nonce\":\"nonce2\"}");
-    assert(controller106.handleConsoleMessage(testView->page(), submit1));
-    assert(controller106.handleConsoleMessage(testView->page(), submit2));
+    const QString submit1 = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Pass#2026\",\"submitted\":true,\"nonce\":\"nonce1\"}");
+    const QString submit2 = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Pass#2026\",\"submitted\":true,\"nonce\":\"nonce2\"}");
+    assert(controller106.handleBridgeMessage(testView->page(), submit1));
+    assert(controller106.handleBridgeMessage(testView->page(), submit2));
 
     // Success hint arrives
-    const QString hint = QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}");
-    assert(controller106.handleConsoleMessage(testView->page(), hint));
+    const QString hint = QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}");
+    assert(controller106.handleBridgeMessage(testView->page(), hint));
     auto *bubble1 = controller106.activeSaveBubble();
     assert(bubble1 != nullptr);
 
     // Second success hint arrives
-    assert(controller106.handleConsoleMessage(testView->page(), hint));
+    assert(controller106.handleBridgeMessage(testView->page(), hint));
     auto *bubble2 = controller106.activeSaveBubble();
     assert(bubble1 == bubble2); // Exactly one bubble, not duplicated
 
@@ -2659,8 +2677,8 @@ int main(int argc, char **argv) {
     // Unrelated form submit (newsletter / search form, no password candidate)
     assert(!controller107.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://news.example.com")));
 
-    const QString hint = QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://news.example.com\"}");
-    controller107.handleConsoleMessage(testView->page(), hint);
+    const QString hint = QStringLiteral("success:{\"origin\":\"https://news.example.com\"}");
+    controller107.handleBridgeMessage(testView->page(), hint);
 
     assert(controller107.activeSaveBubble() == nullptr);
 
@@ -2682,11 +2700,11 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://site.example/login")));
 
     // Synthetic attempt without candidate in memory
-    const QString fakeSubmit = QStringLiteral("DALINIRA_CREDENTIAL_SUBMIT:{\"origin\":\"https://site.example\",\"username\":\"evil\"}");
-    controller108.handleConsoleMessage(testView->page(), fakeSubmit);
+    const QString fakeSubmit = QStringLiteral("submit:{\"origin\":\"https://site.example\",\"username\":\"evil\"}");
+    controller108.handleBridgeMessage(testView->page(), fakeSubmit);
 
     // Later success hint
-    controller108.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://site.example\"}"));
+    controller108.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://site.example\"}"));
     assert(controller108.activeSaveBubble() == nullptr);
 
     controller108.onViewClosed(testView);
@@ -2709,14 +2727,14 @@ int main(int argc, char **argv) {
     tabB->setUrl(QUrl(QStringLiteral("https://www.facebook.com/other")));
 
     // Tab A submits login
-    const QString candA = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"userA@facebook.com\",\"password\":\"PassA#2026\",\"submitted\":true}");
-    assert(controller109.handleConsoleMessage(tabA->page(), candA));
+    const QString candA = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"userA@example.com\",\"password\":\"PassA#2026\",\"submitted\":true}");
+    assert(controller109.handleBridgeMessage(tabA->page(), candA));
     assert(controller109.hasActiveSubmittedLoginAttempt(tabA, QStringLiteral("https://www.facebook.com")));
     assert(!controller109.hasActiveSubmittedLoginAttempt(tabB, QStringLiteral("https://www.facebook.com")));
 
     // Tab B emits success hint
-    const QString hintB = QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}");
-    assert(controller109.handleConsoleMessage(tabB->page(), hintB));
+    const QString hintB = QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}");
+    assert(controller109.handleBridgeMessage(tabB->page(), hintB));
 
     // Tab B had no submitted attempt, so Tab A must NOT be triggered by Tab B
     assert(controller109.activeSaveBubble() == nullptr);
@@ -2740,8 +2758,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@facebook.com\",\"password\":\"Secret#2026\",\"submitted\":true}");
-    assert(controller110.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"Secret#2026\",\"submitted\":true}");
+    assert(controller110.handleBridgeMessage(testView->page(), candMsg));
     assert(controller110.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
 
     // Stale timeout occurs / sensitive data prune
@@ -2749,8 +2767,8 @@ int main(int argc, char **argv) {
     assert(!controller110.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
 
     // Later mutation emits success hint
-    const QString hintMsg = QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}");
-    controller110.handleConsoleMessage(testView->page(), hintMsg);
+    const QString hintMsg = QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}");
+    controller110.handleBridgeMessage(testView->page(), hintMsg);
 
     // Save bubble must NOT be shown
     assert(controller110.activeSaveBubble() == nullptr);
@@ -2773,8 +2791,8 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login/")));
 
     // 1. Submit login on /login/
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"fbuser@example.com\",\"password\":\"SecureFb#111\",\"submitted\":true}");
-    assert(controller111.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"fbuser@example.com\",\"password\":\"SecureFb#111\",\"submitted\":true}");
+    assert(controller111.handleBridgeMessage(testView->page(), candMsg));
     assert(controller111.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
 
     // 2. Same-origin redirect to root /
@@ -2802,8 +2820,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login/")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"feeduser@example.com\",\"password\":\"FeedPass#112\",\"submitted\":true}");
-    assert(controller112.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"feeduser@example.com\",\"password\":\"FeedPass#112\",\"submitted\":true}");
+    assert(controller112.handleBridgeMessage(testView->page(), candMsg));
     assert(controller112.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
 
     // Redirect to authenticated /feed
@@ -2831,8 +2849,8 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://facebook.com/login")));
 
     // Candidate submitted on apex domain facebook.com
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://facebook.com\",\"username\":\"crosssub@example.com\",\"password\":\"Pass#113\",\"submitted\":true}");
-    assert(controller113.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://facebook.com\",\"username\":\"crosssub@example.com\",\"password\":\"Pass#113\",\"submitted\":true}");
+    assert(controller113.handleBridgeMessage(testView->page(), candMsg));
     assert(controller113.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://facebook.com")));
 
     // URL changes to www.facebook.com/home
@@ -2859,8 +2877,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login/")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"survive@example.com\",\"password\":\"SurvivePass#114\",\"submitted\":true}");
-    assert(controller114.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"survive@example.com\",\"password\":\"SurvivePass#114\",\"submitted\":true}");
+    assert(controller114.handleBridgeMessage(testView->page(), candMsg));
 
     // Intermediate navigation to login checkpoint (isLoginOrErrorUrl is true)
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login/checkpoint")));
@@ -2893,15 +2911,15 @@ int main(int argc, char **argv) {
     // User starts on root homepage where login form is embedded
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"rootlogin@example.com\",\"password\":\"RootPass#115\",\"submitted\":true}");
-    assert(controller115.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"rootlogin@example.com\",\"password\":\"RootPass#115\",\"submitted\":true}");
+    assert(controller115.handleBridgeMessage(testView->page(), candMsg));
     assert(controller115.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
 
     // Page reloads / completes load at root homepage (authenticated state)
     // A same-URL load alone is ambiguous; the final DOM success signal confirms it.
     controller115.onPageLoadFinished(testView, true);
     assert(controller115.activeSaveBubble() == nullptr);
-    controller115.handleConsoleMessage(testView->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}"));
+    controller115.handleBridgeMessage(testView->page(), QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}"));
     assert(controller115.activeSaveBubble() != nullptr);
 
     controller115.onViewClosed(testView);
@@ -2921,13 +2939,13 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"spauser@example.com\",\"password\":\"SpaPass#116\",\"submitted\":true}");
-    assert(controller116.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"spauser@example.com\",\"password\":\"SpaPass#116\",\"submitted\":true}");
+    assert(controller116.handleBridgeMessage(testView->page(), candMsg));
     assert(controller116.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
 
     // SPA DOM update triggers success hint
-    const QString hint = QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://www.facebook.com\"}");
-    assert(controller116.handleConsoleMessage(testView->page(), hint));
+    const QString hint = QStringLiteral("success:{\"origin\":\"https://www.facebook.com\"}");
+    assert(controller116.handleBridgeMessage(testView->page(), hint));
     assert(controller116.activeSaveBubble() != nullptr);
 
     controller116.onViewClosed(testView);
@@ -2948,8 +2966,8 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login/")));
 
     // Submit with wrong password
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"WrongPass#117\",\"submitted\":true}");
-    assert(controller117.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"user@example.com\",\"password\":\"WrongPass#117\",\"submitted\":true}");
+    assert(controller117.handleBridgeMessage(testView->page(), candMsg));
 
     // Redirect to login failure page
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login/?error=invalid_password")));
@@ -2977,8 +2995,8 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     // User types in fields without submitting (submitted: false)
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"nosubmit@example.com\",\"password\":\"NoSubmit#118\",\"submitted\":false}");
-    assert(controller118.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"nosubmit@example.com\",\"password\":\"NoSubmit#118\",\"submitted\":false}");
+    assert(controller118.handleBridgeMessage(testView->page(), candMsg));
     assert(!controller118.hasActiveSubmittedLoginAttempt(testView, QStringLiteral("https://www.facebook.com")));
 
     // Navigates away without submitting
@@ -3007,8 +3025,8 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     // Candidate captured during typing, user toggled eye icon
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"eyeuser@example.com\",\"password\":\"EyeToggle#119\",\"submitted\":false}");
-    assert(controller119.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"eyeuser@example.com\",\"password\":\"EyeToggle#119\",\"submitted\":false}");
+    assert(controller119.handleBridgeMessage(testView->page(), candMsg));
 
     // Navigates to unrelated website
     testView->setUrl(QUrl(QStringLiteral("https://unrelated.example.com/")));
@@ -3035,8 +3053,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"novault@example.com\",\"password\":\"NoVault#120\",\"submitted\":true}");
-    assert(controller120.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"novault@example.com\",\"password\":\"NoVault#120\",\"submitted\":true}");
+    assert(controller120.handleBridgeMessage(testView->page(), candMsg));
 
     // Successful login redirect to /
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/")));
@@ -3072,8 +3090,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"newuser@example.com\",\"password\":\"NewPass#121\",\"submitted\":true}");
-    assert(controller121.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"newuser@example.com\",\"password\":\"NewPass#121\",\"submitted\":true}");
+    assert(controller121.handleBridgeMessage(testView->page(), candMsg));
 
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/feed")));
     controller121.onUrlChanged(testView, QUrl(QStringLiteral("https://www.facebook.com/feed")));
@@ -3118,8 +3136,8 @@ int main(int argc, char **argv) {
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login")));
 
     // Login with SAME username but NEW password
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"existing@example.com\",\"password\":\"BrandNewPassword#122\",\"submitted\":true}");
-    assert(controller122.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"existing@example.com\",\"password\":\"BrandNewPassword#122\",\"submitted\":true}");
+    assert(controller122.handleBridgeMessage(testView->page(), candMsg));
 
     // Successful login redirect to /
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/")));
@@ -3154,8 +3172,8 @@ int main(int argc, char **argv) {
     auto *testView = new QWebEngineView();
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/login/")));
 
-    const QString candMsg = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://www.facebook.com\",\"username\":\"onebubble@example.com\",\"password\":\"Pass#123\",\"submitted\":true}");
-    assert(controller123.handleConsoleMessage(testView->page(), candMsg));
+    const QString candMsg = QStringLiteral("candidate:{\"origin\":\"https://www.facebook.com\",\"username\":\"onebubble@example.com\",\"password\":\"Pass#123\",\"submitted\":true}");
+    assert(controller123.handleBridgeMessage(testView->page(), candMsg));
 
     // 1. onUrlChanged fires
     testView->setUrl(QUrl(QStringLiteral("https://www.facebook.com/feed")));
@@ -3182,12 +3200,12 @@ int main(int argc, char **argv) {
     CredentialAutofillController controller124(&manager124);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://same-url.example/")));
-    const QString candidate = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://same-url.example\",\"username\":\"same@example.com\",\"password\":\"Same#124\",\"submitted\":true}");
-    assert(controller124.handleConsoleMessage(view->page(), candidate));
+    const QString candidate = QStringLiteral("candidate:{\"origin\":\"https://same-url.example\",\"username\":\"same@example.com\",\"password\":\"Same#124\",\"submitted\":true}");
+    assert(controller124.handleBridgeMessage(view->page(), candidate));
     QThread::msleep(1550);
-    const QString clearState = QStringLiteral("DALINIRA_CREDENTIAL_STATE:{\"origin\":\"https://same-url.example\",\"loginFormVisible\":false,\"passwordFieldVisible\":false,\"errorStateObserved\":false}");
-    controller124.handleConsoleMessage(view->page(), clearState);
-    controller124.handleConsoleMessage(view->page(), clearState);
+    const QString clearState = QStringLiteral("state:{\"origin\":\"https://same-url.example\",\"loginFormVisible\":false,\"passwordFieldVisible\":false,\"errorStateObserved\":false}");
+    controller124.handleBridgeMessage(view->page(), clearState);
+    controller124.handleBridgeMessage(view->page(), clearState);
     assert(controller124.activeSaveBubble() != nullptr);
     controller124.onViewClosed(view);
     delete view;
@@ -3203,11 +3221,11 @@ int main(int argc, char **argv) {
     CredentialAutofillController controller125(&manager125);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://order-a.example/login")));
-    controller125.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://order-a.example\",\"username\":\"a@example.com\",\"password\":\"Order#125\",\"submitted\":true}"));
+    controller125.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://order-a.example\",\"username\":\"a@example.com\",\"password\":\"Order#125\",\"submitted\":true}"));
     view->setUrl(QUrl(QStringLiteral("https://order-a.example/home")));
     controller125.onUrlChanged(view, view->url());
     controller125.onPageLoadFinished(view, true);
-    controller125.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://order-a.example\"}"));
+    controller125.handleBridgeMessage(view->page(), QStringLiteral("success:{\"origin\":\"https://order-a.example\"}"));
     assert(controller125.activeSaveBubble() != nullptr);
     controller125.onViewClosed(view);
     delete view;
@@ -3223,8 +3241,8 @@ int main(int argc, char **argv) {
     CredentialAutofillController controller126(&manager126);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://order-b.example/login")));
-    controller126.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://order-b.example\",\"username\":\"b@example.com\",\"password\":\"Order#126\",\"submitted\":true}"));
-    controller126.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://order-b.example\"}"));
+    controller126.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://order-b.example\",\"username\":\"b@example.com\",\"password\":\"Order#126\",\"submitted\":true}"));
+    controller126.handleBridgeMessage(view->page(), QStringLiteral("success:{\"origin\":\"https://order-b.example\"}"));
     view->setUrl(QUrl(QStringLiteral("https://order-b.example/home")));
     controller126.onUrlChanged(view, view->url());
     controller126.onPageLoadFinished(view, true);
@@ -3243,10 +3261,10 @@ int main(int argc, char **argv) {
     CredentialAutofillController controller127(&manager127);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://order-c.example/login")));
-    controller127.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://order-c.example\",\"username\":\"c@example.com\",\"password\":\"Order#127\",\"submitted\":true}"));
+    controller127.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://order-c.example\",\"username\":\"c@example.com\",\"password\":\"Order#127\",\"submitted\":true}"));
     controller127.onPageLoadFinished(view, true);
     assert(controller127.activeSaveBubble() == nullptr);
-    controller127.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://order-c.example\"}"));
+    controller127.handleBridgeMessage(view->page(), QStringLiteral("success:{\"origin\":\"https://order-c.example\"}"));
     assert(controller127.activeSaveBubble() != nullptr);
     controller127.onViewClosed(view);
     delete view;
@@ -3262,11 +3280,11 @@ int main(int argc, char **argv) {
     CredentialAutofillController controller128(&manager128);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://same-load.example/")));
-    controller128.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://same-load.example\",\"username\":\"load@example.com\",\"password\":\"Load#128\",\"submitted\":true}"));
+    controller128.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://same-load.example\",\"username\":\"load@example.com\",\"password\":\"Load#128\",\"submitted\":true}"));
     controller128.onPageLoadFinished(view, true);
     assert(controller128.activeSaveBubble() == nullptr);
     assert(controller128.hasActiveSubmittedLoginAttempt(view, QStringLiteral("https://same-load.example")));
-    controller128.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://same-load.example\"}"));
+    controller128.handleBridgeMessage(view->page(), QStringLiteral("success:{\"origin\":\"https://same-load.example\"}"));
     assert(controller128.activeSaveBubble() != nullptr);
     controller128.onViewClosed(view);
     delete view;
@@ -3282,7 +3300,7 @@ int main(int argc, char **argv) {
     CredentialAutofillController controller129(&manager129);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://redirect.example/login")));
-    controller129.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://redirect.example\",\"username\":\"redirect@example.com\",\"password\":\"Redirect#129\",\"submitted\":true}"));
+    controller129.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://redirect.example\",\"username\":\"redirect@example.com\",\"password\":\"Redirect#129\",\"submitted\":true}"));
     view->setUrl(QUrl(QStringLiteral("https://redirect.example/auth/continue")));
     controller129.onUrlChanged(view, view->url());
     controller129.onPageLoadFinished(view, true);
@@ -3305,14 +3323,14 @@ int main(int argc, char **argv) {
     CredentialAutofillController controller130(&manager130);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://grace.example/")));
-    controller130.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://grace.example\",\"username\":\"grace@example.com\",\"password\":\"Grace#130\",\"submitted\":true}"));
-    controller130.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_STATE:{\"origin\":\"https://grace.example\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":false}"));
+    controller130.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://grace.example\",\"username\":\"grace@example.com\",\"password\":\"Grace#130\",\"submitted\":true}"));
+    controller130.handleBridgeMessage(view->page(), QStringLiteral("state:{\"origin\":\"https://grace.example\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":false}"));
     assert(controller130.activeSaveBubble() == nullptr);
     assert(controller130.hasActiveSubmittedLoginAttempt(view, QStringLiteral("https://grace.example")));
     QThread::msleep(1550);
-    const QString gone = QStringLiteral("DALINIRA_CREDENTIAL_STATE:{\"origin\":\"https://grace.example\",\"loginFormVisible\":false,\"passwordFieldVisible\":false,\"errorStateObserved\":false}");
-    controller130.handleConsoleMessage(view->page(), gone);
-    controller130.handleConsoleMessage(view->page(), gone);
+    const QString gone = QStringLiteral("state:{\"origin\":\"https://grace.example\",\"loginFormVisible\":false,\"passwordFieldVisible\":false,\"errorStateObserved\":false}");
+    controller130.handleBridgeMessage(view->page(), gone);
+    controller130.handleBridgeMessage(view->page(), gone);
     assert(controller130.activeSaveBubble() != nullptr);
     controller130.onViewClosed(view);
     delete view;
@@ -3328,8 +3346,8 @@ int main(int argc, char **argv) {
     CredentialAutofillController controller131(&manager131);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://failure.example/login")));
-    controller131.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://failure.example\",\"username\":\"wrong@example.com\",\"password\":\"Wrong#131\",\"submitted\":true}"));
-    controller131.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_STATE:{\"origin\":\"https://failure.example\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":true}"));
+    controller131.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://failure.example\",\"username\":\"wrong@example.com\",\"password\":\"Wrong#131\",\"submitted\":true}"));
+    controller131.handleBridgeMessage(view->page(), QStringLiteral("state:{\"origin\":\"https://failure.example\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":true}"));
     view->setUrl(QUrl(QStringLiteral("https://failure.example/login?error=invalid_password")));
     controller131.onUrlChanged(view, view->url());
     controller131.onPageLoadFinished(view, true);
@@ -3348,10 +3366,10 @@ int main(int argc, char **argv) {
     CredentialAutofillController controller132(&manager132);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://timeout.example/login")));
-    controller132.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://timeout.example\",\"username\":\"timeout@example.com\",\"password\":\"Timeout#132\",\"submitted\":true}"));
-    const QString visibleState = QStringLiteral("DALINIRA_CREDENTIAL_STATE:{\"origin\":\"https://timeout.example\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":false}");
+    controller132.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://timeout.example\",\"username\":\"timeout@example.com\",\"password\":\"Timeout#132\",\"submitted\":true}"));
+    const QString visibleState = QStringLiteral("state:{\"origin\":\"https://timeout.example\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":false}");
     for (int i = 0; i < 25; ++i) {
-      controller132.handleConsoleMessage(view->page(), visibleState);
+      controller132.handleBridgeMessage(view->page(), visibleState);
       QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
       QThread::msleep(500);
     }
@@ -3380,7 +3398,7 @@ int main(int argc, char **argv) {
     view->setHtml(QStringLiteral("<html><body><form id='login'><input type='email'><input type='password'><button>Login</button></form></body></html>"),
                   QUrl(QStringLiteral("https://poll.example/")));
     assert(waitForCondition([&loaded] { return loaded; }));
-    controller133.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://poll.example\",\"username\":\"poll@example.com\",\"password\":\"Poll#133\",\"submitted\":true}"));
+    controller133.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://poll.example\",\"username\":\"poll@example.com\",\"password\":\"Poll#133\",\"submitted\":true}"));
     view->page()->runJavaScript(QStringLiteral("document.getElementById('login').remove();"));
     assert(waitForCondition([&controller133] { return controller133.activeSaveBubble() != nullptr; }, 5000));
     controller133.onViewClosed(view);
@@ -3409,12 +3427,12 @@ int main(int argc, char **argv) {
     QObject::connect(&controller135, &CredentialAutofillController::saveBubbleShown, [&shown] { ++shown; });
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://idempotent.example/login")));
-    controller135.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://idempotent.example\",\"username\":\"once@example.com\",\"password\":\"Once#135\",\"submitted\":true}"));
+    controller135.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://idempotent.example\",\"username\":\"once@example.com\",\"password\":\"Once#135\",\"submitted\":true}"));
     view->setUrl(QUrl(QStringLiteral("https://idempotent.example/home")));
     controller135.onUrlChanged(view, view->url());
     controller135.onPageLoadFinished(view, true);
-    controller135.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://idempotent.example\"}"));
-    controller135.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_STATE:{\"origin\":\"https://idempotent.example\",\"loginFormVisible\":false,\"passwordFieldVisible\":false,\"errorStateObserved\":false}"));
+    controller135.handleBridgeMessage(view->page(), QStringLiteral("success:{\"origin\":\"https://idempotent.example\"}"));
+    controller135.handleBridgeMessage(view->page(), QStringLiteral("state:{\"origin\":\"https://idempotent.example\",\"loginFormVisible\":false,\"passwordFieldVisible\":false,\"errorStateObserved\":false}"));
     assert(shown == 1);
     controller135.onViewClosed(view);
     delete view;
@@ -3434,8 +3452,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 10; ++i) {
       view->setUrl(QUrl(QStringLiteral("https://repeat.example/login?round=%1").arg(i)));
       const QString user = QStringLiteral("repeat%1@example.com").arg(i);
-      const QString candidate = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://repeat.example\",\"username\":\"%1\",\"password\":\"Repeat#136\",\"submitted\":true}").arg(user);
-      controller136.handleConsoleMessage(view->page(), candidate);
+      const QString candidate = QStringLiteral("candidate:{\"origin\":\"https://repeat.example\",\"username\":\"%1\",\"password\":\"Repeat#136\",\"submitted\":true}").arg(user);
+      controller136.handleBridgeMessage(view->page(), candidate);
       view->setUrl(QUrl(QStringLiteral("https://repeat.example/home?round=%1").arg(i)));
       controller136.onUrlChanged(view, view->url());
       controller136.onPageLoadFinished(view, true);
@@ -3462,9 +3480,9 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(QStringLiteral("https://eye.example/login")));
     for (int i = 0; i < 10; ++i) {
-      const QString candidate = QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://eye.example\",\"username\":\"eye%1@example.com\",\"password\":\"Eye#137\",\"submitted\":false}").arg(i);
-      controller137.handleConsoleMessage(view->page(), candidate);
-      controller137.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://eye.example\"}"));
+      const QString candidate = QStringLiteral("candidate:{\"origin\":\"https://eye.example\",\"username\":\"eye%1@example.com\",\"password\":\"Eye#137\",\"submitted\":false}").arg(i);
+      controller137.handleBridgeMessage(view->page(), candidate);
+      controller137.handleBridgeMessage(view->page(), QStringLiteral("success:{\"origin\":\"https://eye.example\"}"));
     }
     assert(shown == 0);
     assert(controller137.activeSaveBubble() == nullptr);
@@ -3483,7 +3501,7 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     view->page()->profile()->cookieStore()->deleteAllCookies();
     view->setUrl(QUrl(QStringLiteral("https://fresh.example/login")));
-    controller138.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://fresh.example\",\"username\":\"fresh@example.com\",\"password\":\"Fresh#138\",\"submitted\":true}"));
+    controller138.handleBridgeMessage(view->page(), QStringLiteral("candidate:{\"origin\":\"https://fresh.example\",\"username\":\"fresh@example.com\",\"password\":\"Fresh#138\",\"submitted\":true}"));
     view->setUrl(QUrl(QStringLiteral("https://fresh.example/home")));
     controller138.onUrlChanged(view, view->url());
     assert(controller138.activeSaveBubble() != nullptr);
@@ -3503,8 +3521,8 @@ int main(int argc, char **argv) {
     view->setUrl(QUrl(QStringLiteral("https://session.example/home")));
     controller139.onUrlChanged(view, view->url());
     controller139.onPageLoadFinished(view, true);
-    controller139.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:{\"origin\":\"https://session.example\"}"));
-    controller139.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_STATE:{\"origin\":\"https://session.example\",\"loginFormVisible\":false,\"passwordFieldVisible\":false,\"errorStateObserved\":false,\"authenticatedStateObserved\":true}"));
+    controller139.handleBridgeMessage(view->page(), QStringLiteral("success:{\"origin\":\"https://session.example\"}"));
+    controller139.handleBridgeMessage(view->page(), QStringLiteral("state:{\"origin\":\"https://session.example\",\"loginFormVisible\":false,\"passwordFieldVisible\":false,\"errorStateObserved\":false,\"authenticatedStateObserved\":true}"));
     assert(controller139.activeSaveBubble() == nullptr);
     controller139.onViewClosed(view);
     delete view;
@@ -3513,7 +3531,7 @@ int main(int argc, char **argv) {
 
   const auto candidateMessage = [](const QString &origin, const QString &username,
                                    const QString &password, bool submitted) {
-    return QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:") +
+    return QStringLiteral("candidate:") +
            QString::fromUtf8(QJsonDocument(QJsonObject{
                {QStringLiteral("origin"), origin},
                {QStringLiteral("username"), username},
@@ -3523,7 +3541,7 @@ int main(int argc, char **argv) {
            }).toJson(QJsonDocument::Compact));
   };
   const auto successMessage = [](const QString &origin) {
-    return QStringLiteral("DALINIRA_CREDENTIAL_SUCCESS_HINT:") +
+    return QStringLiteral("success:") +
            QString::fromUtf8(QJsonDocument(QJsonObject{{QStringLiteral("origin"), origin}})
                                  .toJson(QJsonDocument::Compact));
   };
@@ -3538,7 +3556,7 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow140.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user140@example.com"), QStringLiteral("Secret#140"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user140@example.com"), QStringLiteral("Secret#140"), true));
     assert(c.hasPendingCredentialSaveFlow(view, origin));
     assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::Verifying);
     c.onViewClosed(view);
@@ -3556,7 +3574,7 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow141.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user141@example.com"), QStringLiteral("Secret#141"), false));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user141@example.com"), QStringLiteral("Secret#141"), false));
     assert(!c.hasPendingCredentialSaveFlow(view, origin));
     c.onViewClosed(view);
     delete view;
@@ -3573,7 +3591,7 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow142.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user142@example.com"), QStringLiteral("Secret#142"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user142@example.com"), QStringLiteral("Secret#142"), true));
     assert(waitForCondition([&c] { return c.activeSaveBubble() != nullptr; }, 1000));
     assert(c.activeSaveBubble()->mode() == CredentialSaveMode::Verifying);
     assert(c.activeSaveBubble()->descriptionText() == QStringLiteral("Giriş doğrulanıyor…"));
@@ -3595,8 +3613,8 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow143.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user143@example.com"), QStringLiteral("Secret#143"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user143@example.com"), QStringLiteral("Secret#143"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::ReadyNew);
     assert(c.activeSaveBubble() && c.activeSaveBubble()->mode() == CredentialSaveMode::ReadyNew);
     assert(c.activeSaveBubble()->isPrimaryButtonEnabled());
@@ -3615,8 +3633,8 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow144.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user144@example.com"), QStringLiteral("Wrong#144"), true));
-    c.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_STATE:{\"origin\":\"https://flow144.example\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":true}"));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user144@example.com"), QStringLiteral("Wrong#144"), true));
+    c.handleBridgeMessage(view->page(), QStringLiteral("state:{\"origin\":\"https://flow144.example\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":true}"));
     assert(!c.hasPendingCredentialSaveFlow(view, origin));
     assert(c.pendingCandidateCount() == 0);
     assert(c.activeSaveBubble() == nullptr);
@@ -3639,7 +3657,7 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://flow145.example");
     view->setHtml(QStringLiteral("<form><input type='password'></form>"), QUrl(origin + QStringLiteral("/login")));
     assert(waitForCondition([&loaded] { return loaded; }));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user145@example.com"), QStringLiteral("Secret#145"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user145@example.com"), QStringLiteral("Secret#145"), true));
     assert(waitForCondition([&c, view, origin] { return !c.hasPendingCredentialSaveFlow(view, origin); }, 14000));
     assert(c.lastSaveFlowEndReason() == QStringLiteral("timeout"));
     // Once shown, bubble remains visible as a pending user decision until explicit user resolution
@@ -3663,8 +3681,8 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow146.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user146@example.com"), QStringLiteral("Secret#146"), false));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user146@example.com"), QStringLiteral("Secret#146"), false));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(!c.hasPendingCredentialSaveFlow(view, origin));
     assert(c.activeSaveBubble() == nullptr);
     c.onViewClosed(view);
@@ -3682,10 +3700,10 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow147.example");
     view->setUrl(QUrl(origin + QStringLiteral("/")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user147@example.com"), QStringLiteral("Secret#147"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user147@example.com"), QStringLiteral("Secret#147"), true));
     c.onPageLoadFinished(view, true);
     assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::Verifying);
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::ReadyNew);
     c.onViewClosed(view);
     delete view;
@@ -3702,13 +3720,13 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow148.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user148@example.com"), QStringLiteral("Secret#148"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user148@example.com"), QStringLiteral("Secret#148"), true));
     assert(waitForCondition([&c] { return c.activeSaveBubble() != nullptr; }, 1000));
     QElapsedTimer spinner;
     spinner.start();
     while (spinner.elapsed() < 800) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
     assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::Verifying);
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::ReadyNew);
     c.onViewClosed(view);
     delete view;
@@ -3725,7 +3743,7 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow149.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user149@example.com"), QStringLiteral("Secret#149"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user149@example.com"), QStringLiteral("Secret#149"), true));
     view->setUrl(QUrl(origin + QStringLiteral("/home")));
     c.onUrlChanged(view, view->url());
     assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::ReadyNew);
@@ -3745,8 +3763,8 @@ int main(int argc, char **argv) {
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
     bool opened = false;
     QObject::connect(&c, &CredentialAutofillController::openPasswordManagerRequested, [&opened] { opened = true; });
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user150@example.com"), QStringLiteral("Secret#150"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user150@example.com"), QStringLiteral("Secret#150"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.activeSaveBubble() == nullptr);
     assert(!opened);
     assert(c.pendingCandidateCount() == 0);
@@ -3764,8 +3782,8 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow151.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user151@example.com"), QStringLiteral("Secret#151"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user151@example.com"), QStringLiteral("Secret#151"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.activeSaveBubble() == nullptr);
     assert(manager.create(masterPassword));
     const auto records = manager.forOrigin(QUrl(origin));
@@ -3784,8 +3802,8 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow152.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user152@example.com"), QStringLiteral("Secret#152"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user152@example.com"), QStringLiteral("Secret#152"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.activeSaveBubble() == nullptr);
     assert(c.pendingCandidateCount() == 0);
     c.onViewClosed(view);
@@ -3803,8 +3821,8 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow153.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user153@example.com"), QStringLiteral("Secret#153"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user153@example.com"), QStringLiteral("Secret#153"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     c.activeSaveBubble()->clickPrimary();
     assert(manager.forOrigin(QUrl(origin)).size() == 1);
     assert(!c.hasPendingCredentialSaveFlow(view, origin));
@@ -3824,8 +3842,8 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow154.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user154@example.com"), QStringLiteral("Secret#154"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user154@example.com"), QStringLiteral("Secret#154"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     c.activeSaveBubble()->clickPrimary();
     assert(c.activeUnlockDialog() != nullptr);
     c.activeUnlockDialog()->reject();
@@ -3845,8 +3863,8 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow155.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user155@example.com"), QStringLiteral("Secret#155"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user155@example.com"), QStringLiteral("Secret#155"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     c.activeSaveBubble()->clickPrimary();
     auto *dialog = c.activeUnlockDialog();
     assert(dialog != nullptr);
@@ -3870,8 +3888,8 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow156.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user156@example.com"), QStringLiteral("Secret#156"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user156@example.com"), QStringLiteral("Secret#156"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     c.activeSaveBubble()->clickPrimary();
     assert(c.activeUnlockDialog());
     c.activeUnlockDialog()->reject();
@@ -3900,8 +3918,8 @@ int main(int argc, char **argv) {
     CredentialAutofillController c(&manager);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, initial.username, initial.password, true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, initial.username, initial.password, true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.activeSaveBubble() == nullptr);
     assert(manager.forOrigin(QUrl(origin)).size() == 1);
     assert(!c.hasPendingCredentialSaveFlow(view, origin));
@@ -3927,8 +3945,8 @@ int main(int argc, char **argv) {
     CredentialAutofillController c(&manager);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, initial.username, QStringLiteral("New#158"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, initial.username, QStringLiteral("New#158"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::ReadyUpdate);
     assert(c.activeSaveBubble()->mode() == CredentialSaveMode::ReadyUpdate);
     c.onViewClosed(view);
@@ -3952,8 +3970,8 @@ int main(int argc, char **argv) {
     CredentialAutofillController c(&manager);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, initial.username, QStringLiteral("New#159"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, initial.username, QStringLiteral("New#159"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     c.activeSaveBubble()->clickPrimary();
     CredentialSecret revealed;
     const auto records = manager.forOrigin(QUrl(origin));
@@ -3981,8 +3999,8 @@ int main(int argc, char **argv) {
     CredentialAutofillController c(&manager);
     auto *view = new QWebEngineView();
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("second@example.com"), QStringLiteral("Second#160"), true));
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("second@example.com"), QStringLiteral("Second#160"), true));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::ReadyNew);
     c.activeSaveBubble()->clickPrimary();
     assert(manager.forOrigin(QUrl(origin)).size() == 2);
@@ -4008,8 +4026,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 10; ++i) {
       view->setUrl(QUrl(origin + QStringLiteral("/login?round=%1").arg(i)));
       const QString username = QStringLiteral("user%1@flow161.example").arg(i);
-      c.handleConsoleMessage(view->page(), candidateMessage(origin, username, QStringLiteral("Secret#161"), true));
-      c.handleConsoleMessage(view->page(), successMessage(origin));
+      c.handleBridgeMessage(view->page(), candidateMessage(origin, username, QStringLiteral("Secret#161"), true));
+      c.handleBridgeMessage(view->page(), successMessage(origin));
       assert(c.credentialSaveFlowState(view, origin) == CredentialSaveFlowState::ReadyNew);
       c.activeSaveBubble()->clickSecondary();
     }
@@ -4030,8 +4048,8 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://flow162.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
     for (int i = 0; i < 10; ++i) {
-      c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("eye%1@example.com").arg(i), QStringLiteral("Eye#162"), false));
-      c.handleConsoleMessage(view->page(), successMessage(origin));
+      c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("eye%1@example.com").arg(i), QStringLiteral("Eye#162"), false));
+      c.handleBridgeMessage(view->page(), successMessage(origin));
       assert(!c.hasPendingCredentialSaveFlow(view, origin));
     }
     assert(c.activeSaveBubble() == nullptr);
@@ -4050,7 +4068,7 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow163.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user163@example.com"), QStringLiteral("Secret#163"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user163@example.com"), QStringLiteral("Secret#163"), true));
     assert(waitForCondition([&c] { return c.activeSaveBubble() != nullptr; }, 1000));
     c.activeSaveBubble()->clickClose();
     assert(c.pendingCandidateCount() == 0);
@@ -4070,7 +4088,7 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow164.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user164@example.com"), QStringLiteral("Secret#164"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user164@example.com"), QStringLiteral("Secret#164"), true));
     c.onViewClosed(view);
     assert(c.pendingCandidateCount() == 0);
     assert(!c.hasPendingCredentialSaveFlow(view, origin));
@@ -4089,7 +4107,7 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow165.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user165@example.com"), QStringLiteral("Secret#165"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user165@example.com"), QStringLiteral("Secret#165"), true));
     view->setUrl(QUrl(QStringLiteral("https://unrelated165.example/home")));
     c.onUrlChanged(view, view->url());
     assert(c.pendingCandidateCount() == 0);
@@ -4115,7 +4133,7 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://flow166.example");
     const QString password = QStringLiteral("NeverPersistPendingSecret#166");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user166@example.com"), password, true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user166@example.com"), password, true));
     QDirIterator files(dir.path(), QDirIterator::Subdirectories);
     while (files.hasNext()) {
       QFileInfo info(files.next());
@@ -4138,9 +4156,9 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://flow167.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user167@example.com"), QStringLiteral("Secret#167"), true));
+    c.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user167@example.com"), QStringLiteral("Secret#167"), true));
     assert(c.activeSaveBubble() == nullptr);
-    c.handleConsoleMessage(view->page(), successMessage(origin));
+    c.handleBridgeMessage(view->page(), successMessage(origin));
     assert(c.activeSaveBubble() == nullptr);
     assert(c.pendingCandidateCount() == 0);
     c.onViewClosed(view);
@@ -4172,8 +4190,8 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://test-a.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
 
-    controller.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("alice@example.com"), QStringLiteral("AliceSecret#1"), true));
-    controller.handleConsoleMessage(view->page(), successMessage(origin));
+    controller.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("alice@example.com"), QStringLiteral("AliceSecret#1"), true));
+    controller.handleBridgeMessage(view->page(), successMessage(origin));
 
     assert(controller.activeSaveBubble() == nullptr);
     assert(controller.pendingCandidateCount() == 0);
@@ -4196,8 +4214,8 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://test-b.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
 
-    controller.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("bob@example.com"), QStringLiteral("BobSecret#2"), true));
-    controller.handleConsoleMessage(view->page(), successMessage(origin));
+    controller.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("bob@example.com"), QStringLiteral("BobSecret#2"), true));
+    controller.handleBridgeMessage(view->page(), successMessage(origin));
 
     assert(controller.activeSaveBubble() == nullptr);
     assert(controller.pendingCandidateCount() == 0);
@@ -4231,8 +4249,8 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://test-c.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
 
-    controller.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("charlie@example.com"), QStringLiteral("Charlie#3"), true));
-    controller.handleConsoleMessage(view->page(), successMessage(origin));
+    controller.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("charlie@example.com"), QStringLiteral("Charlie#3"), true));
+    controller.handleBridgeMessage(view->page(), successMessage(origin));
 
     // Save prompt must be shown even when locked
     assert(controller.activeSaveBubble() != nullptr);
@@ -4276,8 +4294,8 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://test-d.example");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
 
-    controller.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("dave@example.com"), QStringLiteral("Dave#4"), true));
-    controller.handleConsoleMessage(view->page(), successMessage(origin));
+    controller.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("dave@example.com"), QStringLiteral("Dave#4"), true));
+    controller.handleBridgeMessage(view->page(), successMessage(origin));
 
     assert(controller.activeSaveBubble() != nullptr);
     assert(controller.activeSaveBubble()->mode() == CredentialSaveMode::ReadyNew);
@@ -4531,7 +4549,7 @@ int main(int argc, char **argv) {
     auto *view = new QWebEngineView();
     const QString origin = QStringLiteral("https://login.example.com");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
-    c180.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user180@example.com"), QStringLiteral("Secret#180"), true));
+    c180.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user180@example.com"), QStringLiteral("Secret#180"), true));
     assert(waitForCondition([&c180] { return c180.activeSaveBubble() != nullptr; }, 1000));
     assert(c180.activeSaveBubble()->origin() == origin);
 
@@ -4570,16 +4588,16 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://service.example.org");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
 
-    c181.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("userA@example.org"), QStringLiteral("PassA#181"), true));
+    c181.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("userA@example.com"), QStringLiteral("PassA#181"), true));
     assert(waitForCondition([&c181] { return c181.activeSaveBubble() != nullptr; }, 1000));
-    assert(c181.activeSaveBubble()->username() == QStringLiteral("userA@example.org"));
+    assert(c181.activeSaveBubble()->username() == QStringLiteral("userA@example.com"));
 
     // Second candidate arrives for different user while decision pending
-    c181.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("userB@example.org"), QStringLiteral("PassB#181"), true));
+    c181.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("userB@example.com"), QStringLiteral("PassB#181"), true));
 
     // Active pending decision MUST NOT be overwritten with different credentials
     assert(c181.activeSaveBubble() != nullptr);
-    assert(c181.activeSaveBubble()->username() == QStringLiteral("userA@example.org"));
+    assert(c181.activeSaveBubble()->username() == QStringLiteral("userA@example.com"));
 
     // Page finishes loading
     c181.onPageLoadFinished(view, true);
@@ -4592,7 +4610,7 @@ int main(int argc, char **argv) {
     // Verify only userA is in vault
     const auto records = manager181.forOrigin(QUrl(origin));
     assert(records.size() == 1);
-    assert(records[0].username == QStringLiteral("userA@example.org"));
+    assert(records[0].username == QStringLiteral("userA@example.com"));
 
     c181.onViewClosed(view);
     delete view;
@@ -4610,17 +4628,17 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://www.facebook.com");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
 
-    c182.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("muhammeddali1453@gmail.com"), QStringLiteral("MyPassword123!"), true));
+    c182.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user@example.com"), QStringLiteral("MyPassword123!"), true));
     assert(waitForCondition([&c182] { return c182.activeSaveBubble() != nullptr; }, 1000));
 
     // Page finishes load and DOM reports error banner (e.g. "The login information you entered is incorrect")
     c182.onPageLoadFinished(view, true);
-    c182.handleConsoleMessage(view->page(), QStringLiteral("DALINIRA_CREDENTIAL_STATE:{\"origin\":\"https://www.facebook.com\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":true}"));
+    c182.handleBridgeMessage(view->page(), QStringLiteral("state:{\"origin\":\"https://www.facebook.com\",\"loginFormVisible\":true,\"passwordFieldVisible\":true,\"errorStateObserved\":true}"));
 
     // Bubble MUST NOT disappear! It remains visible and active for the user's decision
     assert(c182.activeSaveBubble() != nullptr);
     assert(c182.activeSaveBubble()->origin() == origin);
-    assert(c182.activeSaveBubble()->username() == QStringLiteral("muhammeddali1453@gmail.com"));
+    assert(c182.activeSaveBubble()->username() == QStringLiteral("user@example.com"));
     assert(c182.activeSaveBubble()->isPrimaryButtonEnabled());
 
     // User chooses to save
@@ -4630,7 +4648,7 @@ int main(int argc, char **argv) {
 
     const auto records = manager182.forOrigin(QUrl(origin));
     assert(records.size() == 1);
-    assert(records[0].username == QStringLiteral("muhammeddali1453@gmail.com"));
+    assert(records[0].username == QStringLiteral("user@example.com"));
 
     c182.onViewClosed(view);
     delete view;
@@ -4648,7 +4666,7 @@ int main(int argc, char **argv) {
     const QString origin = QStringLiteral("https://destroy.example.com");
     view->setUrl(QUrl(origin + QStringLiteral("/login")));
 
-    c183.handleConsoleMessage(view->page(), candidateMessage(origin, QStringLiteral("user183@example.com"), QStringLiteral("Secret#183"), true));
+    c183.handleBridgeMessage(view->page(), candidateMessage(origin, QStringLiteral("user183@example.com"), QStringLiteral("Secret#183"), true));
     assert(waitForCondition([&c183] { return c183.activeSaveBubble() != nullptr; }, 1000));
     assert(c183.pendingCandidateCount() == 1);
 

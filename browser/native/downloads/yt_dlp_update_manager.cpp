@@ -1,4 +1,5 @@
 #include "yt_dlp_update_manager.h"
+#include "i18n/i18n.h"
 
 #include "security_utils.h"
 
@@ -142,7 +143,7 @@ QString YtDlpUpdateManager::platformArtifactName(QString *error) {
   if (architecture == QLatin1String("x86_64") || architecture == QLatin1String("arm64")
       || architecture == QLatin1String("aarch64")) return QStringLiteral("yt-dlp_macos");
 #endif
-  if (error) *error = QStringLiteral("Bu platform veya işlemci mimarisi desteklenmiyor.");
+  if (error) *error = I18n::text(QStringLiteral("media.platform_unsupported"));
   return {};
 }
 
@@ -152,7 +153,7 @@ bool YtDlpUpdateManager::parseReleaseJson(const QByteArray &json, const QString 
   QJsonParseError parseError;
   const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
   if (!document.isObject()) {
-    if (error) *error = QStringLiteral("Resmi sürüm bilgisi okunamadı.");
+    if (error) *error = I18n::text(QStringLiteral("media.release_info_unreadable"));
     return false;
   }
   const QJsonObject root = document.object();
@@ -161,7 +162,7 @@ bool YtDlpUpdateManager::parseReleaseJson(const QByteArray &json, const QString 
   if (!versionPattern.match(tag).hasMatch() || root.value(QStringLiteral("draft")).toBool()
       || root.value(QStringLiteral("prerelease")).toBool()
       || (root.contains(QStringLiteral("immutable")) && !root.value(QStringLiteral("immutable")).toBool())) {
-    if (error) *error = QStringLiteral("Resmi kararlı sürüm doğrulanamadı.");
+    if (error) *error = I18n::text(QStringLiteral("media.stable_release_unverified"));
     return false;
   }
   QJsonObject artifact;
@@ -177,7 +178,7 @@ bool YtDlpUpdateManager::parseReleaseJson(const QByteArray &json, const QString 
   const qint64 size = static_cast<qint64>(artifact.value(QStringLiteral("size")).toDouble());
   if (!artifactUrl.isValid() || !checksumsUrl.isValid() || size < kMinimumArtifactBytes
       || size > kMaximumArtifactBytes) {
-    if (error) *error = QStringLiteral("Beklenen resmi yt-dlp artifact'ı bulunamadı.");
+    if (error) *error = I18n::text(QStringLiteral("media.artifact_not_found"));
     return false;
   }
   release->version = tag;
@@ -217,7 +218,7 @@ bool YtDlpUpdateManager::verifyArtifactFile(const QString &path, const QString &
   QFile file(path);
   if (!file.open(QIODevice::ReadOnly) || file.size() < kMinimumArtifactBytes
       || file.size() > kMaximumArtifactBytes) {
-    if (error) *error = QStringLiteral("İndirilen dosyanın boyutu geçersiz.");
+    if (error) *error = I18n::text(QStringLiteral("media.downloaded_size_invalid"));
     return false;
   }
   const QByteArray magic = file.read(4);
@@ -232,7 +233,7 @@ bool YtDlpUpdateManager::verifyArtifactFile(const QString &path, const QString &
   }
   const QString expected = normalizedDigest(expectedSha256);
   if (!expectedType || expected.isEmpty() || sha256File(path) != expected) {
-    if (error) *error = QStringLiteral("yt-dlp bütünlük doğrulaması başarısız.");
+    if (error) *error = I18n::text(QStringLiteral("media.ytdlp_integrity_failed"));
     return false;
   }
   if (error) error->clear();
@@ -286,15 +287,15 @@ bool YtDlpUpdateManager::busy() const { return operation_ != Operation::None; }
 bool YtDlpUpdateManager::prepareManagedDirectory(QString *error) const {
   QFileInfo info(managedDirectory_);
   if (info.exists() && (!info.isDir() || info.isSymLink())) {
-    if (error) *error = QStringLiteral("Managed tools dizini güvenli değil.");
+    if (error) *error = I18n::text(QStringLiteral("media.tools_dir_insecure"));
     return false;
   }
   if (!info.exists() && !QDir().mkpath(managedDirectory_)) {
-    if (error) *error = QStringLiteral("Managed tools dizini oluşturulamadı.");
+    if (error) *error = I18n::text(QStringLiteral("media.tools_dir_create_failed"));
     return false;
   }
   if (!QFile::setPermissions(managedDirectory_, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
-    if (error) *error = QStringLiteral("Managed tools dizini izinleri ayarlanamadı.");
+    if (error) *error = I18n::text(QStringLiteral("media.tools_dir_permissions_failed"));
     return false;
   }
   return true;
@@ -334,13 +335,13 @@ void YtDlpUpdateManager::begin(Operation operation) {
   release_ = {};
   expectedSha256_.clear();
   emit statusChanged(operation == Operation::EnsureInstall
-      ? QStringLiteral("İndirme motoru hazırlanıyor…") : QStringLiteral("yt-dlp güncellemesi denetleniyor…"), 0);
+      ? I18n::text(QStringLiteral("media.engine_preparing")) : I18n::text(QStringLiteral("media.checking_ytdlp_update")), 0);
   request(RequestKind::LatestRelease, kLatestReleaseApi);
 }
 
 void YtDlpUpdateManager::request(RequestKind kind, const QUrl &url, int redirectCount) {
   if (!isAllowedOfficialUrl(url) || redirectCount > kMaximumRedirects) {
-    fail(QStringLiteral("Resmi yt-dlp kaynağı doğrulanamadı."));
+    fail(I18n::text(QStringLiteral("media.official_source_unverified")));
     return;
   }
   requestKind_ = kind;
@@ -357,7 +358,7 @@ void YtDlpUpdateManager::request(RequestKind kind, const QUrl &url, int redirect
   connect(reply_, &QNetworkReply::sslErrors, this, [launched](const QList<QSslError> &) { launched->abort(); });
   connect(reply_, &QNetworkReply::downloadProgress, this, [this, kind](qint64 received, qint64 total) {
     if (kind == RequestKind::Artifact && total > 0)
-      emit statusChanged(QStringLiteral("yt-dlp indiriliyor…"), qBound(0, static_cast<int>(received * 100 / total), 99));
+      emit statusChanged(I18n::text(QStringLiteral("media.downloading_ytdlp")), qBound(0, static_cast<int>(received * 100 / total), 99));
   });
   connect(reply_, &QNetworkReply::readyRead, this, [this, launched, kind] {
     if (reply_ != launched) return;
@@ -395,7 +396,7 @@ void YtDlpUpdateManager::handleReplyFinished(QNetworkReply *finished, RequestKin
   }
   finished->deleteLater();
   if (networkError != QNetworkReply::NoError || status != 200) {
-    fail(QStringLiteral("GitHub'a erişilemiyor veya yt-dlp indirilemedi."));
+    fail(I18n::text(QStringLiteral("media.github_unreachable")));
     return;
   }
   if (kind == RequestKind::LatestRelease) handleLatestRelease();
@@ -407,7 +408,7 @@ void YtDlpUpdateManager::handleLatestRelease() {
   QString error;
   if (!parseReleaseJson(responseBytes_, platformArtifactName(), &release_, &error)
       || !isAllowedOfficialUrl(release_.artifactUrl) || !isAllowedOfficialUrl(release_.checksumsUrl)) {
-    fail(error.isEmpty() ? QStringLiteral("Resmi sürüm bilgisi doğrulanamadı.") : error);
+    fail(error.isEmpty() ? I18n::text(QStringLiteral("media.release_info_unverified")) : error);
     return;
   }
   const QDate installed = versionDate(installedVersion());
@@ -416,14 +417,14 @@ void YtDlpUpdateManager::handleLatestRelease() {
     finishNoUpdate();
     return;
   }
-  emit statusChanged(QStringLiteral("yt-dlp bütünlük bilgisi doğrulanıyor…"), 0);
+  emit statusChanged(I18n::text(QStringLiteral("media.verifying_integrity")), 0);
   request(RequestKind::Checksums, release_.checksumsUrl);
 }
 
 void YtDlpUpdateManager::handleChecksums() {
   expectedSha256_ = checksumForArtifact(responseBytes_, release_.artifactName);
   if (expectedSha256_.isEmpty() || (!release_.apiSha256.isEmpty() && release_.apiSha256 != expectedSha256_)) {
-    fail(QStringLiteral("yt-dlp checksum bilgisi doğrulanamadı."));
+    fail(I18n::text(QStringLiteral("media.checksum_unverified")));
     return;
   }
   beginArtifactDownload();
@@ -436,19 +437,19 @@ void YtDlpUpdateManager::beginArtifactDownload() {
   temporaryFile_->setAutoRemove(true);
   if (!temporaryFile_->open()
       || !temporaryFile_->setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
-    fail(QStringLiteral("yt-dlp geçici dosyası oluşturulamadı."));
+    fail(I18n::text(QStringLiteral("media.temp_file_failed")));
     return;
   }
   artifactHash_ = new QCryptographicHash(QCryptographicHash::Sha256);
   downloadedBytes_ = 0;
-  emit statusChanged(QStringLiteral("yt-dlp indiriliyor…"), 0);
+  emit statusChanged(I18n::text(QStringLiteral("media.downloading_ytdlp")), 0);
   request(RequestKind::Artifact, release_.artifactUrl);
 }
 
 void YtDlpUpdateManager::handleArtifactFinished() {
   if (!temporaryFile_ || !artifactHash_ || downloadedBytes_ != release_.artifactSize
       || downloadedBytes_ < kMinimumArtifactBytes || downloadedBytes_ > kMaximumArtifactBytes) {
-    fail(QStringLiteral("İndirilen yt-dlp dosyasının boyutu doğrulanamadı."));
+    fail(I18n::text(QStringLiteral("media.downloaded_size_unverified")));
     return;
   }
   temporaryFile_->flush();
@@ -461,14 +462,14 @@ void YtDlpUpdateManager::handleArtifactFinished() {
   QString error;
   if (streamedHash != expectedSha256_
       || !verifyArtifactFile(temporaryPath_, release_.artifactName, expectedSha256_, &error)) {
-    fail(QStringLiteral("yt-dlp bütünlük doğrulaması başarısız."));
+    fail(I18n::text(QStringLiteral("media.ytdlp_integrity_failed")));
     return;
   }
   if (!QFile::setPermissions(temporaryPath_, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
-    fail(QStringLiteral("yt-dlp executable izni ayarlanamadı."));
+    fail(I18n::text(QStringLiteral("media.exec_permission_failed")));
     return;
   }
-  emit statusChanged(QStringLiteral("yt-dlp doğrulanıyor…"), 100);
+  emit statusChanged(I18n::text(QStringLiteral("media.verifying_ytdlp")), 100);
   verifyDownloadedVersion();
 }
 
@@ -487,7 +488,7 @@ void YtDlpUpdateManager::verifyDownloadedVersion() {
   connect(versionProcess_, &QProcess::readyReadStandardError, this, [launched] { launched->readAllStandardError(); });
   connect(versionProcess_, &QProcess::errorOccurred, this, [this, launched](QProcess::ProcessError error) {
     if (error == QProcess::FailedToStart && versionProcess_ == launched) {
-      fail(QStringLiteral("yt-dlp binary doğrulanamadı."));
+      fail(I18n::text(QStringLiteral("media.binary_unverified")));
     }
   });
   connect(versionProcess_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
@@ -499,7 +500,7 @@ void YtDlpUpdateManager::verifyDownloadedVersion() {
     versionProcess_ = nullptr;
     const QString output = QString::fromUtf8(versionOutput_).trimmed();
     if (status != QProcess::NormalExit || code != 0 || output != release_.version) {
-      fail(QStringLiteral("yt-dlp binary sürümü doğrulanamadı."));
+      fail(I18n::text(QStringLiteral("media.binary_version_unverified")));
       return;
     }
     installVerifiedArtifact(output);
@@ -515,11 +516,11 @@ void YtDlpUpdateManager::installVerifiedArtifact(const QString &versionOutput) {
   if (QFileInfo::exists(finalPath)) {
     QString error;
     if (!verifyArtifactFile(finalPath, release_.artifactName, expectedSha256_, &error)) {
-      fail(QStringLiteral("Managed yt-dlp hedef dosyası güvenli değil."));
+      fail(I18n::text(QStringLiteral("media.target_file_insecure")));
       return;
     }
   } else if (!atomicallyReplace(temporaryPath_, finalPath)) {
-    fail(QStringLiteral("yt-dlp atomik olarak kurulamadı."));
+    fail(I18n::text(QStringLiteral("media.atomic_install_failed")));
     return;
   } else {
     movedTemporaryFile = true;
@@ -536,16 +537,16 @@ void YtDlpUpdateManager::installVerifiedArtifact(const QString &versionOutput) {
     manifest.insert(QStringLiteral("previous"), oldRoot.value(QStringLiteral("previous")));
   if (!writeManifest(manifest)) {
     if (movedTemporaryFile) QFile::remove(finalPath);
-    fail(QStringLiteral("yt-dlp kurulum kaydı yazılamadı."));
+    fail(I18n::text(QStringLiteral("media.install_record_failed")));
     return;
   }
   const QString verified = verifiedManagedExecutable();
-  if (verified.isEmpty()) { fail(QStringLiteral("Kurulan yt-dlp yeniden doğrulanamadı.")); return; }
+  if (verified.isEmpty()) { fail(I18n::text(QStringLiteral("media.reverify_failed"))); return; }
   cleanupOldArtifacts(manifest);
   const bool updated = !existingPath_.isEmpty();
   cleanupTransfer();
   operation_ = Operation::None;
-  emit statusChanged(QStringLiteral("yt-dlp hazır."), 100);
+  emit statusChanged(I18n::text(QStringLiteral("media.ytdlp_ready")), 100);
   emit ready(verified, true);
   emit updateCheckFinished(updated);
 }
@@ -576,7 +577,7 @@ void YtDlpUpdateManager::finishNoUpdate() {
   const QString path = existingPath_;
   cleanupTransfer();
   operation_ = Operation::None;
-  emit statusChanged(QStringLiteral("yt-dlp güncel."), 100);
+  emit statusChanged(I18n::text(QStringLiteral("media.ytdlp_up_to_date")), 100);
   emit ready(path, false);
   emit updateCheckFinished(false);
 }

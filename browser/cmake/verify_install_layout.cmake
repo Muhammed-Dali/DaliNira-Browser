@@ -36,10 +36,24 @@ set(required_files
   "${stage}/usr/share/icons/hicolor/256x256/apps/dalinira.png"
   "${stage}/usr/share/icons/hicolor/128x128/apps/dalinira.png"
   "${stage}/usr/share/icons/hicolor/32x32/apps/dalinira.png"
+  "${executable_root}/dalinira-webengine-process"
+  "${stage}/usr/share/dalinira-browser/i18n"
+  "${stage}/usr/share/dalinira-browser/resources/adblock/NOTICE.txt"
 )
+# The WebKit engine's web process extension (network filtering), when built.
+if(DALINIRA_EXPECT_WEBKIT)
+  list(APPEND required_files "${executable_root}/webkit-extensions/libdalinira-webkit-extension.so")
+endif()
 foreach(required_file IN LISTS required_files)
   if(NOT EXISTS "${required_file}")
     message(FATAL_ERROR "installed runtime asset missing: ${required_file}")
+  endif()
+  if(IS_DIRECTORY "${required_file}")
+    file(GLOB directory_entries "${required_file}/*")
+    if(NOT directory_entries)
+      message(FATAL_ERROR "installed runtime directory is empty: ${required_file}")
+    endif()
+    continue()
   endif()
   file(SIZE "${required_file}" required_size)
   if(required_size EQUAL 0)
@@ -54,7 +68,8 @@ foreach(expected_line
     "TryExec=/usr/bin/dalinira-browser"
     "Icon=dalinira"
     "StartupWMClass=DaliNiraBrowser"
-    "StartupNotify=true")
+    "StartupNotify=true"
+    "MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;")
   string(FIND "${desktop_entry}" "${expected_line}" line_position)
   if(line_position EQUAL -1)
     message(FATAL_ERROR "desktop integration mismatch; missing: ${expected_line}")

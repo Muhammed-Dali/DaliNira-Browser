@@ -26,6 +26,7 @@
 #include "dalinira_blocker_service.h"
 #include "dalinira_blocker_shield_button.h"
 #include "search_suggestion_service.h"
+#include "newtab/new_tab_suggest_command.h"
 #include "glow_toggle_switch.h"
 
 static void wait(int ms) { QEventLoop loop; QTimer::singleShot(ms,&loop,&QEventLoop::quit); loop.exec(); }
@@ -79,6 +80,42 @@ static void suggestions() {
   wait(350);assert(results==QStringList{"latest result"});
   network.body=QByteArray(65537,'x');service.request(&owner,"large","Google",false,done);wait(270);assert(results.isEmpty());
   network.delay=10000;service.request(&owner,"timeout","Google",false,done);wait(4900);assert(results.isEmpty());
+  // Empty input and anything the omnibox would open as an address never leave the browser.
+  network.delay=30;int sent=network.requests;
+  for(const QString &query : {"","   ","github.com","www.example.org/path","https://example.com","http://x.y",
+                              "localhost:3000","127.0.0.1","8.8.8.8","[::1]","sub.example.co.uk"}){
+    assert(!SearchSuggestionService::endpoint("Google",query).isValid());
+    calls=0;service.request(&owner,query,"Google",false,done);wait(240);
+    assert(network.requests==sent);assert(calls==1&&results.isEmpty());
+  }
+  for(const QString &query : {"github","hava durumu","c++ tutorial","ışık","3.5 kg"}) assert(SearchSuggestionService::endpoint("Google",query).isValid());
+  // Turkish input is UTF-8 percent-encoded; a fast typing burst sends one request for the final text.
+  network.body=R"(["çiğ",["çiğköfte tarifi","çiğ süt","ÇİĞ"]])";
+  service.request(&owner,QStringLiteral("ç"),"Google",false,done);wait(50);
+  service.request(&owner,QStringLiteral("çi"),"Google",false,done);wait(50);
+  service.request(&owner,QStringLiteral("çiğ"),"Google",false,done);wait(300);
+  assert(network.requests==sent+1);
+  assert(network.last.url().toString(QUrl::FullyEncoded).endsWith(QStringLiteral("&q=%C3%A7i%C4%9F")));
+  assert(results==QStringList({QStringLiteral("çiğköfte tarifi"),QStringLiteral("çiğ süt"),QStringLiteral("ÇİĞ")}));
+  // A malformed reply yields no suggestions and leaves the service usable.
+  network.body="<html>error</html>";service.request(&owner,"broken","Google",false,done);wait(300);assert(results.isEmpty());
+  network.body=R"(["ok",["ok google"]])";service.request(&owner,"ok","Google",false,done);wait(300);
+  assert(results==QStringList{"ok google"});
+  // Both engines' New Tab transports share one parser for dalinira://suggest.
+  using Op=NewTabSuggestCommand::Op;
+  auto command=NewTabSuggestCommand::parse(QUrl(QStringLiteral("dalinira://suggest?op=query&cap=x&id=7&q=%C3%A7i%C4%9Fk%C3%B6fte%20tarifi")));
+  assert(command.op==Op::Query&&command.id==7&&command.text==QStringLiteral("çiğköfte tarifi"));
+  assert(NewTabSuggestCommand::parse(QUrl("dalinira://suggest?op=query&id=-1&q=a")).op==Op::Invalid);
+  assert(NewTabSuggestCommand::parse(QUrl("dalinira://suggest?op=query&id=x&q=a")).op==Op::Invalid);
+  assert(NewTabSuggestCommand::parse(QUrl("dalinira://suggest?op=query&id=1&q="+QString(257,'a'))).op==Op::Invalid);
+  assert(NewTabSuggestCommand::parse(QUrl("dalinira://navigate?op=query&id=1&q=a")).op==Op::Invalid);
+  command=NewTabSuggestCommand::parse(QUrl("dalinira://suggest?op=consent&enabled=true"));assert(command.op==Op::Consent&&command.enabled);
+  command=NewTabSuggestCommand::parse(QUrl("dalinira://suggest?op=consent&enabled=false"));assert(command.op==Op::Consent&&!command.enabled);
+  assert(NewTabSuggestCommand::parse(QUrl("dalinira://suggest?op=consent&enabled=1")).op==Op::Invalid);
+  command=NewTabSuggestCommand::parse(QUrl("dalinira://suggest?op=activate&q=%20a%20%20b%20"));assert(command.op==Op::Activate&&command.text=="a b");
+  assert(NewTabSuggestCommand::parse(QUrl("dalinira://suggest?op=activate&q=%20")).op==Op::Invalid);
+  command=NewTabSuggestCommand::parse(QUrl("dalinira://suggest?op=delete-history&id=3&q=old&input=ol"));
+  assert(command.op==Op::DeleteHistory&&command.id==3&&command.text=="old"&&command.input=="ol");
   std::cout<<"Suggestion consent, providers, debounce, cancellation, limits, parsing and timeout passed\n";
 }
 static void shields() {

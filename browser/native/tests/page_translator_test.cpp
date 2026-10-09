@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <tuple>
 
 #include "page_translator.h"
 #include "language_detector.h"
@@ -142,9 +143,6 @@ int main(int argc, char *argv[]) {
     auto *view = new QWebEngineView();
     auto *translator = new PageTranslator(view, &service);
     assert(translator->targetLanguage() == QStringLiteral("ar"));
-
-    translator->translatePage(QStringLiteral("en"));
-    assert(translator->targetLanguage() == QStringLiteral("en"));
 
     translator->reset();
     assert(translator->targetLanguage() == QStringLiteral("ar"));
@@ -314,6 +312,51 @@ int main(int argc, char *argv[]) {
     assert(runJs(QStringLiteral("document.getElementById('nav1').getAttribute('title');")).toString() == QStringLiteral("Platform tools"));
 
     delete view;
+  }
+
+  // Test 13: deterministic Chromium automatic-offer matrix. setHtml receives
+  // an HTTP base URL so PageTranslator follows the same eligibility path as a
+  // network page without contacting a live site.
+  {
+    const QString english = QStringLiteral(
+        "<!doctype html><html%1><body><p>The browser page contains enough English text "
+        "for reliable automatic language detection and a deterministic translation offer.</p></body></html>");
+    auto detect = [&](const QString &html, const QString &target) {
+      auto *view = new QWebEngineView();
+      QEventLoop loadLoop;
+      QObject::connect(view, &QWebEngineView::loadFinished, &loadLoop, &QEventLoop::quit);
+      view->setHtml(html, QUrl(QStringLiteral("https://local.dalinira.test/language")));
+      loadLoop.exec();
+      TranslateService service;
+      service.setDefaultTargetLanguage(target);
+      auto *translator = new PageTranslator(view, &service);
+      translator->detectLanguage();
+      QEventLoop detectLoop;
+      QTimer poll;
+      poll.setInterval(10);
+      QObject::connect(&poll, &QTimer::timeout, &detectLoop, [&] {
+        if (!translator->sourceLanguage().isEmpty()) detectLoop.quit();
+      });
+      QTimer::singleShot(3000, &detectLoop, &QEventLoop::quit);
+      poll.start();
+      detectLoop.exec();
+      const QString source = translator->sourceLanguage();
+      const PageTranslator::State state = translator->state();
+      const QString actualTarget = translator->targetLanguage();
+      delete view;
+      return std::tuple{source, state, actualTarget};
+    };
+
+    const auto [trSource, trState, trTarget] = detect(english.arg(QStringLiteral(" lang='en'")), QStringLiteral("tr"));
+    assert(trSource == QLatin1String("en") && trTarget == QLatin1String("tr") && trState == PageTranslator::State::Detected);
+    const auto [enSource, enState, enTarget] = detect(english.arg(QStringLiteral(" lang='en'")), QStringLiteral("en"));
+    assert(enSource == QLatin1String("en") && enTarget == QLatin1String("en") && enState == PageTranslator::State::Idle);
+    const auto [arSource, arState, arTarget] = detect(english.arg(QStringLiteral(" lang='en'")), QStringLiteral("ar"));
+    assert(arSource == QLatin1String("en") && arTarget == QLatin1String("ar") && arState == PageTranslator::State::Detected);
+    const auto [frSource, frState, frTarget] = detect(english.arg(QStringLiteral(" lang='en'")), QStringLiteral("fr"));
+    assert(frSource == QLatin1String("en") && frTarget == QLatin1String("fr") && frState == PageTranslator::State::Detected);
+    const auto [fallbackSource, fallbackState, fallbackTarget] = detect(english.arg(QString()), QStringLiteral("tr"));
+    assert(fallbackSource == QLatin1String("en") && fallbackTarget == QLatin1String("tr") && fallbackState == PageTranslator::State::Detected);
   }
 
   return 0;

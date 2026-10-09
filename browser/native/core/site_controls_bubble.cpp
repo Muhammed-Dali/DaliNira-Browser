@@ -8,6 +8,7 @@
 #include <QStyle>
 #include <QStyleOption>
 #include <QScrollBar>
+#include "i18n/i18n.h"
 
 namespace {
 
@@ -62,7 +63,7 @@ QWidget *createSubpageHeader(const QString &title, QLabel **outHostLabel, std::f
   backBtn->setObjectName(QStringLiteral("site-controls-back-btn"));
   backBtn->setIcon(BrowserIcons::icon(BrowserIcon::ArrowLeft));
   backBtn->setIconSize(QSize(18, 18));
-  backBtn->setToolTip(QStringLiteral("Geri"));
+  backBtn->setToolTip(I18n::text(QStringLiteral("common.back")));
   backBtn->setCursor(Qt::PointingHandCursor);
   QObject::connect(backBtn, &QToolButton::clicked, onBack);
   hLayout->addWidget(backBtn);
@@ -253,7 +254,7 @@ QWidget *SiteControlsBubble::createMainPage() {
   mainCloseBtn_ = new QToolButton(page);
   mainCloseBtn_->setObjectName(QStringLiteral("site-controls-close-btn"));
   mainCloseBtn_->setText(QStringLiteral("×"));
-  mainCloseBtn_->setToolTip(QStringLiteral("Kapat (Esc)"));
+  mainCloseBtn_->setToolTip(I18n::text(QStringLiteral("permission.close_tooltip")));
   mainCloseBtn_->setCursor(Qt::PointingHandCursor);
   connect(mainCloseBtn_, &QToolButton::clicked, this, &QWidget::hide);
   topRow->addWidget(mainCloseBtn_);
@@ -262,8 +263,8 @@ QWidget *SiteControlsBubble::createMainPage() {
 
   // Row 1: Connection Security
   mainSecurityRow_ = createNavRowButton(
-      BrowserIcon::Privacy, QStringLiteral("Bağlantı güvenli"),
-      QStringLiteral("Bilgileriniz güvende"), &mainSecuritySubLabel_,
+      BrowserIcon::Privacy, I18n::text(QStringLiteral("site.connection_secure")),
+      I18n::text(QStringLiteral("site.info_secure")), &mainSecuritySubLabel_,
       &mainSecurityIconLabel_, &mainSecurityTitleLabel_);
   connect(mainSecurityRow_, &QPushButton::clicked, this, [this] {
     stack_->setCurrentIndex(1);
@@ -272,8 +273,8 @@ QWidget *SiteControlsBubble::createMainPage() {
 
   // Row 2: Cookies and site data
   mainCookiesRow_ = createNavRowButton(
-      BrowserIcon::Cookie, QStringLiteral("Çerezler ve site verileri"),
-      QStringLiteral("0 çerez kullanımda"), &mainCookiesSubLabel_);
+      BrowserIcon::Cookie, I18n::text(QStringLiteral("settings.privacy.cookies_and_site_data")),
+      I18n::text(QStringLiteral("site.cookies_zero")), &mainCookiesSubLabel_);
   connect(mainCookiesRow_, &QPushButton::clicked, this, [this] {
     stack_->setCurrentIndex(2);
   });
@@ -281,8 +282,8 @@ QWidget *SiteControlsBubble::createMainPage() {
 
   // Row 3: Site permissions
   mainPermsRow_ = createNavRowButton(
-      BrowserIcon::Tune, QStringLiteral("Site izinleri"),
-      QStringLiteral("İzinleri yönetin"), &mainPermsSubLabel_);
+      BrowserIcon::Tune, I18n::text(QStringLiteral("site.permissions")),
+      I18n::text(QStringLiteral("site.manage_permissions")), &mainPermsSubLabel_);
   connect(mainPermsRow_, &QPushButton::clicked, this, [this] {
     stack_->setCurrentIndex(3);
   });
@@ -296,8 +297,8 @@ QWidget *SiteControlsBubble::createMainPage() {
 
   // Row 4: About this page
   mainAboutRow_ = createNavRowButton(
-      BrowserIcon::Info, QStringLiteral("Bu sayfa hakkında"),
-      QStringLiteral("Bağlantı ve site detayları"), nullptr);
+      BrowserIcon::Info, I18n::text(QStringLiteral("site.about_this_page")),
+      I18n::text(QStringLiteral("site.connection_and_details")), nullptr);
   connect(mainAboutRow_, &QPushButton::clicked, this, [this] {
     stack_->setCurrentIndex(4);
   });
@@ -312,7 +313,7 @@ QWidget *SiteControlsBubble::createSecurityPage() {
   layout->setContentsMargins(10, 10, 10, 12);
   layout->setSpacing(10);
 
-  layout->addWidget(createSubpageHeader(QStringLiteral("Güvenlik"), &secHostLabel_, [this] {
+  layout->addWidget(createSubpageHeader(I18n::text(QStringLiteral("site.security")), &secHostLabel_, [this] {
     stack_->setCurrentIndex(0);
   }));
 
@@ -374,7 +375,7 @@ QWidget *SiteControlsBubble::createCookiesPage() {
   layout->setContentsMargins(10, 10, 10, 12);
   layout->setSpacing(10);
 
-  layout->addWidget(createSubpageHeader(QStringLiteral("Çerezler ve site verileri"), &cookiesHostLabel_, [this] {
+  layout->addWidget(createSubpageHeader(I18n::text(QStringLiteral("settings.privacy.cookies_and_site_data")), &cookiesHostLabel_, [this] {
     stack_->setCurrentIndex(0);
   }));
 
@@ -395,7 +396,7 @@ QWidget *SiteControlsBubble::createCookiesPage() {
   top->addWidget(cookiesCountLabel_, 1);
   cLayout->addLayout(top);
 
-  auto *descLbl = new QLabel(QStringLiteral("Çerezler oturum bilgilerini ve tercihlerinizi saklar."), card);
+  auto *descLbl = new QLabel(I18n::text(QStringLiteral("site.cookies_desc")), card);
   descLbl->setObjectName(QStringLiteral("site-controls-row-subtitle"));
   descLbl->setWordWrap(true);
   cLayout->addWidget(descLbl);
@@ -408,7 +409,7 @@ QWidget *SiteControlsBubble::createCookiesPage() {
   cookiesStatusLabel_->hide();
   layout->addWidget(cookiesStatusLabel_);
 
-  cookiesClearBtn_ = new QPushButton(QStringLiteral("Bu sitenin verilerini sil"), page);
+  cookiesClearBtn_ = new QPushButton(I18n::text(QStringLiteral("site.delete_site_data")), page);
   cookiesClearBtn_->setObjectName(QStringLiteral("site-controls-action-btn"));
   cookiesClearBtn_->setCursor(Qt::PointingHandCursor);
   connect(cookiesClearBtn_, &QPushButton::clicked, this, [this] {
@@ -416,11 +417,11 @@ QWidget *SiteControlsBubble::createCookiesPage() {
       profileService_->clearCookiesForHost(host_);
     }
     emit cookiesClearedRequested(host_);
-    cookiesCountLabel_->setText(QStringLiteral("Bu site için 0 adet çerez depolanıyor"));
+    cookiesCountLabel_->setText(I18n::text(QStringLiteral("site.cookies_stored_zero")));
     if (mainCookiesSubLabel_) {
-      mainCookiesSubLabel_->setText(QStringLiteral("0 çerez kullanımda"));
+      mainCookiesSubLabel_->setText(I18n::text(QStringLiteral("site.cookies_zero")));
     }
-    cookiesStatusLabel_->setText(QStringLiteral("Bu sitenin çerezleri ve verileri temizlendi."));
+    cookiesStatusLabel_->setText(I18n::text(QStringLiteral("site.data_cleared")));
     cookiesStatusLabel_->show();
   });
   layout->addWidget(cookiesClearBtn_);
@@ -435,7 +436,7 @@ QWidget *SiteControlsBubble::createPermissionsPage() {
   layout->setContentsMargins(10, 10, 10, 12);
   layout->setSpacing(8);
 
-  layout->addWidget(createSubpageHeader(QStringLiteral("Site izinleri"), &permsHostLabel_, [this] {
+  layout->addWidget(createSubpageHeader(I18n::text(QStringLiteral("site.permissions")), &permsHostLabel_, [this] {
     stack_->setCurrentIndex(0);
   }));
 
@@ -454,14 +455,14 @@ QWidget *SiteControlsBubble::createPermissionsPage() {
     QString title;
     BrowserIcon icon;
   } kSupportedPerms[] = {
-    {QStringLiteral("geolocation"), QStringLiteral("Konum"), BrowserIcon::Location},
-    {QStringLiteral("camera"), QStringLiteral("Kamera"), BrowserIcon::Camera},
-    {QStringLiteral("microphone"), QStringLiteral("Mikrofon"), BrowserIcon::Microphone},
-    {QStringLiteral("notifications"), QStringLiteral("Bildirimler"), BrowserIcon::Notification},
-    {QStringLiteral("clipboard"), QStringLiteral("Pano erişimi"), BrowserIcon::Clipboard},
-    {QStringLiteral("localFonts"), QStringLiteral("Yerel yazı tipleri"), BrowserIcon::Fonts},
-    {QStringLiteral("mouseLock"), QStringLiteral("Fare kilidi"), BrowserIcon::Mouse},
-    {QStringLiteral("screenShare"), QStringLiteral("Ekran paylaşımı"), BrowserIcon::Video}
+    {QStringLiteral("geolocation"), I18n::text(QStringLiteral("settings.site.location")), BrowserIcon::Location},
+    {QStringLiteral("camera"), I18n::text(QStringLiteral("settings.site.camera")), BrowserIcon::Camera},
+    {QStringLiteral("microphone"), I18n::text(QStringLiteral("settings.site.microphone")), BrowserIcon::Microphone},
+    {QStringLiteral("notifications"), I18n::text(QStringLiteral("settings.site.notifications")), BrowserIcon::Notification},
+    {QStringLiteral("clipboard"), I18n::text(QStringLiteral("site.clipboard_access")), BrowserIcon::Clipboard},
+    {QStringLiteral("localFonts"), I18n::text(QStringLiteral("settings.site.local_fonts")), BrowserIcon::Fonts},
+    {QStringLiteral("mouseLock"), I18n::text(QStringLiteral("settings.site.pointer_lock")), BrowserIcon::Mouse},
+    {QStringLiteral("screenShare"), I18n::text(QStringLiteral("settings.site.screen_sharing")), BrowserIcon::Video}
   };
 
   permRows_.clear();
@@ -486,7 +487,7 @@ QWidget *SiteControlsBubble::createPermissionsPage() {
     nameLbl->setStyleSheet(QStringLiteral("font-size: 12px; font-weight: 550;"));
     textCol->addWidget(nameLbl);
 
-    auto *badgeLbl = new QLabel(QStringLiteral("Bu ziyaret için izin verildi"), rowWidget);
+    auto *badgeLbl = new QLabel(I18n::text(QStringLiteral("site.allowed_this_visit")), rowWidget);
     badgeLbl->setStyleSheet(QStringLiteral("color: #58a6c7; font-size: 10px; font-weight: 600;"));
     badgeLbl->hide();
     textCol->addWidget(badgeLbl);
@@ -494,7 +495,7 @@ QWidget *SiteControlsBubble::createPermissionsPage() {
     rLayout->addLayout(textCol, 1);
 
     auto *combo = new QComboBox(rowWidget);
-    combo->addItems({QStringLiteral("Sor"), QStringLiteral("İzin ver"), QStringLiteral("Engelle")});
+    combo->addItems({I18n::text(QStringLiteral("site.ask")), I18n::text(QStringLiteral("site.allow")), I18n::text(QStringLiteral("permission.block"))});
     combo->setCursor(Qt::PointingHandCursor);
 
     PermissionRowWidgets prw;
@@ -531,7 +532,7 @@ QWidget *SiteControlsBubble::createPermissionsPage() {
   layout->addWidget(scrollArea, 1);
 
   // Bottom action: Reset all site permissions
-  resetAllPermsBtn_ = new QPushButton(QStringLiteral("Tüm site izinlerini sıfırla"), page);
+  resetAllPermsBtn_ = new QPushButton(I18n::text(QStringLiteral("site.reset_all_permissions")), page);
   resetAllPermsBtn_->setObjectName(QStringLiteral("site-controls-action-btn"));
   resetAllPermsBtn_->setCursor(Qt::PointingHandCursor);
   connect(resetAllPermsBtn_, &QPushButton::clicked, this, [this] {
@@ -556,7 +557,7 @@ QWidget *SiteControlsBubble::createAboutPage() {
   layout->setContentsMargins(10, 10, 10, 12);
   layout->setSpacing(10);
 
-  layout->addWidget(createSubpageHeader(QStringLiteral("Bu sayfa hakkında"), &aboutHostLabel_, [this] {
+  layout->addWidget(createSubpageHeader(I18n::text(QStringLiteral("site.about_this_page")), &aboutHostLabel_, [this] {
     stack_->setCurrentIndex(0);
   }));
 
@@ -566,7 +567,7 @@ QWidget *SiteControlsBubble::createAboutPage() {
   cLayout->setContentsMargins(10, 10, 10, 10);
   cLayout->setSpacing(8);
 
-  auto *urlTitle = new QLabel(QStringLiteral("Tam web adresi:"), card);
+  auto *urlTitle = new QLabel(I18n::text(QStringLiteral("site.full_url")), card);
   urlTitle->setObjectName(QStringLiteral("site-controls-row-subtitle"));
   cLayout->addWidget(urlTitle);
 
@@ -576,7 +577,7 @@ QWidget *SiteControlsBubble::createAboutPage() {
   aboutUrlLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
   cLayout->addWidget(aboutUrlLabel_);
 
-  auto *protoTitle = new QLabel(QStringLiteral("Protokol ve güvenlik:"), card);
+  auto *protoTitle = new QLabel(I18n::text(QStringLiteral("site.protocol_security")), card);
   protoTitle->setObjectName(QStringLiteral("site-controls-row-subtitle"));
   cLayout->addWidget(protoTitle);
 
@@ -632,58 +633,56 @@ void SiteControlsBubble::updateSecurityPageContent() {
       mainSecurityIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Privacy).pixmap(QSize(20, 20)));
     }
     if (mainSecurityTitleLabel_) {
-      mainSecurityTitleLabel_->setText(QStringLiteral("Bağlantı güvenli"));
+      mainSecurityTitleLabel_->setText(I18n::text(QStringLiteral("site.connection_secure")));
     }
     if (mainSecuritySubLabel_) {
-      mainSecuritySubLabel_->setText(QStringLiteral("Bilgileriniz bu sitede güvende"));
+      mainSecuritySubLabel_->setText(I18n::text(QStringLiteral("site.info_secure_on_site")));
     }
     if (secStatusIconLabel_) {
       secStatusIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::Privacy).pixmap(QSize(20, 20)));
     }
     if (secStatusTitleLabel_) {
-      secStatusTitleLabel_->setText(QStringLiteral("Bağlantı güvenli"));
+      secStatusTitleLabel_->setText(I18n::text(QStringLiteral("site.connection_secure")));
     }
     if (secStatusDescLabel_) {
-      secStatusDescLabel_->setText(QStringLiteral(
-          "Bu siteye gönderdiğiniz bilgiler (örneğin parolalar veya kredi kartı bilgileri) gizli tutulur."));
+      secStatusDescLabel_->setText(I18n::text(QStringLiteral("site.secure_info_desc")));
     }
     if (secCertIconLabel_) {
       secCertIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::ProtectedContent).pixmap(QSize(20, 20)));
     }
     if (secCertTitleLabel_) {
-      secCertTitleLabel_->setText(QStringLiteral("Sertifika geçerli"));
+      secCertTitleLabel_->setText(I18n::text(QStringLiteral("site.certificate_valid")));
     }
     if (secCertDescLabel_) {
-      secCertDescLabel_->setText(QStringLiteral("Sertifika bu bağlantı için doğrulandı (TLS / Şifreli bağlantı)."));
+      secCertDescLabel_->setText(I18n::text(QStringLiteral("site.certificate_valid_desc")));
     }
   } else {
     if (mainSecurityIconLabel_) {
       mainSecurityIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::InsecureContent).pixmap(QSize(20, 20)));
     }
     if (mainSecurityTitleLabel_) {
-      mainSecurityTitleLabel_->setText(QStringLiteral("Bağlantı güvenli değil"));
+      mainSecurityTitleLabel_->setText(I18n::text(QStringLiteral("site.connection_not_secure")));
     }
     if (mainSecuritySubLabel_) {
-      mainSecuritySubLabel_->setText(QStringLiteral("Gönderilen bilgiler şifrelenmiyor"));
+      mainSecuritySubLabel_->setText(I18n::text(QStringLiteral("site.info_not_encrypted")));
     }
     if (secStatusIconLabel_) {
       secStatusIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::InsecureContent).pixmap(QSize(20, 20)));
     }
     if (secStatusTitleLabel_) {
-      secStatusTitleLabel_->setText(QStringLiteral("Bağlantı güvenli değil"));
+      secStatusTitleLabel_->setText(I18n::text(QStringLiteral("site.connection_not_secure")));
     }
     if (secStatusDescLabel_) {
-      secStatusDescLabel_->setText(QStringLiteral(
-          "Bu sitede hassas bilgilerinizi (örneğin parolalar veya kredi kartı bilgileri) girmemelisiniz. Çünkü bu bilgiler saldırganlar tarafından çalınabilir."));
+      secStatusDescLabel_->setText(I18n::text(QStringLiteral("site.insecure_warning")));
     }
     if (secCertIconLabel_) {
       secCertIconLabel_->setPixmap(BrowserIcons::icon(BrowserIcon::InsecureContent).pixmap(QSize(20, 20)));
     }
     if (secCertTitleLabel_) {
-      secCertTitleLabel_->setText(QStringLiteral("Sertifika yok"));
+      secCertTitleLabel_->setText(I18n::text(QStringLiteral("site.no_certificate")));
     }
     if (secCertDescLabel_) {
-      secCertDescLabel_->setText(QStringLiteral("Bu site için geçerli bir SSL/TLS güvenlik sertifikası bulunmuyor."));
+      secCertDescLabel_->setText(I18n::text(QStringLiteral("site.no_certificate_desc")));
     }
   }
 }
@@ -691,10 +690,10 @@ void SiteControlsBubble::updateSecurityPageContent() {
 void SiteControlsBubble::updateCookiesPageContent() {
   const int count = profileService_ ? profileService_->cookiesCountForHost(host_) : 0;
   if (mainCookiesSubLabel_) {
-    mainCookiesSubLabel_->setText(QStringLiteral("%1 çerez kullanımda").arg(count));
+    mainCookiesSubLabel_->setText(I18n::text(QStringLiteral("site.cookies_in_use")).arg(count));
   }
   if (cookiesCountLabel_) {
-    cookiesCountLabel_->setText(QStringLiteral("Bu site için %1 adet çerez depolanıyor").arg(count));
+    cookiesCountLabel_->setText(I18n::text(QStringLiteral("site.cookies_stored")).arg(count));
   }
   if (cookiesStatusLabel_) {
     cookiesStatusLabel_->hide();
@@ -736,12 +735,12 @@ void SiteControlsBubble::refreshPermissions() {
 void SiteControlsBubble::updateAboutPageContent() {
   if (aboutUrlLabel_) aboutUrlLabel_->setText(url_.toString());
   if (aboutProtocolLabel_) {
-    aboutProtocolLabel_->setText(isHttps_ ? QStringLiteral("HTTPS (Güvenli Şifreli Bağlantı)") : QStringLiteral("HTTP (Güvenli Değil)"));
+    aboutProtocolLabel_->setText(isHttps_ ? I18n::text(QStringLiteral("site.protocol_https")) : I18n::text(QStringLiteral("site.protocol_http")));
   }
   if (aboutSecurityDetailLabel_) {
     aboutSecurityDetailLabel_->setText(
-        isHttps_ ? QStringLiteral("Bu sayfa TLS şifrelemesi kullanır. Verileriniz üçüncü şahıslardan korunur.")
-                 : QStringLiteral("Bu sayfa şifrelenmemiştir. Ağınızdaki başkaları aktarılan verileri görebilir."));
+        isHttps_ ? I18n::text(QStringLiteral("site.protocol_https_desc"))
+                 : I18n::text(QStringLiteral("site.protocol_http_desc")));
   }
 }
 

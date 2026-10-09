@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QDial>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QListWidget>
 #include <QListView>
@@ -16,6 +17,8 @@
 #include <QStackedWidget>
 #include <QSlider>
 #include <QTemporaryDir>
+#include <QWebEnginePage>
+#include <QWebEngineView>
 
 #include <limits>
 
@@ -84,9 +87,10 @@ int main(int argc, char *argv[]) {
         || controller.autoGainMaxGainDb() != 12.0 || controller.autoGainSpeed() != QStringLiteral("medium")
         || controller.autoGainPreset() != QStringLiteral("balanced")) return 1;
     const QString runtime = controller.injectionScript();
-    if (!runtime.contains(QStringLiteral("latencyHint: 'playback'"))
+    if (!runtime.contains(QStringLiteral("options && options.mediaLatencyHint || 'playback'"))
         || !runtime.contains(QStringLiteral("protocol === 'file:'"))
-        || !runtime.contains(QStringLiteral("element.readyState < 2 && element.paused"))
+        || !runtime.contains(QStringLiteral("!cfg.enabled || !root.isAudibleMedia(element)"))
+        || !runtime.contains(QStringLiteral("root.scheduleIdleCheck"))
         || !runtime.contains(QStringLiteral("root.audioContext = ctx"))
         || !runtime.contains(QStringLiteral("document.addEventListener('canplay'"))) return 1;
     controller.setEnabled(false);
@@ -847,6 +851,40 @@ int main(int argc, char *argv[]) {
     WebAudioEffectsController restored;
     EqPresetRepository repository;
     if (!repository.load() || restored.equalizerBands() != repository.presets().at(2).bands) return 1;
+  }
+  {
+    // Closing a tab whose effect script is still pending (always the case for
+    // a discarded page) must not crash: QtWebEngine answers the script with
+    // an invalid result from inside the view's destructor, as BrowserWindow's
+    // pages are children of their view.
+    WebAudioEffectsController controller;
+    controller.setEnabled(true);
+    QTemporaryDir site;
+    QFile page(site.filePath(QStringLiteral("media.html")));
+    if (!page.open(QIODevice::WriteOnly)) return 1;
+    page.write("<html><body><audio></audio></body></html>");
+    page.close();
+    for (int round = 0; round < 3; ++round) {
+      auto *view = new QWebEngineView;
+      view->setPage(new QWebEnginePage(view));
+      view->setProperty("dalinira-trusted-local-media", true);
+      bool loaded = false;
+      QObject::connect(view, &QWebEngineView::loadFinished, [&loaded](bool) { loaded = true; });
+      view->load(QUrl::fromLocalFile(page.fileName()));
+      controller.registerWebView(view, QUrl::fromLocalFile(page.fileName()));
+      QElapsedTimer wait;
+      wait.start();
+      while (!loaded && wait.elapsed() < 15000) QApplication::processEvents(QEventLoop::AllEvents, 20);
+      if (!loaded) return 1;
+      // A hidden, discarded page (what the memory saver produces) never runs
+      // scripts; their callbacks stay pending until the page is destroyed.
+      view->page()->setLifecycleState(QWebEnginePage::LifecycleState::Discarded);
+      QApplication::processEvents();
+      controller.applyToView(view);
+      delete view;
+      QApplication::processEvents();
+    }
+    if (controller.audioEnabledWebViewCount() != 0) return 1;
   }
   return 0;
 }
