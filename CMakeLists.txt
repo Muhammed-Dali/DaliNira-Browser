@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(DaliNiraBrowser VERSION 7.2.1 LANGUAGES CXX)
+project(DaliNiraBrowser VERSION 8.0.0 LANGUAGES CXX)
 
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX "/usr" CACHE PATH "Default install prefix" FORCE)
@@ -35,11 +35,13 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS
   Gui
   Widgets
   WebEngineWidgets
+  WebChannel
   Network
   Svg
   Concurrent
   DBus
 )
+find_package(SQLite3 REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PSL REQUIRED IMPORTED_TARGET libpsl)
@@ -66,6 +68,8 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/browser/native/downloads
   ${CMAKE_CURRENT_SOURCE_DIR}/browser/native/translate
   ${CMAKE_CURRENT_SOURCE_DIR}/browser/native/i18n
+  ${CMAKE_CURRENT_SOURCE_DIR}/browser/native/engine
+  ${CMAKE_CURRENT_SOURCE_DIR}/browser/native/onboarding
 )
 
 # -------------------------------------------------------------
@@ -115,8 +119,13 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/assets/new-tab)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/assets/new-tab/icons)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/browser/resources/adblock
      DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/resources)
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/i18n
-     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# configure_file (unlike file(COPY)) re-copies a catalog whenever it changes,
+# so tests that read build/i18n never see stale translations.
+foreach(I18N_FILE languages.json translations/tr.json translations/en.json
+                  translations/ar.json translations/fr.json)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/i18n/${I18N_FILE}
+                 ${CMAKE_CURRENT_BINARY_DIR}/i18n/${I18N_FILE} COPYONLY)
+endforeach()
 
 foreach(NTP_ASSET dalinira-flow-blue.png google.ico duckduckgo.ico startpage.ico mojeek.ico)
   configure_file(
@@ -151,10 +160,12 @@ add_custom_target(dalinira-browser-policy DEPENDS ${DALI_POLICY_JSON})
 # -------------------------------------------------------------
 set(CORE_SOURCES
   browser/native/core/application_identity.cpp
+  browser/native/core/default_browser_integration.cpp
   browser/native/core/browser_profile_service.cpp
   browser/native/core/browser_permission_policy.cpp
   browser/native/core/site_permission_prompt_bubble.cpp
   browser/native/core/site_controls_bubble.cpp
+  browser/native/core/bookmark_bar_reorder.cpp
   browser/native/core/performance_diagnostics.cpp
   browser/native/core/browser_policy.cpp
   browser/native/core/security_utils.cpp
@@ -182,6 +193,8 @@ set(NEWTAB_SOURCES
 set(DESKTOP_TABS_SOURCES
   browser/native/desktop_tabs/tab_manager.cpp
   browser/native/desktop_tabs/tab_performance_manager.cpp
+  browser/native/desktop_tabs/tab_lifecycle_adapter.cpp
+  browser/native/desktop_tabs/tab_resource_model.cpp
   browser/native/desktop_tabs/system_memory_pressure_monitor.cpp
   browser/native/desktop_tabs/tab_throbber.cpp
   browser/native/desktop_tabs/tab_hover_card.cpp
@@ -206,11 +219,27 @@ set(SESSION_SOURCES
 )
 
 set(SETTINGS_SOURCES
+  browser/native/settings/feedback_links.cpp
   browser/native/settings/settings_page.cpp
   browser/native/settings/settings_content_section.cpp
   browser/native/settings/settings_performance_section.cpp
   browser/native/settings/settings_privacy_section.cpp
   browser/native/settings/settings_languages_section.cpp
+)
+
+set(ONBOARDING_SOURCES
+  browser/native/onboarding/browser_data_importer.cpp
+  browser/native/onboarding/engine_step.cpp
+  browser/native/onboarding/import_step.cpp
+  browser/native/onboarding/layout_step.cpp
+  browser/native/onboarding/search_privacy_step.cpp
+  browser/native/onboarding/ready_step.cpp
+  browser/native/onboarding/onboarding_manager.cpp
+  browser/native/onboarding/onboarding_step.cpp
+  browser/native/onboarding/onboarding_view.cpp
+  browser/native/onboarding/welcome_step.cpp
+  browser/native/onboarding/aurora_wave_background.cpp
+  browser/native/onboarding/onboarding_window.cpp
 )
 
 set(AUDIO_SOURCES
@@ -230,6 +259,9 @@ set(BLOCKER_SOURCES
   browser/native/blocker/dalinira_blocker_settings.cpp
   browser/native/blocker/dalinira_blocker_engine.cpp
   browser/native/blocker/dalinira_blocker_list_manager.cpp
+  browser/native/blocker/dalinira_blocker_filter_updates.cpp
+  browser/native/blocker/dalinira_blocker_redirect_resources.cpp
+  browser/native/blocker/dalinira_blocker_element_picker.cpp
   browser/native/blocker/dalinira_blocker_request_interceptor.cpp
   browser/native/blocker/dalinira_blocker_service.cpp
   browser/native/blocker/dalinira_blocker_page.cpp
@@ -241,6 +273,7 @@ set(PASSWORDS_SOURCES
   browser/native/passwords/credential_vault.cpp
   browser/native/passwords/credential_vault_manager.cpp
   browser/native/passwords/credential_autofill_controller.cpp
+  browser/native/passwords/webkit_credential_controller.cpp
   browser/native/passwords/credential_save_bubble.cpp
   browser/native/passwords/vault_unlock_dialog.cpp
   browser/native/passwords/password_manager_page.cpp
@@ -267,6 +300,7 @@ set(DOWNLOADS_SOURCES
   browser/native/downloads/yt_dlp_update_manager.cpp
   browser/native/downloads/media_platform_registry.cpp
   browser/native/downloads/media_page_url_resolver.cpp
+  browser/native/downloads/download_desktop_actions.cpp
 )
 
 set(TRANSLATE_SOURCES
@@ -289,7 +323,55 @@ set(WINDOW_SOURCES
   browser/native/browser_window.cpp
   browser/native/browser_window_menus.cpp
   browser/native/browser_window_page_actions.cpp
+  browser/native/layout/browser_layout.cpp
+  browser/native/layout/browser_layout_controller.cpp
+  browser/native/layout/browser_side_panel.cpp
 )
+
+set(ENGINE_SOURCES
+  browser/native/engine/engine_backend.cpp
+  browser/native/engine/engine_view.cpp
+  browser/native/engine/engine_profile.cpp
+  browser/native/engine/engine_storage_manager.cpp
+  browser/native/engine/display_platform.cpp
+  browser/native/engine/chromium/chromium_backend.cpp
+  browser/native/engine/chromium/chromium_engine_view.cpp
+)
+
+option(DALINIRA_ENABLE_WEBKIT "Enable WebKit backend (WebCore/JavaScriptCore)" ON)
+if(DALINIRA_ENABLE_WEBKIT)
+  # gstreamer-1.0: the UI process checks the same registry WebKit's media stack uses.
+  pkg_check_modules(WEBKIT webkit2gtk-4.1 gstreamer-1.0)
+  pkg_check_modules(X11 x11 xi xcb)
+  if(WEBKIT_FOUND AND X11_FOUND)
+    set(DALINIRA_BUILD_WEBKIT 1)
+    add_compile_definitions(DALINIRA_BUILD_WEBKIT=1)
+    message(STATUS "WebKit backend enabled (WebKitGTK ${WEBKIT_VERSION})")
+    include_directories(${WEBKIT_INCLUDE_DIRS} ${X11_INCLUDE_DIRS})
+    link_libraries(${WEBKIT_LIBRARIES} ${X11_LIBRARIES})
+    list(APPEND ENGINE_SOURCES
+      browser/native/engine/webkit/webkit_backend.cpp
+      browser/native/engine/webkit/webkit_engine_view.cpp
+      browser/native/engine/webkit/webkit_engine_profile.cpp
+      browser/native/engine/webkit/webkit_media_runtime.cpp
+      browser/native/engine/webkit/webkit_network_filter.cpp
+    )
+    # Loaded by WebKitGTK into DaliNira's web processes (network and audio policy).
+    # It lives next to the executable, in the build tree and when installed.
+    pkg_check_modules(WEBKIT_EXTENSION REQUIRED webkit2gtk-web-extension-4.1 gstreamer-1.0)
+    add_library(dalinira-webkit-extension MODULE
+      browser/native/engine/webkit/extension/dalinira_web_extension.cpp)
+    target_include_directories(dalinira-webkit-extension PRIVATE ${WEBKIT_EXTENSION_INCLUDE_DIRS})
+    # Only the web-extension API: not the directory-wide UI-process libraries.
+    set_property(TARGET dalinira-webkit-extension PROPERTY LINK_LIBRARIES ${WEBKIT_EXTENSION_LIBRARIES})
+    set_target_properties(dalinira-webkit-extension PROPERTIES
+      LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/webkit-extensions
+      CXX_VISIBILITY_PRESET hidden
+      AUTOMOC OFF)
+  else()
+    message(WARNING "WebKit requested but webkit2gtk-4.1 or x11 not found. WebKit backend disabled.")
+  endif()
+endif()
 
 set(BROWSER_SOURCES
   ${CORE_SOURCES}
@@ -306,6 +388,8 @@ set(BROWSER_SOURCES
   ${TRANSLATE_SOURCES}
   ${I18N_SOURCES}
   ${WINDOW_SOURCES}
+  ${ENGINE_SOURCES}
+  ${ONBOARDING_SOURCES}
   browser/native/main.cpp
 )
 
@@ -377,6 +461,9 @@ add_dependencies(dalinira-adult-domain-snapshot
   dalinira-adult-domains-source)
 
 add_executable(dalinira-browser ${BROWSER_SOURCES})
+if(TARGET dalinira-webkit-extension)
+  add_dependencies(dalinira-browser dalinira-webkit-extension)
+endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(dalinira-browser PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()
@@ -472,6 +559,9 @@ qt_add_resources(dalinira-browser "browser_icons"
     browser/assets/browser-icons/image.svg
     browser/assets/browser-icons/popup.svg
     browser/assets/browser-icons/chevron-right.svg
+    browser/assets/browser-icons/chevron-up.svg
+    browser/assets/browser-icons/find-in-page.svg
+    browser/assets/browser-icons/mail.svg
     browser/assets/browser-icons/chevron-down.svg
     browser/assets/browser-icons/fonts.svg
     browser/assets/browser-icons/mouse.svg
@@ -490,6 +580,8 @@ qt_add_resources(dalinira-browser "browser_icons"
     browser/assets/browser-icons/js-optimize.svg
     browser/assets/browser-icons/fullscreen.svg
     browser/assets/browser-icons/tune.svg
+    browser/assets/browser-icons/chromium.svg
+    browser/assets/browser-icons/webkit.svg
 )
 
 qt_add_resources(dalinira-browser "search_engine_icons"
@@ -524,6 +616,7 @@ qt_add_resources(dalinira-browser "i18n_resources"
     i18n/translations/en.json
     i18n/translations/tr.json
     i18n/translations/ar.json
+    i18n/translations/fr.json
 )
 
 set_source_files_properties(${DALINIRA_ADULT_DOMAINS_SNAPSHOT} PROPERTIES
@@ -541,12 +634,19 @@ target_link_libraries(dalinira-browser PRIVATE
   Qt6::Gui
   Qt6::Widgets
   Qt6::WebEngineWidgets
+  Qt6::WebChannel
   Qt6::Network
   Qt6::Svg
   Qt6::Concurrent
   Qt6::DBus
   OpenSSL::Crypto
+  SQLite3::SQLite3
 )
+
+if(DALINIRA_BUILD_WEBKIT)
+  target_link_libraries(dalinira-browser PRIVATE ${WEBKIT_LIBRARIES} ${X11_LIBRARIES})
+  target_include_directories(dalinira-browser PRIVATE ${WEBKIT_INCLUDE_DIRS} ${X11_INCLUDE_DIRS})
+endif()
 
 target_compile_definitions(dalinira-browser PRIVATE
   DALINIRA_BROWSER_POLICY_PATH="${DALI_POLICY_JSON}"
@@ -599,6 +699,12 @@ set_target_properties(dalinira-browser PROPERTIES
 # -------------------------------------------------------------
 enable_testing()
 
+# Tests that open real windows run through this gate (see DALINIRA_GUI_TESTS
+# below): under a plain `ctest` they report "Skipped" instead of opening
+# windows on the developer's desktop. scripts/safe-gui-test.sh and CI (on a
+# virtual display) enable them with DALINIRA_GUI_TESTS=1.
+set(DALINIRA_GUI_GATE ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gui-test-gate.sh)
+
 add_executable(dalinira-browser-policy-test
   browser/native/tests/browser_policy_test.cpp
   browser/native/core/browser_policy.cpp
@@ -614,6 +720,15 @@ add_executable(dalinira-browser-security-utils-test
 )
 target_link_libraries(dalinira-browser-security-utils-test PRIVATE Qt6::Core)
 add_test(NAME browser-security-utils COMMAND dalinira-browser-security-utils-test)
+
+add_executable(dalinira-browser-feedback-system-test
+  browser/native/tests/feedback_system_test.cpp
+  browser/native/settings/feedback_links.cpp
+)
+target_link_libraries(dalinira-browser-feedback-system-test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
+target_compile_definitions(dalinira-browser-feedback-system-test PRIVATE
+  DALINIRA_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+add_test(NAME browser-feedback-system COMMAND dalinira-browser-feedback-system-test)
 
 add_executable(dalinira-browser-web-engine-hardware-acceleration-test
   browser/native/tests/web_engine_hardware_acceleration_test.cpp
@@ -641,6 +756,7 @@ add_executable(dalinira-browser-web-audio-effects-test
   browser/native/tests/web_audio_effects_controller_test.cpp
   browser/native/audio/audio_platform_policy.cpp
   browser/native/audio/web_audio_effects_controller.cpp
+  browser/native/engine/engine_view.cpp
   browser/native/audio/audio_effects_page.cpp
   browser/native/eq/eq_preset_repository.cpp
   browser/native/eq/eq_preset_page.cpp
@@ -663,10 +779,61 @@ set_tests_properties(browser-web-audio-effects PROPERTIES
   TIMEOUT 60
 )
 
+# The shared Web Audio effects engine without pages or engine processes.
+add_executable(dalinira-browser-web-audio-engine-unit-test
+  browser/native/tests/web_audio_engine_unit_test.cpp
+  browser/native/audio/audio_platform_policy.cpp
+  browser/native/audio/web_audio_effects_controller.cpp
+  browser/native/engine/engine_view.cpp
+)
+target_link_libraries(dalinira-browser-web-audio-engine-unit-test PRIVATE
+  Qt6::Core Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets
+)
+target_compile_definitions(dalinira-browser-web-audio-engine-unit-test PRIVATE
+  DALINIRA_WEB_OUTPUT_DALI_MODULE_RELATIVE_PATH="dali/web-output-audiophile.generated.js"
+  DALINIRA_WEB_EQ32_DALI_MODULE_RELATIVE_PATH="dali/web-equalizer-32.generated.js"
+  DALINIRA_WEB_COMPRESSOR_DALI_MODULE_RELATIVE_PATH="dali/web-dynamic-compressor.generated.js"
+  DALINIRA_WEB_LIMITER_DALI_MODULE_RELATIVE_PATH="dali/web-limiter.generated.js"
+  DALINIRA_WEB_BASS_ENHANCER_DALI_MODULE_RELATIVE_PATH="dali/web-bass-enhancer.generated.js"
+  DALINIRA_WEB_AUTO_GAIN_DALI_MODULE_RELATIVE_PATH="dali/web-auto-gain.generated.js"
+)
+add_dependencies(dalinira-browser-web-audio-engine-unit-test dalinira-web-output-dali)
+add_test(NAME browser-web-audio-engine-unit COMMAND dalinira-browser-web-audio-engine-unit-test)
+set_tests_properties(browser-web-audio-engine-unit PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+
+# Load test of the shared Web Audio effects engine: several feed-like pages,
+# offscreen and muted, local silent media (no GUI, no audible output).
+add_executable(dalinira-browser-web-audio-engine-stress-test
+  browser/native/tests/web_audio_engine_stress_test.cpp
+  browser/native/audio/audio_platform_policy.cpp
+  browser/native/audio/web_audio_effects_controller.cpp
+  browser/native/engine/engine_view.cpp
+)
+target_include_directories(dalinira-browser-web-audio-engine-stress-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/browser/native)
+target_link_libraries(dalinira-browser-web-audio-engine-stress-test PRIVATE
+  Qt6::Core Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets
+)
+target_compile_definitions(dalinira-browser-web-audio-engine-stress-test PRIVATE
+  DALINIRA_WEB_OUTPUT_DALI_MODULE_RELATIVE_PATH="dali/web-output-audiophile.generated.js"
+  DALINIRA_WEB_EQ32_DALI_MODULE_RELATIVE_PATH="dali/web-equalizer-32.generated.js"
+  DALINIRA_WEB_COMPRESSOR_DALI_MODULE_RELATIVE_PATH="dali/web-dynamic-compressor.generated.js"
+  DALINIRA_WEB_LIMITER_DALI_MODULE_RELATIVE_PATH="dali/web-limiter.generated.js"
+  DALINIRA_WEB_BASS_ENHANCER_DALI_MODULE_RELATIVE_PATH="dali/web-bass-enhancer.generated.js"
+  DALINIRA_WEB_AUTO_GAIN_DALI_MODULE_RELATIVE_PATH="dali/web-auto-gain.generated.js"
+)
+add_dependencies(dalinira-browser-web-audio-engine-stress-test dalinira-web-output-dali)
+add_test(NAME browser-web-audio-engine-stress COMMAND dalinira-browser-web-audio-engine-stress-test)
+set_tests_properties(browser-web-audio-engine-stress PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu --mute-audio"
+  TIMEOUT 120
+)
+
 add_test(NAME browser-installed-package-layout
   COMMAND ${CMAKE_COMMAND}
     -DDALINIRA_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -DDALINIRA_INSTALL_BINDIR=${CMAKE_INSTALL_BINDIR}
+    -DDALINIRA_EXPECT_WEBKIT=$<BOOL:${DALINIRA_BUILD_WEBKIT}>
     -P ${CMAKE_CURRENT_SOURCE_DIR}/browser/cmake/verify_install_layout.cmake
 )
 set_tests_properties(browser-installed-package-layout PROPERTIES TIMEOUT 90)
@@ -691,7 +858,7 @@ add_executable(dalinira-browser-password-autofill-test
   browser/native/core/browser_icons.cpp
   browser/native/core/search_engine_definition.cpp
 )
-target_link_libraries(dalinira-browser-password-autofill-test PRIVATE Qt6::Widgets Qt6::WebEngineWidgets Qt6::Concurrent Qt6::Svg Qt6::DBus OpenSSL::Crypto)
+target_link_libraries(dalinira-browser-password-autofill-test PRIVATE Qt6::Widgets Qt6::WebEngineWidgets Qt6::WebChannel Qt6::Concurrent Qt6::Svg Qt6::DBus OpenSSL::Crypto)
 qt_add_resources(dalinira-browser-password-autofill-test "password_autofill_icons"
     PREFIX "/browser-icons"
     BASE_DIR "browser/assets/browser-icons"
@@ -763,6 +930,27 @@ add_executable(dalinira-browser-local-media-routing-test
 target_link_libraries(dalinira-browser-local-media-routing-test PRIVATE Qt6::Core)
 add_test(NAME browser-local-media-routing COMMAND dalinira-browser-local-media-routing-test)
 
+add_executable(dalinira-browser-webkit-download-parity-test
+  browser/native/tests/webkit_download_parity_test.cpp
+  browser/native/downloads/general_download_manager.cpp
+  browser/native/downloads/media_platform_registry.cpp
+  browser/native/downloads/media_page_url_resolver.cpp
+  browser/native/downloads/download_desktop_actions.cpp
+  browser/native/downloads/local_media_routing.cpp
+  browser/native/core/security_utils.cpp
+)
+target_link_libraries(dalinira-browser-webkit-download-parity-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus)
+add_test(NAME browser-webkit-download-parity COMMAND dalinira-browser-webkit-download-parity-test)
+set_tests_properties(browser-webkit-download-parity PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_executable(dalinira-browser-download-gui-parity-test
+  browser/native/tests/download_gui_parity_test.cpp
+  browser/native/downloads/download_desktop_actions.cpp
+  browser/native/downloads/local_media_routing.cpp
+  browser/native/i18n/language_manager.cpp
+)
+target_link_libraries(dalinira-browser-download-gui-parity-test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::DBus)
+
 add_executable(dalinira-browser-application-identity-test
   browser/native/tests/application_identity_test.cpp
   browser/native/core/application_identity.cpp)
@@ -804,8 +992,8 @@ add_executable(dalinira-browser-desktop-tab-system-test
   browser/native/desktop_tabs/platform/tab_drag_platform.cpp
 )
 target_link_libraries(dalinira-browser-desktop-tab-system-test PRIVATE Qt6::Widgets Qt6::Gui)
-add_test(NAME browser-desktop-tab-system COMMAND dalinira-browser-desktop-tab-system-test)
-set_tests_properties(browser-desktop-tab-system PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=xcb")
+add_test(NAME browser-desktop-tab-system COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-desktop-tab-system-test>)
+set_tests_properties(browser-desktop-tab-system PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=xcb;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu")
 
 add_executable(dalinira-browser-tab-drag-controller-test
   browser/native/tests/tab_drag_controller_test.cpp
@@ -821,8 +1009,8 @@ add_executable(dalinira-browser-tab-drag-controller-test
   browser/native/desktop_tabs/platform/tab_drag_platform.cpp
 )
 target_link_libraries(dalinira-browser-tab-drag-controller-test PRIVATE Qt6::Widgets Qt6::Gui)
-add_test(NAME browser-tab-drag-controller COMMAND dalinira-browser-tab-drag-controller-test)
-set_tests_properties(browser-tab-drag-controller PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=xcb")
+add_test(NAME browser-tab-drag-controller COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-tab-drag-controller-test>)
+set_tests_properties(browser-tab-drag-controller PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=xcb;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu")
 
 add_executable(dalinira-browser-critical-tab-drag-scenario-test
   browser/native/tests/critical_tab_drag_scenario_test.cpp
@@ -838,15 +1026,20 @@ add_executable(dalinira-browser-critical-tab-drag-scenario-test
   browser/native/desktop_tabs/platform/tab_drag_platform.cpp
 )
 target_link_libraries(dalinira-browser-critical-tab-drag-scenario-test PRIVATE Qt6::Widgets Qt6::Gui)
-add_test(NAME browser-critical-tab-drag-scenario COMMAND dalinira-browser-critical-tab-drag-scenario-test)
+add_test(NAME browser-critical-tab-drag-scenario COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-critical-tab-drag-scenario-test>)
 
 add_executable(dalinira-browser-runtime-feature-integration-test
+  ${I18N_SOURCES}
   browser/native/tests/runtime_feature_integration_test.cpp
   browser/native/audio/audio_platform_policy.cpp
   browser/native/audio/web_audio_effects_controller.cpp
+  browser/native/engine/engine_view.cpp
   browser/native/blocker/dalinira_blocker_service.cpp
   browser/native/blocker/dalinira_blocker_engine.cpp
   browser/native/blocker/dalinira_blocker_list_manager.cpp
+  browser/native/blocker/dalinira_blocker_filter_updates.cpp
+  browser/native/blocker/dalinira_blocker_redirect_resources.cpp
+  browser/native/blocker/dalinira_blocker_element_picker.cpp
   browser/native/blocker/dalinira_blocker_request_interceptor.cpp
   browser/native/blocker/dalinira_blocker_settings.cpp
   browser/native/pulse/song_recognition_service.cpp
@@ -855,16 +1048,19 @@ add_executable(dalinira-browser-runtime-feature-integration-test
   browser/native/audio/audio_device_manager.cpp
   browser/native/pulse/song_fingerprint.cpp
   browser/native/newtab/new_tab_scheme.cpp
+  browser/native/newtab/new_tab_asset_resolver.cpp
   browser/native/newtab/new_tab_html.cpp
   browser/native/core/security_utils.cpp
   browser/native/core/adult_content_protection.cpp
   browser/native/core/search_engine_definition.cpp
+  browser/native/core/browser_icons.cpp
   browser/native/core/search_suggestion_service.cpp
+  browser/native/core/address_input_resolver.cpp
   browser/native/downloads/media_download_service.cpp
   browser/native/downloads/yt_dlp_update_manager.cpp
   browser/native/blocker/dalinira_blocker_shield_button.cpp
 )
-target_link_libraries(dalinira-browser-runtime-feature-integration-test PRIVATE Qt6::Widgets Qt6::WebEngineWidgets Qt6::Network Qt6::Concurrent)
+target_link_libraries(dalinira-browser-runtime-feature-integration-test PRIVATE Qt6::Widgets Qt6::WebEngineWidgets Qt6::Network Qt6::Concurrent Qt6::Svg)
 target_compile_definitions(dalinira-browser-runtime-feature-integration-test PRIVATE
   DALINIRA_WEB_OUTPUT_DALI_MODULE_RELATIVE_PATH="dali/web-output-audiophile.generated.js"
   DALINIRA_WEB_EQ32_DALI_MODULE_RELATIVE_PATH="dali/web-equalizer-32.generated.js"
@@ -873,7 +1069,7 @@ target_compile_definitions(dalinira-browser-runtime-feature-integration-test PRI
   DALINIRA_WEB_BASS_ENHANCER_DALI_MODULE_RELATIVE_PATH="dali/web-bass-enhancer.generated.js"
   DALINIRA_WEB_AUTO_GAIN_DALI_MODULE_RELATIVE_PATH="dali/web-auto-gain.generated.js"
 )
-add_test(NAME browser-runtime-feature-integration COMMAND dalinira-browser-runtime-feature-integration-test)
+add_test(NAME browser-runtime-feature-integration COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-runtime-feature-integration-test>)
 
 add_executable(dalinira-browser-phase2a-policy-test
   browser/native/tests/phase2a_policy_test.cpp
@@ -883,12 +1079,15 @@ add_executable(dalinira-browser-phase2a-policy-test
   browser/native/core/security_utils.cpp
 )
 target_link_libraries(dalinira-browser-phase2a-policy-test PRIVATE Qt6::Core Qt6::WebEngineWidgets)
-add_test(NAME browser-phase2a-policy COMMAND dalinira-browser-phase2a-policy-test)
+add_test(NAME browser-phase2a-policy COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-phase2a-policy-test>)
 
 add_executable(dalinira-browser-tab-scheduler-retry-test
   browser/native/tests/tab_scheduler_retry_test.cpp
   browser/native/desktop_tabs/tab_manager.cpp
   browser/native/desktop_tabs/tab_performance_manager.cpp
+  browser/native/desktop_tabs/tab_lifecycle_adapter.cpp
+  browser/native/desktop_tabs/tab_resource_model.cpp
+  browser/native/engine/engine_view.cpp
   browser/native/desktop_tabs/system_memory_pressure_monitor.cpp
 )
 target_link_libraries(dalinira-browser-tab-scheduler-retry-test PRIVATE Qt6::Widgets Qt6::WebEngineWidgets)
@@ -898,9 +1097,17 @@ set_tests_properties(browser-tab-scheduler-retry PROPERTIES ENVIRONMENT "QT_QPA_
 add_executable(dalinira-browser-tab-hover-card-test
   browser/native/tests/tab_hover_card_test.cpp
   browser/native/desktop_tabs/tab_hover_card.cpp
+  browser/native/desktop_tabs/tab_resource_model.cpp
+  browser/native/desktop_tabs/tab_manager.cpp
+  browser/native/desktop_tabs/tab_performance_manager.cpp
+  browser/native/desktop_tabs/tab_lifecycle_adapter.cpp
+  browser/native/desktop_tabs/system_memory_pressure_monitor.cpp
+  browser/native/engine/engine_view.cpp
+  ${I18N_SOURCES}
   browser/native/core/browser_icons.cpp
   browser/native/core/search_engine_definition.cpp
   browser/native/core/search_suggestion_service.cpp
+  browser/native/core/address_input_resolver.cpp
 )
 target_link_libraries(dalinira-browser-tab-hover-card-test PRIVATE Qt6::Widgets Qt6::WebEngineWidgets Qt6::Svg)
 add_test(NAME browser-tab-hover-card COMMAND dalinira-browser-tab-hover-card-test)
@@ -937,11 +1144,15 @@ target_link_libraries(dalinira-browser-smart-omnibox-phase2-test PRIVATE Qt6::Co
 add_test(NAME browser-smart-omnibox-phase2 COMMAND dalinira-browser-smart-omnibox-phase2-test)
 
 add_executable(smart_omnibox_phase2_1_test
+  ${I18N_SOURCES}
   browser/native/tests/smart_omnibox_phase2_1_test.cpp
   browser/native/core/browser_profile_service.cpp
+  browser/native/engine/engine_backend.cpp
+  browser/native/onboarding/onboarding_manager.cpp
   browser/native/downloads/general_download_manager.cpp
   browser/native/core/search_engine_definition.cpp
   browser/native/core/search_suggestion_service.cpp
+  browser/native/core/address_input_resolver.cpp
   browser/native/core/browser_policy.cpp
   browser/native/core/security_utils.cpp
   browser/native/core/adult_content_protection.cpp
@@ -949,9 +1160,13 @@ add_executable(smart_omnibox_phase2_1_test
   browser/native/newtab/new_tab_asset_resolver.cpp
   browser/native/newtab/new_tab_scheme.cpp
   browser/native/newtab/new_tab_background_store.cpp
+  browser/native/core/browser_icons.cpp
   browser/native/blocker/dalinira_blocker_settings.cpp
   browser/native/blocker/dalinira_blocker_engine.cpp
   browser/native/blocker/dalinira_blocker_list_manager.cpp
+  browser/native/blocker/dalinira_blocker_filter_updates.cpp
+  browser/native/blocker/dalinira_blocker_redirect_resources.cpp
+  browser/native/blocker/dalinira_blocker_element_picker.cpp
   browser/native/blocker/dalinira_blocker_request_interceptor.cpp
   browser/native/blocker/dalinira_blocker_service.cpp
   browser/native/passwords/device_keyring.cpp
@@ -972,20 +1187,29 @@ target_link_libraries(smart_omnibox_phase2_1_test PRIVATE
   Qt6::Network
   Qt6::Concurrent
   Qt6::DBus
+  Qt6::Svg
   OpenSSL::Crypto
 )
+add_test(NAME browser-newtab-shortcuts-storage COMMAND smart_omnibox_phase2_1_test --newtab-shortcuts-storage)
+add_test(NAME browser-newtab-shortcuts COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:smart_omnibox_phase2_1_test> --newtab-shortcuts)
+set_tests_properties(browser-newtab-shortcuts PROPERTIES LABELS "gui" TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 add_test(NAME smart_omnibox_phase2_1_test COMMAND smart_omnibox_phase2_1_test)
 set_tests_properties(smart_omnibox_phase2_1_test PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu")
 
 add_executable(dalinira-phase22d-test
+  ${I18N_SOURCES}
   browser/native/tests/phase22d_test.cpp
   browser/native/newtab/new_tab_html.cpp
   browser/native/core/search_engine_definition.cpp
   browser/native/core/search_suggestion_service.cpp
+  browser/native/core/address_input_resolver.cpp
   browser/native/blocker/dalinira_blocker_settings.cpp
   browser/native/blocker/dalinira_blocker_engine.cpp
   browser/native/blocker/dalinira_blocker_list_manager.cpp
+  browser/native/blocker/dalinira_blocker_filter_updates.cpp
+  browser/native/blocker/dalinira_blocker_redirect_resources.cpp
+  browser/native/blocker/dalinira_blocker_element_picker.cpp
   browser/native/blocker/dalinira_blocker_service.cpp
   browser/native/blocker/dalinira_blocker_request_interceptor.cpp
   browser/native/blocker/dalinira_blocker_shield_button.cpp
@@ -1081,6 +1305,19 @@ target_include_directories(dalinira-adult-content-benchmark-release PRIVATE brow
 target_compile_options(dalinira-adult-content-benchmark-release PRIVATE -O3 -DNDEBUG)
 
 
+# Developer memory profiler (docs/memory-profiling.md); built on request only.
+add_executable(dalinira-memory-profile EXCLUDE_FROM_ALL
+  ${DALINIRA_BROWSER_FULL_SOURCES}
+  browser/native/tools/memory_profile.cpp)
+target_link_libraries(dalinira-memory-profile PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+if(DALINIRA_BROWSER_FULL_DEFS)
+  target_compile_definitions(dalinira-memory-profile PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+endif()
+add_dependencies(dalinira-memory-profile dalinira-browser-policy dalinira-web-output-dali)
+if(TARGET dalinira-webkit-extension)
+  add_dependencies(dalinira-memory-profile dalinira-webkit-extension)
+endif()
+
 add_executable(dalinira-browser-step5-test
   ${DALINIRA_BROWSER_FULL_SOURCES}
   browser/native/tests/step5_essential_features_test.cpp)
@@ -1090,10 +1327,166 @@ if(DALINIRA_BROWSER_FULL_DEFS)
 endif()
 target_compile_options(dalinira-browser-step5-test PRIVATE -UNDEBUG)
 add_dependencies(dalinira-browser-step5-test dalinira-browser-policy dalinira-web-output-dali)
-add_test(NAME browser-step5-essential-features COMMAND dalinira-browser-step5-test)
-set_tests_properties(browser-step5-essential-features PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=xcb;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu" TIMEOUT 120)
+add_test(NAME browser-step5-essential-features COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-step5-test>)
+# The WebKit phase opens three tabs at once (bookmark middle-click and open in
+# new tab), each with its own web process.
+set_tests_properties(browser-step5-essential-features PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=xcb;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;DALINIRA_GUI_MAX_WEB_PROCESSES=4" TIMEOUT 120)
+add_test(NAME browser-secure-dns-configuration
+  COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-step5-test> --secure-dns-only)
+set_tests_properties(browser-secure-dns-configuration PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=xcb;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu"
+  TIMEOUT 60)
 
 set_tests_properties(smart_omnibox_phase2_1_test PROPERTIES TIMEOUT 90)
+
+# Tab Sleep/Wake menu and hover-card memory on both engines (GUI tier). The
+# renderer limit makes the Chromium phase's two tabs share one renderer.
+add_executable(dalinira-browser-tab-memory-ux-test
+  ${DALINIRA_BROWSER_FULL_SOURCES}
+  browser/native/tests/tab_memory_ux_test.cpp)
+target_link_libraries(dalinira-browser-tab-memory-ux-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+if(DALINIRA_BROWSER_FULL_DEFS)
+  target_compile_definitions(dalinira-browser-tab-memory-ux-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+endif()
+add_dependencies(dalinira-browser-tab-memory-ux-test dalinira-browser-policy dalinira-web-output-dali)
+if(TARGET dalinira-webkit-extension)
+  add_dependencies(dalinira-browser-tab-memory-ux-test dalinira-webkit-extension)
+endif()
+add_test(NAME browser-tab-memory-ux COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-tab-memory-ux-test>)
+set_tests_properties(browser-tab-memory-ux PROPERTIES
+  # Two WebKit tabs: two page processes, plus a site's service worker or a
+  # cross-site swap overlapping briefly (safe-gui-test.sh reads this budget).
+  ENVIRONMENT "QT_QPA_PLATFORM=xcb;GDK_BACKEND=x11;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu --renderer-process-limit=1;DALINIRA_GUI_MAX_WEB_PROCESSES=4"
+  TIMEOUT 240)
+
+# Chromium and WebKit browsing workspaces (tabs, session, shortcut row) are
+# independent; the bookmark library stays shared. One executable: the logic
+# checks run in the default tier; the engine switch (one child process per
+# engine, run one after another, as DaliNira relaunches) is a GUI-tier test.
+add_executable(dalinira-browser-engine-workspace-test
+  ${DALINIRA_BROWSER_FULL_SOURCES}
+  browser/native/tests/engine_workspace_test.cpp)
+target_link_libraries(dalinira-browser-engine-workspace-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+if(DALINIRA_BROWSER_FULL_DEFS)
+  target_compile_definitions(dalinira-browser-engine-workspace-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+endif()
+add_dependencies(dalinira-browser-engine-workspace-test dalinira-browser-policy dalinira-web-output-dali)
+if(TARGET dalinira-webkit-extension)
+  add_dependencies(dalinira-browser-engine-workspace-test dalinira-webkit-extension)
+endif()
+add_test(NAME browser-engine-workspace COMMAND dalinira-browser-engine-workspace-test --logic)
+set_tests_properties(browser-engine-workspace PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu" TIMEOUT 60)
+add_test(NAME browser-engine-workspace-switch
+  COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-engine-workspace-test> --gui)
+set_tests_properties(browser-engine-workspace-switch PROPERTIES
+  # One window at a time; the WebKit phases hold two tabs (two page
+  # processes, plus a brief cross-site swap).
+  ENVIRONMENT "QT_QPA_PLATFORM=xcb;GDK_BACKEND=x11;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;DALINIRA_GUI_MAX_WEB_PROCESSES=4"
+  TIMEOUT 300)
+
+# Windowing / input compatibility of both engines on X11, XWayland and native
+# Wayland. The display plan logic runs in the default tier; the GUI tier runs
+# one child process per engine, once with Qt on xcb and once on wayland (on
+# Wayland sessions; WebKit then still runs through XWayland).
+add_executable(dalinira-browser-window-platform-test
+  ${DALINIRA_BROWSER_FULL_SOURCES}
+  browser/native/tests/window_platform_test.cpp)
+target_link_libraries(dalinira-browser-window-platform-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+if(DALINIRA_BROWSER_FULL_DEFS)
+  target_compile_definitions(dalinira-browser-window-platform-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+endif()
+if(DALINIRA_BUILD_WEBKIT)
+  # Real X key events into the WebKit surface (only while its focus is verified).
+  pkg_check_modules(DALINIRA_XTST xtst)
+  if(DALINIRA_XTST_FOUND)
+    target_compile_definitions(dalinira-browser-window-platform-test PRIVATE DALINIRA_TEST_XTEST=1)
+    target_include_directories(dalinira-browser-window-platform-test PRIVATE ${DALINIRA_XTST_INCLUDE_DIRS})
+    target_link_libraries(dalinira-browser-window-platform-test PRIVATE ${DALINIRA_XTST_LIBRARIES})
+  endif()
+endif()
+add_dependencies(dalinira-browser-window-platform-test dalinira-browser-policy dalinira-web-output-dali)
+if(TARGET dalinira-webkit-extension)
+  add_dependencies(dalinira-browser-window-platform-test dalinira-webkit-extension)
+endif()
+add_test(NAME browser-window-platform COMMAND dalinira-browser-window-platform-test --logic)
+set_tests_properties(browser-window-platform PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+foreach(DALINIRA_QPA xcb wayland)
+  add_test(NAME browser-window-platform-${DALINIRA_QPA}
+    COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-window-platform-test> --gui)
+  set_tests_properties(browser-window-platform-${DALINIRA_QPA} PROPERTIES
+    # One window at a time; the WebKit phase holds up to three tabs.
+    ENVIRONMENT "QT_QPA_PLATFORM=${DALINIRA_QPA};QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;DALINIRA_GUI_MAX_WEB_PROCESSES=4"
+    TIMEOUT 300)
+endforeach()
+
+# User-visible Chromium / WebKit parity in the real BrowserWindow: popups and
+# window.opener, per-site "block scripts", fullscreen media, onboarding and
+# runtime layout / theme switching. One GUI test per case; each runs a
+# Chromium then a WebKit child and compares their results.
+add_executable(dalinira-browser-engine-parity-test
+  ${DALINIRA_BROWSER_FULL_SOURCES}
+  browser/native/tests/engine_parity_test.cpp)
+target_link_libraries(dalinira-browser-engine-parity-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+if(DALINIRA_BROWSER_FULL_DEFS)
+  target_compile_definitions(dalinira-browser-engine-parity-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+endif()
+target_compile_definitions(dalinira-browser-engine-parity-test PRIVATE
+  DALINIRA_TEST_MEDIA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/browser/native/tests/fixtures/media")
+add_dependencies(dalinira-browser-engine-parity-test dalinira-browser-policy dalinira-web-output-dali)
+if(TARGET dalinira-webkit-extension)
+  add_dependencies(dalinira-browser-engine-parity-test dalinira-webkit-extension)
+endif()
+set(DALINIRA_PARITY_CASES popup scripts media layout privacy network fingerprint audit about find)
+if(DALINIRA_XTST_FOUND)
+  target_compile_definitions(dalinira-browser-engine-parity-test PRIVATE DALINIRA_TEST_XTEST=1)
+  target_include_directories(dalinira-browser-engine-parity-test PRIVATE ${DALINIRA_XTST_INCLUDE_DIRS})
+  target_link_libraries(dalinira-browser-engine-parity-test PRIVATE ${DALINIRA_XTST_LIBRARIES})
+  list(APPEND DALINIRA_PARITY_CASES translate)
+endif()
+foreach(DALINIRA_PARITY_CASE IN LISTS DALINIRA_PARITY_CASES)
+  add_test(NAME browser-engine-parity-${DALINIRA_PARITY_CASE}
+    COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-engine-parity-test> --gui ${DALINIRA_PARITY_CASE})
+  set_tests_properties(browser-engine-parity-${DALINIRA_PARITY_CASE} PROPERTIES
+    # One window at a time; popups share their opener's web process, the
+    # script case swaps processes across two sites.
+    ENVIRONMENT "QT_QPA_PLATFORM=xcb;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox;DALINIRA_GUI_MAX_WEB_PROCESSES=4"
+    TIMEOUT 330)
+endforeach()
+# The layout case again with Qt on native Wayland (Chromium; WebKit still runs
+# through XWayland). Skipped outside a Wayland session.
+add_test(NAME browser-engine-parity-layout-wayland
+  COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-engine-parity-test> --gui layout)
+set_tests_properties(browser-engine-parity-layout-wayland PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=wayland;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox;DALINIRA_GUI_MAX_WEB_PROCESSES=4"
+  TIMEOUT 330)
+
+# The shared Web Audio effects engine in the real BrowserWindow, Chromium then
+# WebKit (one child process per engine, one after the other), same checks.
+add_executable(dalinira-browser-web-audio-engine-gui-test
+  ${DALINIRA_BROWSER_FULL_SOURCES}
+  browser/native/tests/web_audio_engine_gui_test.cpp)
+target_link_libraries(dalinira-browser-web-audio-engine-gui-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+if(DALINIRA_BROWSER_FULL_DEFS)
+  target_compile_definitions(dalinira-browser-web-audio-engine-gui-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+endif()
+add_dependencies(dalinira-browser-web-audio-engine-gui-test dalinira-browser-policy dalinira-web-output-dali)
+if(TARGET dalinira-webkit-extension)
+  add_dependencies(dalinira-browser-web-audio-engine-gui-test dalinira-webkit-extension)
+endif()
+add_test(NAME browser-web-audio-engine-gui
+  COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-web-audio-engine-gui-test>)
+set_tests_properties(browser-web-audio-engine-gui PROPERTIES
+  # One window at a time; the WebKit phase has two media tabs.
+  ENVIRONMENT "QT_QPA_PLATFORM=xcb;GDK_BACKEND=x11;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;DALINIRA_GUI_MAX_WEB_PROCESSES=4"
+  TIMEOUT 300)
+
+# Effect activation latency (Chromium then WebKit), from the same binary.
+add_test(NAME browser-web-audio-activation-latency
+  COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-web-audio-engine-gui-test> --latency)
+set_tests_properties(browser-web-audio-activation-latency PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=xcb;GDK_BACKEND=x11;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;DALINIRA_GUI_MAX_WEB_PROCESSES=4"
+  TIMEOUT 600)
 
 add_executable(dalinira-language-manager-test
   ${I18N_SOURCES}
@@ -1107,6 +1500,7 @@ qt_add_resources(dalinira-language-manager-test "i18n_resources_test"
     i18n/translations/en.json
     i18n/translations/tr.json
     i18n/translations/ar.json
+    i18n/translations/fr.json
 )
 target_link_libraries(dalinira-language-manager-test PRIVATE
   Qt6::Core
@@ -1157,15 +1551,58 @@ add_test(NAME browser-internal-tab COMMAND dalinira-browser-internal-tab-test)
 set_tests_properties(browser-internal-tab PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu")
 
+add_executable(dalinira-browser-onboarding-test
+  browser/native/tests/onboarding_test.cpp
+  browser/native/onboarding/browser_data_importer.cpp
+  browser/native/onboarding/engine_step.cpp
+  browser/native/onboarding/import_step.cpp
+  browser/native/onboarding/layout_step.cpp
+  browser/native/onboarding/search_privacy_step.cpp
+  browser/native/onboarding/ready_step.cpp
+  browser/native/onboarding/onboarding_manager.cpp
+  browser/native/onboarding/onboarding_step.cpp
+  browser/native/onboarding/onboarding_view.cpp
+  browser/native/onboarding/welcome_step.cpp
+  browser/native/onboarding/aurora_wave_background.cpp
+  browser/native/onboarding/onboarding_window.cpp
+  browser/native/layout/browser_layout.cpp
+  browser/native/layout/browser_layout_controller.cpp
+  browser/native/layout/browser_side_panel.cpp
+  browser/native/core/application_identity.cpp
+  browser/native/core/browser_icons.cpp
+  browser/native/core/search_engine_definition.cpp
+  browser/native/i18n/language_manager.cpp)
+target_link_libraries(dalinira-browser-onboarding-test PRIVATE Qt6::Widgets Qt6::Svg SQLite3::SQLite3)
+add_test(NAME browser-onboarding COMMAND dalinira-browser-onboarding-test)
+set_tests_properties(browser-onboarding PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 add_executable(dalinira-browser-tab-performance-manager-test
   browser/native/tests/tab_performance_manager_test.cpp
   browser/native/desktop_tabs/tab_manager.cpp
   browser/native/desktop_tabs/tab_performance_manager.cpp
+  browser/native/desktop_tabs/tab_lifecycle_adapter.cpp
+  browser/native/desktop_tabs/tab_resource_model.cpp
+  browser/native/engine/engine_view.cpp
   browser/native/desktop_tabs/system_memory_pressure_monitor.cpp)
 target_link_libraries(dalinira-browser-tab-performance-manager-test PRIVATE Qt6::Widgets Qt6::WebEngineWidgets)
 add_test(NAME browser-tab-performance-manager COMMAND dalinira-browser-tab-performance-manager-test)
 set_tests_properties(browser-tab-performance-manager PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu" TIMEOUT 90)
+
+# The shared tab sleeping policy both engines follow (engine-neutral, no GUI).
+add_executable(dalinira-browser-tab-sleep-policy-test
+  browser/native/tests/tab_sleep_policy_test.cpp
+  browser/native/desktop_tabs/tab_manager.cpp
+  browser/native/desktop_tabs/tab_performance_manager.cpp
+  browser/native/desktop_tabs/tab_lifecycle_adapter.cpp
+  browser/native/desktop_tabs/tab_resource_model.cpp
+  browser/native/engine/engine_view.cpp
+  browser/native/desktop_tabs/system_memory_pressure_monitor.cpp)
+target_link_libraries(dalinira-browser-tab-sleep-policy-test PRIVATE Qt6::Widgets Qt6::WebEngineWidgets)
+add_test(NAME browser-tab-sleep-policy COMMAND dalinira-browser-tab-sleep-policy-test)
+set_tests_properties(browser-tab-sleep-policy PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu" TIMEOUT 60)
 
 add_executable(dalinira-browser-page-translator-test
   browser/native/tests/page_translator_test.cpp
@@ -1185,7 +1622,8 @@ target_link_libraries(dalinira-browser-page-translator-test PRIVATE
   Qt6::Widgets Qt6::WebEngineWidgets Qt6::Network Qt6::Concurrent Qt6::DBus OpenSSL::Crypto)
 add_test(NAME browser-page-translator COMMAND dalinira-browser-page-translator-test)
 set_tests_properties(browser-page-translator PROPERTIES
-  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu")
+  ENVIRONMENT "QT_QPA_PLATFORM=xcb;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu"
+  LABELS "gui;integration")
 
 add_executable(dalinira-browser-state-transfer-test
   browser/native/tests/state_transfer_test.cpp)
@@ -1238,6 +1676,9 @@ add_executable(dalinira-browser-adaptive-audio-dsp-test
   browser/native/eq/eq_preset_page.cpp
   browser/native/desktop_tabs/tab_manager.cpp
   browser/native/desktop_tabs/tab_performance_manager.cpp
+  browser/native/desktop_tabs/tab_lifecycle_adapter.cpp
+  browser/native/desktop_tabs/tab_resource_model.cpp
+  browser/native/engine/engine_view.cpp
   browser/native/desktop_tabs/system_memory_pressure_monitor.cpp)
 target_link_libraries(dalinira-browser-adaptive-audio-dsp-test PRIVATE
   Qt6::Core Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets Qt6::Svg)
@@ -1254,6 +1695,7 @@ set_tests_properties(browser-adaptive-audio-dsp PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu")
 
 add_executable(dalinira-browser-blocker-test
+  ${I18N_SOURCES}
   browser/native/tests/dalinira_blocker_test.cpp
   ${BLOCKER_SOURCES}
   browser/native/newtab/new_tab_html.cpp
@@ -1265,7 +1707,63 @@ target_compile_definitions(dalinira-browser-blocker-test PRIVATE
   DALINIRA_BROWSER_VERSION="${PROJECT_VERSION}")
 add_test(NAME browser-blocker COMMAND dalinira-browser-blocker-test)
 set_tests_properties(browser-blocker PROPERTIES
-  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu" TIMEOUT 90)
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;QTWEBENGINE_DISABLE_SANDBOX=1"
+  TIMEOUT 90)
+add_test(NAME browser-blocker-chromium-picker
+  COMMAND dalinira-browser-blocker-test --chromium-picker-only)
+set_tests_properties(browser-blocker-chromium-picker PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;QTWEBENGINE_DISABLE_SANDBOX=1"
+  TIMEOUT 60)
+add_test(NAME browser-blocker-bounce-storage
+  COMMAND dalinira-browser-blocker-test --bounce-storage-only)
+set_tests_properties(browser-blocker-bounce-storage PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;QTWEBENGINE_DISABLE_SANDBOX=1"
+  TIMEOUT 60)
+add_test(NAME browser-blocker-bounce-storage-chromium
+  COMMAND dalinira-browser-blocker-test --chromium-bounce-storage-only)
+set_tests_properties(browser-blocker-bounce-storage-chromium PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;QTWEBENGINE_DISABLE_SANDBOX=1"
+  TIMEOUT 60)
+
+# Remote filter-list updates against a loopback HTTP fixture (no Internet),
+# including one offscreen Chromium page and the WebKit filter's socket server.
+add_executable(dalinira-browser-blocker-filter-update-test
+  ${I18N_SOURCES}
+  browser/native/tests/blocker_filter_update_test.cpp
+  browser/native/engine/webkit/webkit_network_filter.cpp
+  ${BLOCKER_SOURCES}
+  browser/native/newtab/new_tab_html.cpp
+  browser/native/core/search_engine_definition.cpp
+  browser/native/core/security_utils.cpp)
+target_link_libraries(dalinira-browser-blocker-filter-update-test PRIVATE
+  Qt6::Core Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets Qt6::Network Qt6::Concurrent Qt6::Svg)
+target_compile_definitions(dalinira-browser-blocker-filter-update-test PRIVATE
+  DALINIRA_BROWSER_VERSION="${PROJECT_VERSION}"
+  DALINIRA_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+add_test(NAME browser-blocker-filter-update COMMAND dalinira-browser-blocker-filter-update-test)
+set_tests_properties(browser-blocker-filter-update PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;QTWEBENGINE_DISABLE_SANDBOX=1"
+  TIMEOUT 180 LABELS "integration;webengine")
+
+# Filter syntax families ($removeparam, $redirect, $badfilter, $method,
+# response-phase rules) through the shared model and both engine adapters.
+add_executable(dalinira-browser-blocker-filter-syntax-test
+  ${I18N_SOURCES}
+  browser/native/tests/blocker_filter_syntax_test.cpp
+  browser/native/engine/webkit/webkit_network_filter.cpp
+  ${BLOCKER_SOURCES}
+  browser/native/newtab/new_tab_html.cpp
+  browser/native/core/search_engine_definition.cpp
+  browser/native/core/security_utils.cpp)
+target_link_libraries(dalinira-browser-blocker-filter-syntax-test PRIVATE
+  Qt6::Core Qt6::Gui Qt6::Widgets Qt6::WebEngineWidgets Qt6::Network Qt6::Concurrent Qt6::Svg)
+target_compile_definitions(dalinira-browser-blocker-filter-syntax-test PRIVATE
+  DALINIRA_BROWSER_VERSION="${PROJECT_VERSION}"
+  DALINIRA_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+add_test(NAME browser-blocker-filter-syntax COMMAND dalinira-browser-blocker-filter-syntax-test)
+set_tests_properties(browser-blocker-filter-syntax PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;QTWEBENGINE_DISABLE_SANDBOX=1"
+  TIMEOUT 180 LABELS "integration;webengine")
 
 # These two UI tests intentionally use the application source set because the
 # Settings and profile objects coordinate multiple subsystem hooks.
@@ -1292,6 +1790,141 @@ add_dependencies(dalinira-browser-tab-audible-fullscreen-test dalinira-browser-p
 add_test(NAME browser-tab-audible-fullscreen COMMAND dalinira-browser-tab-audible-fullscreen-test)
 set_tests_properties(browser-tab-audible-fullscreen PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu" TIMEOUT 90)
+
+if(DALINIRA_BUILD_WEBKIT)
+  add_executable(dalinira-browser-webkit-backend-test
+    ${I18N_SOURCES}
+    browser/native/tests/webkit_backend_test.cpp
+    ${ENGINE_SOURCES}
+    ${BLOCKER_SOURCES}
+    browser/native/core/adult_content_protection.cpp
+    browser/native/core/security_utils.cpp
+    browser/native/core/search_engine_definition.cpp
+    browser/native/core/search_suggestion_service.cpp
+    browser/native/core/address_input_resolver.cpp
+    browser/native/newtab/new_tab_html.cpp
+    browser/native/newtab/new_tab_asset_resolver.cpp
+    browser/native/newtab/new_tab_scheme.cpp
+    browser/native/core/browser_icons.cpp
+  )
+  target_link_libraries(dalinira-browser-webkit-backend-test PRIVATE
+    Qt6::Concurrent
+    Qt6::Core
+    Qt6::Widgets
+    Qt6::WebEngineWidgets
+    Qt6::Network
+    Qt6::Svg
+    ${WEBKIT_LIBRARIES}
+    ${X11_LIBRARIES}
+  )
+  target_include_directories(dalinira-browser-webkit-backend-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/browser/native
+    ${CMAKE_CURRENT_SOURCE_DIR}/browser/native/engine
+    ${WEBKIT_INCLUDE_DIRS}
+    ${X11_INCLUDE_DIRS}
+  )
+  target_compile_definitions(dalinira-browser-webkit-backend-test PRIVATE
+    DALINIRA_BROWSER_VERSION="${PROJECT_VERSION}")
+  add_dependencies(dalinira-browser-webkit-backend-test dalinira-webkit-extension)
+  add_test(NAME browser-webkit-newtab-shortcuts COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-webkit-backend-test> --newtab-shortcuts)
+  set_tests_properties(browser-webkit-newtab-shortcuts PROPERTIES LABELS "gui" TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 ENVIRONMENT "GDK_BACKEND=x11;QT_QPA_PLATFORM=xcb")
+  add_test(NAME browser-webkit-backend COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-webkit-backend-test>)
+  set_tests_properties(browser-webkit-backend PROPERTIES
+    ENVIRONMENT "GDK_BACKEND=x11;QT_QPA_PLATFORM=xcb" TIMEOUT 150)
+  add_test(NAME browser-webkit-site-data
+    COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-webkit-backend-test> --site-data-only)
+  set_tests_properties(browser-webkit-site-data PROPERTIES
+    LABELS "gui;privacy" ENVIRONMENT "GDK_BACKEND=x11;QT_QPA_PLATFORM=xcb" TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+
+  # Engine-neutral logic behind the WebKit backend; no window, no engine process.
+  add_executable(dalinira-browser-webkit-engine-logic-test
+    ${I18N_SOURCES}
+    browser/native/tests/webkit_engine_logic_test.cpp
+    ${ENGINE_SOURCES}
+    browser/native/core/adult_content_protection.cpp
+    browser/native/core/security_utils.cpp
+    browser/native/core/search_engine_definition.cpp
+    browser/native/core/search_suggestion_service.cpp
+    browser/native/core/address_input_resolver.cpp
+    browser/native/newtab/new_tab_html.cpp
+    browser/native/newtab/new_tab_asset_resolver.cpp
+    browser/native/newtab/new_tab_scheme.cpp
+    browser/native/core/browser_icons.cpp
+  )
+  target_link_libraries(dalinira-browser-webkit-engine-logic-test PRIVATE
+    Qt6::Core Qt6::Widgets Qt6::WebEngineWidgets Qt6::Network Qt6::Svg ${WEBKIT_LIBRARIES} ${X11_LIBRARIES})
+  target_include_directories(dalinira-browser-webkit-engine-logic-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/browser/native
+    ${CMAKE_CURRENT_SOURCE_DIR}/browser/native/engine
+    ${WEBKIT_INCLUDE_DIRS}
+    ${X11_INCLUDE_DIRS})
+  add_test(NAME browser-webkit-engine-logic COMMAND dalinira-browser-webkit-engine-logic-test)
+  set_tests_properties(browser-webkit-engine-logic PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
+  add_executable(dalinira-browser-webkit-media-test
+    ${I18N_SOURCES}
+    browser/native/tests/webkit_media_test.cpp
+    ${ENGINE_SOURCES}
+    browser/native/core/adult_content_protection.cpp
+    browser/native/core/security_utils.cpp
+    browser/native/core/search_engine_definition.cpp
+    browser/native/newtab/new_tab_html.cpp
+    browser/native/newtab/new_tab_asset_resolver.cpp
+    browser/native/newtab/new_tab_scheme.cpp
+    browser/native/core/browser_icons.cpp
+  )
+  target_link_libraries(dalinira-browser-webkit-media-test PRIVATE
+    Qt6::Core Qt6::Widgets Qt6::WebEngineWidgets Qt6::Network Qt6::Svg ${WEBKIT_LIBRARIES} ${X11_LIBRARIES})
+  target_include_directories(dalinira-browser-webkit-media-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/browser/native
+    ${CMAKE_CURRENT_SOURCE_DIR}/browser/native/engine
+    ${WEBKIT_INCLUDE_DIRS}
+    ${X11_INCLUDE_DIRS})
+  target_compile_definitions(dalinira-browser-webkit-media-test PRIVATE
+    DALINIRA_TEST_MEDIA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/browser/native/tests/fixtures/media")
+  add_test(NAME browser-webkit-media COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-webkit-media-test>)
+  # ~35 s locally (includes WebKit's 10 s service worker delays); --live adds
+  # YouTube start, a possible pre-roll ad and a seek.
+  set_tests_properties(browser-webkit-media PROPERTIES
+    ENVIRONMENT "GDK_BACKEND=x11;QT_QPA_PLATFORM=xcb" TIMEOUT 240)
+endif()
+
+# Tests that open real windows on the desktop display (GUI tier). They run
+# through ${DALINIRA_GUI_GATE}, so a plain `ctest` skips them; run them with
+# scripts/safe-gui-test.sh (one at a time, resource monitor, crash/GPU-error
+# checks, no core dumps). Chromium GUI tests keep the GPU disabled, as the
+# offscreen WebEngine tests do; WebKit tests use the desktop's GPU selection.
+# Window-manager stress, fullscreen, live sites and memory profiling are a
+# further opt-in tier (safe-gui-test.sh --manual / --live / --memory-profile).
+foreach(DALINIRA_GUI_TEST browser-critical-tab-drag-scenario browser-runtime-feature-integration browser-phase2a-policy)
+  set_tests_properties(${DALINIRA_GUI_TEST} PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=xcb;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu")
+endforeach()
+set(DALINIRA_GUI_TESTS
+  browser-desktop-tab-system browser-tab-drag-controller browser-critical-tab-drag-scenario
+  browser-runtime-feature-integration browser-phase2a-policy browser-step5-essential-features
+  browser-tab-memory-ux browser-engine-workspace-switch browser-web-audio-engine-gui
+  browser-web-audio-activation-latency browser-window-platform-xcb browser-window-platform-wayland
+  browser-secure-dns-configuration browser-engine-parity-layout-wayland)
+# Every parity case goes through the GUI gate; list them all so a plain or
+# CI `ctest -LE gui` run skips them instead of reporting the gate as a failure.
+foreach(DALINIRA_PARITY_CASE IN LISTS DALINIRA_PARITY_CASES)
+  list(APPEND DALINIRA_GUI_TESTS browser-engine-parity-${DALINIRA_PARITY_CASE})
+endforeach()
+if(DALINIRA_BUILD_WEBKIT)
+  list(APPEND DALINIRA_GUI_TESTS browser-webkit-backend browser-webkit-media)
+endif()
+set_tests_properties(${DALINIRA_GUI_TESTS} PROPERTIES RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+
+# X11 map check used by scripts/safe-gui-test.sh before any GUI test.
+pkg_check_modules(DALINIRA_XLIB x11)
+if(DALINIRA_XLIB_FOUND)
+  add_executable(dalinira-x11-map-probe browser/native/tools/x11_map_probe.cpp)
+  target_include_directories(dalinira-x11-map-probe PRIVATE ${DALINIRA_XLIB_INCLUDE_DIRS})
+  set_property(TARGET dalinira-x11-map-probe PROPERTY LINK_LIBRARIES ${DALINIRA_XLIB_LIBRARIES})
+  set_target_properties(dalinira-x11-map-probe PROPERTIES AUTOMOC OFF)
+endif()
 
 # Keep assertions enabled in Release and apply the same conservative warning
 # coverage used by the application to all DaliNira-owned test executables.
@@ -1331,6 +1964,110 @@ set_property(TEST
   browser-page-translator browser-state-transfer browser-adaptive-audio-dsp
   browser-blocker browser-performance-settings browser-tab-audible-fullscreen
   APPEND PROPERTY ENVIRONMENT "QTWEBENGINE_DISABLE_SANDBOX=1")
+# Appended last: other blocks above set these tests' LABELS.
+set_property(TEST ${DALINIRA_GUI_TESTS} APPEND PROPERTY LABELS gui)
+
+# Localization: one shared catalog for both engines.
+# Stand-alone tests whose sources now show catalog strings link the manager.
+foreach(DALINIRA_I18N_TARGET
+    dalinira-browser-eq-preset-repository-test dalinira-browser-web-audio-effects-test
+    dalinira-browser-web-audio-engine-unit-test dalinira-browser-web-audio-engine-stress-test
+    dalinira-browser-credential-vault-test dalinira-browser-song-finder-test
+    dalinira-browser-password-autofill-test dalinira-browser-media-download-service-test
+    dalinira-password-manager-page-test dalinira-browser-general-download-manager-test
+    dalinira-browser-phase2a-policy-test dalinira-browser-address-input-resolver-test
+    dalinira-browser-omnibox-navigation-integration-test dalinira-browser-smart-omnibox-phase2-test
+    dalinira-browser-new-tab-background-store-test dalinira-browser-page-translator-test
+    dalinira-browser-translate-service-test dalinira-browser-yt-dlp-update-manager-test
+    dalinira-browser-adaptive-audio-dsp-test dalinira-browser-webkit-download-parity-test)
+  target_sources(${DALINIRA_I18N_TARGET} PRIVATE ${I18N_SOURCES})
+  target_link_libraries(${DALINIRA_I18N_TARGET} PRIVATE Qt6::Gui)
+endforeach()
+
+add_executable(dalinira-browser-localization-ui-test
+  ${DALINIRA_BROWSER_FULL_SOURCES}
+  browser/native/tests/localization_ui_test.cpp)
+target_link_libraries(dalinira-browser-localization-ui-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+if(DALINIRA_BROWSER_FULL_DEFS)
+  target_compile_definitions(dalinira-browser-localization-ui-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+endif()
+target_compile_options(dalinira-browser-localization-ui-test PRIVATE -UNDEBUG)
+add_dependencies(dalinira-browser-localization-ui-test dalinira-browser-policy dalinira-web-output-dali)
+add_test(NAME browser-localization-ui COMMAND dalinira-browser-localization-ui-test)
+set_tests_properties(browser-localization-ui PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu;QTWEBENGINE_DISABLE_SANDBOX=1"
+  TIMEOUT 180)
+
+# One controlled GUI validation per engine (gated like the other GUI tests;
+# run through scripts/safe-gui-test.sh).
+add_executable(dalinira-browser-localization-gui-test
+  ${DALINIRA_BROWSER_FULL_SOURCES}
+  browser/native/tests/localization_gui_test.cpp)
+target_link_libraries(dalinira-browser-localization-gui-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+if(DALINIRA_BROWSER_FULL_DEFS)
+  target_compile_definitions(dalinira-browser-localization-gui-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+endif()
+add_dependencies(dalinira-browser-localization-gui-test dalinira-browser-policy dalinira-web-output-dali)
+add_test(NAME browser-localization-gui
+         COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-localization-gui-test>)
+set_tests_properties(browser-localization-gui PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=xcb;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox"
+  TIMEOUT 240 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS gui)
+
+if(DALINIRA_BUILD_WEBKIT)
+  add_test(NAME browser-blocker-provenance-webkit-gui
+           COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-localization-gui-test> --webkit)
+  set_tests_properties(browser-blocker-provenance-webkit-gui PROPERTIES
+    ENVIRONMENT "GDK_BACKEND=x11;QT_QPA_PLATFORM=xcb;DALINIRA_GUI_MAX_WEB_PROCESSES=2"
+    TIMEOUT 240 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS gui)
+endif()
+
+if(DALINIRA_BUILD_WEBKIT)
+  add_executable(dalinira-browser-localization-webkit-gui-test
+    ${I18N_SOURCES}
+    browser/native/tests/localization_webkit_gui_test.cpp
+    ${ENGINE_SOURCES}
+    browser/native/core/adult_content_protection.cpp
+    browser/native/core/security_utils.cpp
+    browser/native/core/search_engine_definition.cpp
+    browser/native/core/search_suggestion_service.cpp
+    browser/native/core/address_input_resolver.cpp
+    browser/native/newtab/new_tab_html.cpp
+    browser/native/newtab/new_tab_asset_resolver.cpp
+    browser/native/newtab/new_tab_scheme.cpp
+    browser/native/core/browser_icons.cpp
+  )
+  target_link_libraries(dalinira-browser-localization-webkit-gui-test PRIVATE
+    Qt6::Core Qt6::Widgets Qt6::WebEngineWidgets Qt6::Network Qt6::Svg ${WEBKIT_LIBRARIES} ${X11_LIBRARIES})
+  target_include_directories(dalinira-browser-localization-webkit-gui-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/browser/native
+    ${CMAKE_CURRENT_SOURCE_DIR}/browser/native/engine
+    ${WEBKIT_INCLUDE_DIRS}
+    ${X11_INCLUDE_DIRS})
+  add_dependencies(dalinira-browser-localization-webkit-gui-test dalinira-webkit-extension)
+  add_test(NAME browser-localization-webkit-gui
+           COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-localization-webkit-gui-test>)
+  set_tests_properties(browser-localization-webkit-gui PROPERTIES
+    ENVIRONMENT "GDK_BACKEND=x11;QT_QPA_PLATFORM=xcb"
+    TIMEOUT 120 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS gui)
+endif()
+
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME i18n-audit
+           COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/i18n_audit.py)
+  add_test(NAME i18n-audit-selftest
+           COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/i18n_audit_selftest.py)
+endif()
+
+# Legacy tests assert the Turkish source wording. Pin their UI language so the
+# result does not depend on the machine locale; language tests manage it.
+get_property(DALINIRA_ALL_TESTS DIRECTORY PROPERTY TESTS)
+foreach(DALINIRA_TEST ${DALINIRA_ALL_TESTS})
+  if(NOT DALINIRA_TEST MATCHES "^(language-manager-test|browser-localization-.*|i18n-audit.*)$")
+    set_property(TEST ${DALINIRA_TEST} APPEND PROPERTY ENVIRONMENT "DALINIRA_UI_LANGUAGE=tr")
+  endif()
+endforeach()
 
 # -------------------------------------------------------------
 # Installation Rules
@@ -1377,6 +2114,12 @@ install(DIRECTORY i18n
 install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/assets/new-tab/
   DESTINATION ${CMAKE_INSTALL_DATADIR}/dalinira-browser/new-tab
 )
+
+if(TARGET dalinira-webkit-extension)
+  install(TARGETS dalinira-webkit-extension
+    LIBRARY DESTINATION ${DALINIRA_RUNTIME_INSTALL_DIR}/webkit-extensions
+  )
+endif()
 
 if(TARGET dalinira-webengine-process)
   install(TARGETS dalinira-webengine-process
@@ -1432,3 +2175,7 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/browser/resources/eq-presets
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/browser/resources/adblock
   DESTINATION ${CMAKE_INSTALL_DATADIR}/dalinira-browser/resources
 )
+
+# Native .deb / .rpm packages, with the runtime (GStreamer media plugins) as
+# package dependencies.
+include(${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/cpack.cmake)

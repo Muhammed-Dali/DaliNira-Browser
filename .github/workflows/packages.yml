@@ -1,0 +1,362 @@
+name: Packages
+
+# Builds every DaliNira package in its own distribution's container and
+# installs each one into a fresh container that has none of the build
+# dependencies: the package manager alone must bring in the whole runtime,
+# including the GStreamer plugins WebKit needs for HTML5 media.
+#
+#   portable      Debian 12 baseline build -> dalinira-browser-<v>-linux-x86_64.tar.zst
+#                 (the release archive; the Arch binary packages repack it)
+#   native        .deb (Debian 12, Ubuntu 24.04) and .rpm (Fedora), via CPack
+#   arch-bin      packaging/pacman PKGBUILD (pacman repo / AUR dalinira, dalinira-bin)
+#   arch-source   packaging/archlinux PKGBUILD (source build)
+#   install-test  fresh install of each package + packaging/linux/validate-installed-package.sh
+#
+# No GUI tests and no display server here: the validation starts the browser
+# on Qt's offscreen platform (Chromium engine, GPU disabled).
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build
+        type: string
+        required: true
+      run_tests:
+        description: Run the non-GUI test tier in the portable build
+        type: boolean
+        default: false
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+  pull_request:
+    paths:
+      - packaging/**
+      - CMakeLists.txt
+      - browser/cmake/**
+      - browser/resources/linux/**
+      - scripts/check-release-metadata.sh
+      - .github/workflows/packages.yml
+  push:
+    branches: [main]
+    paths:
+      - packaging/**
+      - CMakeLists.txt
+      - browser/cmake/**
+      - browser/resources/linux/**
+      - scripts/check-release-metadata.sh
+      - .github/workflows/packages.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ inputs.ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  BUILD_REF: ${{ inputs.ref || github.sha }}
+
+jobs:
+  metadata:
+    name: Release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+      - name: Versions, PKGBUILD/.SRCINFO and file names agree
+        run: scripts/check-release-metadata.sh
+      - id: version
+        name: Version
+        run: echo "version=$(sed -n 's/^project(DaliNiraBrowser VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)" >> "$GITHUB_OUTPUT"
+
+  portable:
+    name: Portable archive (Debian 12 baseline)
+    needs: metadata
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential ca-certificates cmake ffmpeg git ninja-build nodejs zstd \
+            libssl-dev libpsl-dev pkg-config qt6-base-dev qt6-image-formats-plugins qt6-svg-dev \
+            qt6-webengine-dev libwebkit2gtk-4.1-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav \
+            gstreamer1.0-gl gstreamer1.0-alsa
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser
+          cmake --build build --parallel 2
+
+      - name: Non-GUI tests
+        if: ${{ inputs.run_tests }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_DISABLE_SANDBOX: "1"
+          QTWEBENGINE_CHROMIUM_FLAGS: --no-sandbox --disable-gpu
+        run: ctest --test-dir build --output-on-failure -LE gui --timeout 180
+
+      - name: Assemble portable archive
+        run: |
+          version="${{ needs.metadata.outputs.version }}"
+          stage="${GITHUB_WORKSPACE}/release-root"
+          DESTDIR="${stage}" cmake --install build
+          install -dm755 "${stage}/usr/bin"
+          ln -sf ../lib/dalinira-browser/dalinira-browser "${stage}/usr/bin/dalinira-browser"
+          mkdir -p dist
+          tar --zstd -C "${stage}" -cf "dist/dalinira-browser-${version}-linux-x86_64.tar.zst" usr
+          ls -l dist
+
+      - name: Upload portable archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: portable
+          path: dist/*
+          if-no-files-found: error
+
+  native:
+    name: Native package (${{ matrix.distro }})
+    needs: metadata
+    runs-on: ubuntu-latest
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: debian12
+            container: debian:12
+            generator: DEB
+          - distro: ubuntu2404
+            container: ubuntu:24.04
+            generator: DEB
+          - distro: fedora
+            container: fedora:latest
+            generator: RPM
+    steps:
+      - name: Install Debian/Ubuntu build dependencies
+        if: ${{ matrix.generator == 'DEB' }}
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential ca-certificates cmake dpkg-dev file ffmpeg git ninja-build nodejs \
+            libssl-dev libpsl-dev pkg-config qt6-base-dev qt6-image-formats-plugins qt6-svg-dev \
+            qt6-webengine-dev libwebkit2gtk-4.1-dev libgstreamer1.0-dev
+
+      - name: Install Fedora build dependencies
+        if: ${{ matrix.generator == 'RPM' }}
+        run: |
+          dnf install -y \
+            cmake ffmpeg-free gcc-c++ git ninja-build nodejs openssl-devel libpsl-devel \
+            pkgconf-pkg-config rpm-build file qt6-qtbase-devel qt6-qtimageformats \
+            qt6-qtsvg-devel qt6-qtwebengine-devel webkit2gtk4.1-devel gstreamer1-devel
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser \
+            -DDALINIRA_PACKAGE_DISTRO=${{ matrix.distro }}
+          # Everything the install rules package (policy, Dali modules, assets).
+          cmake --build build --parallel 2
+
+      - name: Build package
+        run: |
+          cd build
+          cpack -G ${{ matrix.generator }}
+          mkdir -p ../packages
+          mv dalinira-browser*.deb dalinira-browser*.rpm ../packages/ 2>/dev/null || true
+          ls -l ../packages
+          # Exactly one package, named after the version (no "~": GitHub
+          # renames such release assets).
+          test "$(ls ../packages | wc -l)" -eq 1
+          ls ../packages | grep -Eq '^dalinira-browser[-_]${{ needs.metadata.outputs.version }}-1[._][A-Za-z0-9._]+\.(deb|rpm)$'
+
+      - name: Show package dependencies
+        run: |
+          for package in packages/*; do
+            case "$package" in
+              *.deb) dpkg-deb --field "$package" Package Version Depends Recommends Suggests ;;
+              *.rpm) rpm -qp --requires --recommends --suggests "$package" | grep -v '^rpmlib(' ;;
+            esac
+          done
+
+      - name: Upload package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-${{ matrix.distro }}
+          path: packages/*
+          if-no-files-found: error
+
+  arch-bin:
+    name: Arch binary package (pacman repo / AUR)
+    needs: [metadata, portable]
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install packaging tools
+        run: pacman -Syu --noconfirm --needed git
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+
+      - name: Download portable archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: portable
+          path: packaging/pacman
+
+      - name: Build with makepkg
+        run: |
+          # The recipe's source file is already present, so makepkg uses this
+          # build instead of downloading a published release.
+          useradd -m builder
+          chown -R builder:builder packaging/pacman
+          su builder -c "cd '${GITHUB_WORKSPACE}/packaging/pacman' && makepkg -f --nodeps --noconfirm"
+          mkdir -p packages
+          mv packaging/pacman/dalinira-*.pkg.tar.zst packages/
+          ls -l packages
+          test "$(ls packages | wc -l)" -eq 1
+          ls packages | grep -Eq '^dalinira-${{ needs.metadata.outputs.version }}-[0-9]+-x86_64\.pkg\.tar\.zst$'
+
+      - name: Upload package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-arch-bin
+          path: packages/*
+          if-no-files-found: error
+
+  arch-source:
+    name: Arch source package (packaging/archlinux)
+    needs: metadata
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git cmake ninja nodejs \
+            ffmpeg libpsl libsecret openssl qt6-base qt6-imageformats qt6-svg qt6-webengine \
+            webkit2gtk-4.1 gst-plugins-base gst-plugins-good gst-plugins-bad gst-libav
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+
+      - name: Build with makepkg
+        run: |
+          version="${{ needs.metadata.outputs.version }}"
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+          # The tag archive the recipe downloads, made from this checkout.
+          git archive --format=tar.gz --prefix="DaliNira-Browser-${version}/" \
+            -o "packaging/archlinux/dalinira-browser-${version}.tar.gz" HEAD
+          useradd -m builder
+          chown -R builder:builder packaging/archlinux
+          # check() runs the test suite, which the CI core job already runs on
+          # Arch with these sources; this job validates the recipe and package.
+          su builder -c "cd '${GITHUB_WORKSPACE}/packaging/archlinux' && MAKEFLAGS=-j2 makepkg -f --nocheck --noconfirm"
+          mkdir -p packages
+          mv packaging/archlinux/dalinira-browser-*.pkg.tar.zst packages/
+          ls -l packages
+          test "$(ls packages | wc -l)" -eq 1
+          ls packages | grep -Eq "^dalinira-browser-${version}-[0-9]+-x86_64\.pkg\.tar\.zst$"
+
+      - name: Upload package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-arch-source
+          path: packages/*
+          if-no-files-found: error
+
+  install-test:
+    name: Fresh install (${{ matrix.package }})
+    needs: [metadata, native, arch-bin, arch-source]
+    runs-on: ubuntu-latest
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: debian12
+            container: debian:12
+          - package: ubuntu2404
+            container: ubuntu:24.04
+          - package: fedora
+            container: fedora:latest
+            # Fedora's FFmpeg lacks H.264, which needs the Cisco openh264
+            # repository: playable (VP9/YouTube), some formats unsupported.
+            media_option: --allow-partial-media
+          - package: arch-bin
+            container: archlinux:latest
+          - package: arch-source
+            container: archlinux:latest
+    steps:
+      - name: Checkout validation script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+          path: source
+
+      - name: Download package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-${{ matrix.package }}
+          path: packages
+
+      - name: Install with the package manager only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v apt-get >/dev/null; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y ./packages/*.deb
+            apt-cache policy dalinira-browser
+          elif command -v dnf >/dev/null; then
+            dnf install -y ./packages/*.rpm
+            rpm -q --requires dalinira-browser | grep -v '^rpmlib('
+          else
+            pacman -Syu --noconfirm
+            pacman -U --noconfirm ./packages/*.pkg.tar.zst
+            pacman -Qi "$(pacman -Qqp ./packages/*.pkg.tar.zst)"
+          fi
+
+      - name: Install validation tools
+        shell: bash
+        run: |
+          # Test-only tools, installed after the package so they cannot hide a
+          # missing runtime dependency.
+          if command -v apt-get >/dev/null; then
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends desktop-file-utils
+          elif command -v dnf >/dev/null; then
+            dnf install -y desktop-file-utils
+          else
+            pacman -S --noconfirm --needed desktop-file-utils
+          fi
+
+      - name: Validate the installed package
+        shell: bash
+        run: |
+          source/packaging/linux/validate-installed-package.sh \
+            --version "${{ needs.metadata.outputs.version }}" ${{ matrix.media_option }}

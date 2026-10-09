@@ -4,6 +4,7 @@
 #include <QRadialGradient>
 #include <cmath>
 #include <numbers>
+#include "i18n/i18n.h"
 
 BigListenButton::BigListenButton(QWidget *parent) : BigListenButton(140, parent) {}
 
@@ -13,8 +14,8 @@ BigListenButton::BigListenButton(int diameter, QWidget *parent)
   setFixedSize(diameter_, diameter_);
   setCursor(Qt::PointingHandCursor);
   setFocusPolicy(Qt::StrongFocus);
-  setAccessibleName(QStringLiteral("Şarkı Dinleme Düğmesi"));
-  setToolTip(QStringLiteral("Dinlemeyi Başlat / Durdur"));
+  setAccessibleName(I18n::text(QStringLiteral("pulse.listen_button")));
+  setToolTip(I18n::text(QStringLiteral("pulse.listen_toggle")));
 
   animTimer_ = new QTimer(this);
   animTimer_->setInterval(33);  // ~30 FPS
@@ -37,11 +38,11 @@ void BigListenButton::setListening(bool listening) {
   if (isListening_) {
     animationPhase_ = 0.0;
     animTimer_->start();
-    setToolTip(QStringLiteral("Dinlemeyi Durdur"));
+    setToolTip(I18n::text(QStringLiteral("pulse.stop_listening")));
   } else {
     animTimer_->stop();
     levelPercent_ = 0.0;
-    setToolTip(QStringLiteral("Dinlemeyi Başlat"));
+    setToolTip(I18n::text(QStringLiteral("pulse.start_listening")));
     update();
   }
 }

@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QFutureWatcher>
+#include <QFile>
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -19,6 +20,7 @@
 #include <QWebEnginePage>
 #include <QWebEngineView>
 #include <QtConcurrent>
+#include "i18n/i18n.h"
 
 static QString registrableDomain(const QString &host) {
   QString h = host.trimmed().toLower();
@@ -462,11 +464,27 @@ QWebEngineScript CredentialAutofillController::candidateCaptureScript() {
   script.setWorldId(QWebEngineScript::ApplicationWorld);
   script.setInjectionPoint(QWebEngineScript::DocumentCreation);
   script.setRunsOnSubFrames(false);
-  script.setSourceCode(QStringLiteral(R"JS((() => {
+  QFile webChannelSource(QStringLiteral(":/qtwebchannel/qwebchannel.js"));
+  if (!webChannelSource.open(QIODevice::ReadOnly)) return script;
+  script.setSourceCode(QString::fromUtf8(webChannelSource.readAll()) + QStringLiteral(R"JS(
+  (() => {
     if (window.top !== window || window.__daliniraCredentialCaptureInstalled) return;
+    if (typeof QWebChannel !== 'function' || !window.qt || !qt.webChannelTransport) return;
     try {
       Object.defineProperty(window, '__daliniraCredentialCaptureInstalled', { value: true });
     } catch (_) {}
+
+    const bridgeQueue = [];
+    let nativeBridge = null;
+    window.__daliniraCredentialSend = (type, payload) => {
+      if (nativeBridge) nativeBridge.send(type, payload);
+      else if (bridgeQueue.length < 16) bridgeQueue.push([type, payload]);
+    };
+    new QWebChannel(qt.webChannelTransport, channel => {
+      nativeBridge = channel.objects.daliniraCredentials || null;
+      if (!nativeBridge) return;
+      for (const [type, payload] of bridgeQueue.splice(0)) nativeBridge.send(type, payload);
+    });
 
     const visible = el => {
       if (!el || !el.isConnected) return false;
@@ -574,7 +592,7 @@ QWebEngineScript CredentialAutofillController::candidateCaptureScript() {
       if (!username || username.length > 320 || username === lastUsername) return;
       lastUsername = username;
       try {
-        console.info('DALINIRA_CREDENTIAL_STAGE:' + JSON.stringify({ origin: location.origin, username }));
+        window.__daliniraCredentialSend('stage', { origin: location.origin, username });
       } catch (_) {}
     };
 
@@ -597,13 +615,13 @@ QWebEngineScript CredentialAutofillController::candidateCaptureScript() {
         if (!password || password.length > 4096) return;
         if (username) stageUsername(username);
         lastCandidateAt = now;
-        console.info('DALINIRA_CREDENTIAL_CANDIDATE:' + JSON.stringify({
+        window.__daliniraCredentialSend('candidate', {
           origin: location.origin,
           username: username.slice(0, 320),
           password: password.slice(0, 4096),
           submitted: isSubmit,
           nonce: attemptNonce
-        }));
+        });
       } catch (_) {}
     };
 
@@ -616,10 +634,10 @@ QWebEngineScript CredentialAutofillController::candidateCaptureScript() {
       attemptNonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
       capture(scope, true);
       try {
-        console.info('DALINIRA_CREDENTIAL_SUBMIT:' + JSON.stringify({
+        window.__daliniraCredentialSend('submit', {
           origin: location.origin,
           nonce: attemptNonce
-        }));
+        });
       } catch (_) {}
       clearInterval(confirmationTimer);
       confirmationTimer = setInterval(observeSuccess, 400);
@@ -628,12 +646,12 @@ QWebEngineScript CredentialAutofillController::candidateCaptureScript() {
     const successHint = () => {
       if (!loginSubmitted || Date.now() - loginSubmittedAt > 12000) return;
       try {
-        console.info('DALINIRA_CREDENTIAL_SUCCESS_HINT:' + JSON.stringify({
+        window.__daliniraCredentialSend('success', {
           origin: location.origin,
           loginFormVisible: false,
           passwordFieldVisible: false,
           errorStateObserved: false
-        }));
+        });
       } catch (_) {}
       loginSubmitted = false;
       clearInterval(confirmationTimer);
@@ -723,6 +741,33 @@ QWebEngineScript CredentialAutofillController::candidateCaptureScript() {
   })())JS"));
   return script;
 }
+
+QString CredentialAutofillController::webKitCandidateCaptureSource() {
+  const QString chromiumSource = candidateCaptureScript().sourceCode();
+  const qsizetype body = chromiumSource.indexOf(QStringLiteral("    const visible = el =>"));
+  if (body < 0) return {};
+  return QStringLiteral(R"JS((() => {
+    if (window.top !== window || window.__daliniraCredentialCaptureInstalled) return;
+    const handler = window.webkit && window.webkit.messageHandlers &&
+                    window.webkit.messageHandlers.daliniraCredentials;
+    if (!handler) return;
+    try { Object.defineProperty(window, '__daliniraCredentialCaptureInstalled', { value: true }); }
+    catch (_) { return; }
+    window.__daliniraCredentialSend = (type, payload) => {
+      try { handler.postMessage({ type, payload }); } catch (_) {}
+    };
+)JS") + chromiumSource.mid(body);
+}
+
+namespace {
+// JSON-encoded string literal safe to splice into injected JavaScript.
+QString jsStringLiteral(const QString &value) {
+  QString json = QString::fromUtf8(QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact));
+  json = json.mid(1, json.size() - 2);
+  json.replace(QLatin1String("</"), QLatin1String("<\\/"));
+  return json;
+}
+}  // namespace
 
 QString CredentialAutofillController::fillButtonScript(const QString &token) {
   const QString payload = QString::fromUtf8(QJsonDocument(QJsonObject{{QStringLiteral("token"), token}}).toJson(QJsonDocument::Compact));
@@ -830,7 +875,7 @@ QString CredentialAutofillController::fillButtonScript(const QString &token) {
         managedButton = document.createElement('button');
         managedButton.type = 'button';
         managedButton.textContent = '🔑';
-        managedButton.title = 'DaliNira Şifre Yöneticisi — Otomatik Doldur';
+        managedButton.title = %2;
         managedButton.setAttribute('aria-label', managedButton.title);
         managedButton.setAttribute('data-dalinira-autofill-btn', 'true');
         Object.assign(managedButton.style, {
@@ -880,10 +925,11 @@ QString CredentialAutofillController::fillButtonScript(const QString &token) {
           lastTriggerAt = now;
           try {
             const activeTok = window.__daliniraFillToken || payload.token;
-            console.info('DALINIRA_CREDENTIAL_FILL_REQUEST:' + JSON.stringify({
+            if (typeof window.__daliniraCredentialSend !== 'function') return;
+            window.__daliniraCredentialSend('fill', {
               origin: location.origin,
               token: activeTok
-            }));
+            });
           } catch (_) {}
         };
 
@@ -977,7 +1023,7 @@ QString CredentialAutofillController::fillButtonScript(const QString &token) {
 
     // On initial injection, do not auto-show unless a password field is already active
     scanAndAttach();
-  })())JS").arg(payload);
+  })())JS").arg(payload, jsStringLiteral(I18n::text(QStringLiteral("passwords.autofill_button_title"))));
 }
 
 QString CredentialAutofillController::domFillScript(const QString &origin, const QString &username,
@@ -1104,48 +1150,42 @@ QString CredentialAutofillController::loginStateQueryScript() {
   })())JS");
 }
 
-bool CredentialAutofillController::handleConsoleMessage(QWebEnginePage *page, const QString &message) {
-  if (!message.startsWith(QLatin1String("DALINIRA_CREDENTIAL_"))) {
-    return false;
-  }
+bool CredentialAutofillController::handleBridgeMessage(QWebEnginePage *page, const QString &message) {
+  const int separator = message.indexOf(QLatin1Char(':'));
+  if (separator <= 0) return false;
+  const QString type = message.left(separator);
+  const QJsonDocument document = QJsonDocument::fromJson(message.mid(separator + 1).toUtf8());
+  return document.isObject() && handleBridgePayload(page, type, document.object().toVariantMap());
+}
 
-  // Canonical entry guard: when no vault exists, completely ignore all credential operations
-  if (!vaultManager_ || !vaultManager_->exists()) {
-    return true;
-  }
+bool CredentialAutofillController::handleBridgePayload(QWebEnginePage *page, const QString &type,
+                                                        const QVariantMap &payload) {
+  if (!page || !vaultManager_) return false;
+  static const QSet<QString> allowed{QStringLiteral("candidate"), QStringLiteral("submit"),
+                                     QStringLiteral("stage"), QStringLiteral("success"),
+                                     QStringLiteral("state"), QStringLiteral("fill")};
+  if (!allowed.contains(type)) return false;
+  if (!vaultManager_->exists()) return true;
+  const QByteArray encoded = QJsonDocument::fromVariant(payload).toJson(QJsonDocument::Compact);
+  if (encoded.isEmpty() || encoded.size() > 16 * 1024) return false;
+  const QString json = QString::fromUtf8(encoded);
+  if (type == QLatin1String("candidate")) handleCandidate(page, json);
+  else if (type == QLatin1String("submit")) handleSubmit(page, json);
+  else if (type == QLatin1String("stage")) handleStage(page, json);
+  else if (type == QLatin1String("success")) handleSuccessHint(page, json);
+  else if (type == QLatin1String("state")) handleLoginState(page, json);
+  else if (type == QLatin1String("fill")) handleFillRequest(page, json);
+  return true;
+}
 
-  static constexpr auto kPrefixCandidate = "DALINIRA_CREDENTIAL_CANDIDATE:";
-  static constexpr auto kPrefixStage = "DALINIRA_CREDENTIAL_STAGE:";
-  static constexpr auto kPrefixSubmit = "DALINIRA_CREDENTIAL_SUBMIT:";
-  static constexpr auto kPrefixSuccess = "DALINIRA_CREDENTIAL_SUCCESS_HINT:";
-  static constexpr auto kPrefixState = "DALINIRA_CREDENTIAL_STATE:";
-  static constexpr auto kPrefixFill = "DALINIRA_CREDENTIAL_FILL_REQUEST:";
+CredentialMessageBridge::CredentialMessageBridge(QWebEnginePage *page,
+                                                   CredentialAutofillController *controller,
+                                                   QObject *parent)
+    : QObject(parent), page_(page), controller_(controller) {}
 
-  if (message.startsWith(QLatin1String(kPrefixCandidate))) {
-    handleCandidate(page, message.mid(int(std::char_traits<char>::length(kPrefixCandidate))));
-    return true;
-  }
-  if (message.startsWith(QLatin1String(kPrefixSubmit))) {
-    handleSubmit(page, message.mid(int(std::char_traits<char>::length(kPrefixSubmit))));
-    return true;
-  }
-  if (message.startsWith(QLatin1String(kPrefixStage))) {
-    handleStage(page, message.mid(int(std::char_traits<char>::length(kPrefixStage))));
-    return true;
-  }
-  if (message.startsWith(QLatin1String(kPrefixSuccess))) {
-    handleSuccessHint(page, message.mid(int(std::char_traits<char>::length(kPrefixSuccess))));
-    return true;
-  }
-  if (message.startsWith(QLatin1String(kPrefixState))) {
-    handleLoginState(page, message.mid(int(std::char_traits<char>::length(kPrefixState))));
-    return true;
-  }
-  if (message.startsWith(QLatin1String(kPrefixFill))) {
-    handleFillRequest(page, message.mid(int(std::char_traits<char>::length(kPrefixFill))));
-    return true;
-  }
-  return false;
+void CredentialMessageBridge::send(const QString &type, const QVariantMap &payload) {
+  if (!page_ || !controller_) return;
+  controller_->handleBridgePayload(page_, type, payload);
 }
 
 void CredentialAutofillController::handleSubmit(QWebEnginePage *page, const QString &payload) {
@@ -1353,8 +1393,8 @@ void CredentialAutofillController::triggerFillForView(QWebEngineView *view) {
       for (const VaultMetadata &vault : vaultChoices) labels << vault.name;
       bool ok = false;
       const QString label = QInputDialog::getItem(
-          dialogParent_, QStringLiteral("Kasayı Seçin"),
-          QStringLiteral("Kayıtlı girişin bulunduğu kasa:"), labels, 0, false, &ok);
+          dialogParent_, I18n::text(QStringLiteral("passwords.choose_vault")),
+          I18n::text(QStringLiteral("passwords.vault_with_login")), labels, 0, false, &ok);
       if (!ok) return;
       selectedVault = labels.indexOf(label);
       if (selectedVault < 0) return;
@@ -1380,11 +1420,12 @@ QString CredentialAutofillController::selectCredentialForView(QWebEngineView *vi
     }
     QStringList labels;
     for (const VaultMetadata &v : otherVaults) {
-      labels << (v.name + (v.locked ? QStringLiteral(" · kilitli") : QStringLiteral(" · açık")));
+      labels << (v.locked ? I18n::text(QStringLiteral("passwords.vault_label_locked"))
+                         : I18n::text(QStringLiteral("passwords.vault_label_open"))).arg(v.name);
     }
     bool ok = false;
-    const QString selection = QInputDialog::getItem(dialogParent_, QStringLiteral("Kasayı Seçin"),
-                                                    QStringLiteral("Kayıtlı girişin bulunduğu kasa:"),
+    const QString selection = QInputDialog::getItem(dialogParent_, I18n::text(QStringLiteral("passwords.choose_vault")),
+                                                    I18n::text(QStringLiteral("passwords.vault_with_login")),
                                                     labels, 0, false, &ok);
     if (!ok) return {};
     const int index = labels.indexOf(selection);
@@ -1405,8 +1446,8 @@ QString CredentialAutofillController::selectCredentialForView(QWebEngineView *vi
       labels << QStringLiteral("%1 (%2)").arg(c.username, c.vaultName);
     }
     bool ok = false;
-    const QString label = QInputDialog::getItem(dialogParent_, QStringLiteral("Hesap Seçin"),
-                                                QStringLiteral("Kullanılacak hesap:"), labels, 0, false, &ok);
+    const QString label = QInputDialog::getItem(dialogParent_, I18n::text(QStringLiteral("passwords.choose_account")),
+                                                I18n::text(QStringLiteral("passwords.account_to_use")), labels, 0, false, &ok);
     if (!ok) return {};
     const int selIdx = labels.indexOf(label);
     if (selIdx >= 0) selected = choices.at(selIdx);
@@ -1422,6 +1463,10 @@ bool CredentialAutofillController::pendingFillContextIsCurrent() const {
   if (view->url() != pendingFill_.url) return false;
   const QString currentOrigin = CredentialVault::canonicalHttpsOrigin(view->url());
   if (currentOrigin.isEmpty() || currentOrigin != pendingFill_.origin) return false;
+  if (!vaultManager_ || pendingFill_.vaultId.isEmpty() ||
+      vaultManager_->isVaultLocked(pendingFill_.vaultId)) return false;
+  if (!pendingFill_.recordId.isEmpty() &&
+      vaultManager_->owningVaultId(pendingFill_.recordId) != pendingFill_.vaultId) return false;
   return !activeTokenForView(view, currentOrigin).isEmpty();
 }
 
@@ -1431,11 +1476,12 @@ void CredentialAutofillController::clearPendingFill() {
   pendingFill_.origin.clear();
   pendingFill_.url.clear();
   pendingFill_.recordId.clear();
+  pendingFill_.vaultId.clear();
   pendingFill_.navigationGeneration = 0;
 }
 
 void CredentialAutofillController::completePendingFill() {
-  if (!pendingFillContextIsCurrent() || !vaultManager_ || vaultManager_->isLocked()) {
+  if (!pendingFillContextIsCurrent() || !vaultManager_) {
     clearPendingFill();
     return;
   }
@@ -1456,6 +1502,10 @@ void CredentialAutofillController::completePendingFill() {
       return;
     }
     recordId = choices.front().id;
+    if (vaultManager_->owningVaultId(recordId) != pendingFill_.vaultId) {
+      clearPendingFill();
+      return;
+    }
   }
 
   if (!pendingFillContextIsCurrent()) {
@@ -1494,8 +1544,8 @@ void CredentialAutofillController::completePendingFill() {
 
   view->page()->runJavaScript(script, QWebEngineScript::ApplicationWorld, [this](const QVariant &result) {
     if (!result.toBool() && dialogParent_) {
-      QMessageBox::information(dialogParent_, QStringLiteral("Şifre Yöneticisi"),
-                               QStringLiteral("Giriş formu alanları bulunamadı."));
+      QMessageBox::information(dialogParent_, I18n::text(QStringLiteral("toolbar.passwords")),
+                               I18n::text(QStringLiteral("passwords.login_fields_not_found")));
     }
   });
   emit credentialFillDispatched(expectedOrigin, filledUsername);
@@ -1525,11 +1575,18 @@ void CredentialAutofillController::beginFillReauthentication(QWebEngineView *vie
   pendingFill_.origin = canonicalOrigin;
   pendingFill_.url = view->url();
   pendingFill_.recordId = recordId;
+  pendingFill_.vaultId = recordId.isEmpty() ? vaultManager_->activeVaultId()
+                                            : vaultManager_->owningVaultId(recordId);
+  if (pendingFill_.vaultId.isEmpty()) {
+    clearPendingFill();
+    return;
+  }
   pendingFill_.navigationGeneration = navigationGenerations_.value(view);
 
   QWidget *parent = dialogParent_ ? dialogParent_ : (view ? view->window() : nullptr);
   auto *dialog = new VaultUnlockDialog(vaultManager_, canonicalOrigin, parent,
-                                       VaultUnlockDialog::Purpose::ReauthenticateForAutofill);
+                                       VaultUnlockDialog::Purpose::ReauthenticateForAutofill,
+                                       pendingFill_.vaultId);
   activeUnlockDialog_ = dialog;
   emit reauthenticationRequested(canonicalOrigin);
 
@@ -1729,8 +1786,8 @@ void CredentialAutofillController::triggerSaveCandidate(const QString &candidate
     emit credentialSaved(candidate.origin, candidate.username);
     refreshAutofillForViews();
   } else if (dialogParent_) {
-    QMessageBox::warning(dialogParent_, QStringLiteral("Şifre Yöneticisi"),
-                         QStringLiteral("Giriş bilgisi kaydedilemedi."));
+    QMessageBox::warning(dialogParent_, I18n::text(QStringLiteral("toolbar.passwords")),
+                         I18n::text(QStringLiteral("passwords.login_save_failed")));
   }
 }
 
@@ -1773,8 +1830,8 @@ void CredentialAutofillController::triggerUpdateCandidate(const QString &candida
     emit credentialUpdated(candidate.origin, candidate.username);
     refreshAutofillForViews();
   } else if (dialogParent_) {
-    QMessageBox::warning(dialogParent_, QStringLiteral("Şifre Yöneticisi"),
-                         QStringLiteral("Giriş bilgisi güncellenemedi."));
+    QMessageBox::warning(dialogParent_, I18n::text(QStringLiteral("toolbar.passwords")),
+                         I18n::text(QStringLiteral("passwords.login_update_failed")));
   }
 }
 

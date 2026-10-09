@@ -15,7 +15,7 @@ TabThrobber::TabThrobber(QObject *parent) : QObject(parent) {
   connect(&animationTimer_, &QTimer::timeout, this, &TabThrobber::onTimerTick);
 }
 
-void TabThrobber::startLoading(const QWebEngineView *view, QObject *ownerWindow, qint64 currentTimeMs) {
+void TabThrobber::startLoading(const QObject *view, QObject *ownerWindow, qint64 currentTimeMs) {
   if (!view) return;
   const qint64 now = (currentTimeMs > 0) ? currentTimeMs : QDateTime::currentMSecsSinceEpoch();
   ViewState &state = states_[view];
@@ -31,10 +31,10 @@ void TabThrobber::startLoading(const QWebEngineView *view, QObject *ownerWindow,
 
 void TabThrobber::onViewDestroyed(QObject *obj) {
   if (!obj) return;
-  removeView(reinterpret_cast<const QWebEngineView *>(obj));
+  removeView(obj);
 }
 
-void TabThrobber::finishLoading(const QWebEngineView *view, bool success) {
+void TabThrobber::finishLoading(const QObject *view, bool success) {
   Q_UNUSED(success);
   if (!view) return;
   states_.remove(view);
@@ -42,7 +42,7 @@ void TabThrobber::finishLoading(const QWebEngineView *view, bool success) {
   emit throbberTick();
 }
 
-void TabThrobber::cacheFavicon(const QWebEngineView *view, const QIcon &icon) {
+void TabThrobber::cacheFavicon(const QObject *view, const QIcon &icon) {
   if (!view || icon.isNull()) return;
   ViewState *state = findState(view);
   if (state) {
@@ -50,7 +50,7 @@ void TabThrobber::cacheFavicon(const QWebEngineView *view, const QIcon &icon) {
   }
 }
 
-void TabThrobber::updateOwner(const QWebEngineView *view, QObject *newOwner) {
+void TabThrobber::updateOwner(const QObject *view, QObject *newOwner) {
   if (!view) return;
   ViewState *state = findState(view);
   if (state) {
@@ -58,33 +58,33 @@ void TabThrobber::updateOwner(const QWebEngineView *view, QObject *newOwner) {
   }
 }
 
-void TabThrobber::removeView(const QWebEngineView *view) {
+void TabThrobber::removeView(const QObject *view) {
   if (!view) return;
   states_.remove(view);
   updateTimerState();
 }
 
-bool TabThrobber::isLoading(const QWebEngineView *view) const {
+bool TabThrobber::isLoading(const QObject *view) const {
   const ViewState *state = findState(view);
   return state && state->isLoading;
 }
 
-bool TabThrobber::isThrobberVisible(const QWebEngineView *view) const {
+bool TabThrobber::isThrobberVisible(const QObject *view) const {
   const ViewState *state = findState(view);
   return state && state->isLoading && state->visibleOnTabBar;
 }
 
-QIcon TabThrobber::cachedFavicon(const QWebEngineView *view) const {
+QIcon TabThrobber::cachedFavicon(const QObject *view) const {
   const ViewState *state = findState(view);
   return state ? state->cachedFavicon : QIcon();
 }
 
-TabThrobber::ViewState *TabThrobber::findState(const QWebEngineView *view) {
+TabThrobber::ViewState *TabThrobber::findState(const QObject *view) {
   auto it = states_.find(view);
   return (it != states_.end()) ? &it.value() : nullptr;
 }
 
-const TabThrobber::ViewState *TabThrobber::findState(const QWebEngineView *view) const {
+const TabThrobber::ViewState *TabThrobber::findState(const QObject *view) const {
   auto it = states_.constFind(view);
   return (it != states_.constEnd()) ? &it.value() : nullptr;
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QIcon>
 
 enum class BrowserIcon {
@@ -53,6 +54,7 @@ enum class BrowserIcon {
   Image,
   Popup,
   ChevronRight,
+  ChevronUp,
   ChevronDown,
   Fonts,
   Mouse,
@@ -73,11 +75,16 @@ enum class BrowserIcon {
   SiteData,
   JsOptimize,
   Fullscreen,
-  Tune
+  Tune,
+  FindInPage,
+  Mail
 };
 
 namespace BrowserIcons {
 QIcon icon(BrowserIcon id);
+// Same icon drawn in caller-chosen colours, for surfaces that follow the light
+// theme (icon() is tuned for the dark toolbar).
+QIcon tintedIcon(BrowserIcon id, const QColor &normal, const QColor &active, const QColor &disabled);
 QIcon backIcon();
 QIcon forwardIcon();
 QIcon reloadIcon();
@@ -88,5 +95,7 @@ QIcon youtubeIcon();
 QIcon youtubeMusicIcon();
 QIcon searchEngineIcon(const QString &engineName);
 QIcon combinedMediaCaptureIcon();
+QIcon chromiumIcon();
+QIcon webkitIcon();
 QString resourcePath(BrowserIcon id);
 }  // namespace BrowserIcons

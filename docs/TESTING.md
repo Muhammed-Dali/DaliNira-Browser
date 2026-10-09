@@ -31,6 +31,58 @@ A test executable can also be run directly for its per-case diagnostics:
 Do not encode the current suite count in scripts; use `ctest --test-dir build
 -N` when an inventory is needed.
 
+## GUI and WebKit tests
+
+Tests are split into tiers so that the default run never stalls a developer's
+desktop:
+
+| Tier | How to run | What it does |
+|---|---|---|
+| Unit / integration | `ctest --test-dir build` | Invisible (offscreen or no windows) and light. |
+| GUI (label `gui`) | `scripts/safe-gui-test.sh [TEST...]` | Real windows on the desktop display, one test at a time. |
+| Manual | `scripts/safe-gui-test.sh --manual TEST` | Window-manager cases: several simultaneous windows, create/destroy sequences, fullscreen. |
+| Live sites | `scripts/safe-gui-test.sh --live TEST` | DuckDuckGo / YouTube. |
+| Memory profile | `scripts/safe-gui-test.sh --memory-profile chromium\|webkit` | The developer memory profiler. |
+
+A plain `ctest` reports GUI-tier tests as "Skipped". They run through
+`scripts/gui-test-gate.sh`, which only starts them with `DALINIRA_GUI_TESTS=1`.
+CI sets that variable on its virtual display; on a desktop, use
+`safe-gui-test.sh`. The runner:
+
+- refuses virtual displays and GPU override variables;
+- runs one test at a time under a hard timeout, and waits for every engine
+  process and any crash handling to finish before the next;
+- disables core dumps. Processing one WebKit core dump took systemd-coredump
+  ~5.5 GB of memory and stalled the desktop. Crashes are still logged and
+  detected; `--keep-cores` keeps the dumps for debugging;
+- samples CPU, PSS/private memory, WebKit process and window counts, GPU
+  engine time (DRM fdinfo), memory pressure and systemd-coredump once per
+  second (`scripts/gui-test-monitor.py`). It writes the samples to
+  `build/gui-test-logs/`, prints the peaks, and stops the test at a limit:
+  more than one view's web processes, under 1.5 GB available memory, over
+  3 GB PSS, or memory pressure above 20%. A test that legitimately opens
+  several WebKit tabs declares its own budget in its ctest `ENVIRONMENT`
+  (`DALINIRA_GUI_MAX_WEB_PROCESSES`, e.g. `browser-tab-memory-ux`);
+- stops at the first failure, crash, kernel GPU/driver error or KWin stall
+  report ("main thread was hanging").
+
+The WebKit GUI tests (`browser-webkit-backend`, `browser-webkit-media`) use
+`browser/native/tests/webkit_gui_harness.h`:
+
+- one top-level window for the whole run;
+- at most one `WebKitEngineView` at a time. A destroyed view's web process
+  must exit before the next case starts;
+- waits sleep in the event loop instead of spinning;
+- the first web process termination or failed check exits immediately, with
+  no core dump.
+
+The engine-neutral logic they depend on is in `browser-webkit-engine-logic`,
+which runs in the default tier.
+
+On a memory-limited workstation, also cap build parallelism (for example
+`cmake --build build -j4`): each C++ compile job of this project can take
+1–2 GB.
+
 ## Test categories
 
 - Core/unit: policies, URL security, address resolution, application identity,
@@ -58,6 +110,15 @@ addition to the original browser suites:
 
 - `adaptive_audio_dsp_test.cpp` — adaptive audio state and persistence.
 - `dalinira_blocker_test.cpp` — blocker policy, UI, rules and migrations.
+- `blocker_filter_update_test.cpp` — remote filter-list updates against a
+  loopback HTTP fixture: validation, ETag/Last-Modified, failures, crash
+  recovery, scheduling, and one shared update applied by the Chromium
+  interceptor (offscreen page) and the WebKit network filter socket.
+- `blocker_filter_syntax_test.cpp` — `$removeparam`, `$redirect`/`$rewrite`
+  and redirect exceptions, `$badfilter`, `$method` and the response-phase
+  rules neither engine can enforce, through the shared rule model, a real
+  Chromium page and the WebKit filter socket. `browser-webkit-backend` (GUI
+  tier) repeats the end-to-end part in a real WebKit page.
 - `internal_tab_test.cpp` — native-tab/session and private-session isolation.
 - `new_tab_background_store_test.cpp` — image validation and size limits.
 - `page_translator_test.cpp` and `translate_service_test.cpp` — translator

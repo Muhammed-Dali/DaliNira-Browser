@@ -45,6 +45,7 @@
 #include <algorithm>
 #include <functional>
 #include <QMouseEvent>
+#include "i18n/i18n.h"
 
 namespace {
 class ConsentCard final : public QFrame {
@@ -259,15 +260,15 @@ QIcon passwordVisibilityIcon(bool visible) {
 QLineEdit *passwordField(QWidget *parent) {
   auto *field = new QLineEdit(parent); field->setEchoMode(QLineEdit::Password); field->setMaxLength(256);
   auto *toggle = field->addAction(passwordVisibilityIcon(false), QLineEdit::TrailingPosition);
-  toggle->setToolTip(QStringLiteral("Parolayı göster"));
+  toggle->setToolTip(I18n::text(QStringLiteral("passwords.show_password")));
   QObject::connect(toggle, &QAction::triggered, field, [field, toggle] {
     const bool makeVisible = field->echoMode() != QLineEdit::Normal;
     field->setEchoMode(makeVisible ? QLineEdit::Normal : QLineEdit::Password);
     toggle->setIcon(passwordVisibilityIcon(makeVisible));
-    toggle->setToolTip(makeVisible ? QStringLiteral("Parolayı gizle") : QStringLiteral("Parolayı göster"));
+    toggle->setToolTip(makeVisible ? I18n::text(QStringLiteral("passwords.hide_password")) : I18n::text(QStringLiteral("passwords.show_password")));
     if (makeVisible) QTimer::singleShot(15000, field, [field, toggle] {
       if (field->echoMode() != QLineEdit::Normal) return;
-      field->setEchoMode(QLineEdit::Password); toggle->setIcon(passwordVisibilityIcon(false)); toggle->setToolTip(QStringLiteral("Parolayı göster"));
+      field->setEchoMode(QLineEdit::Password); toggle->setIcon(passwordVisibilityIcon(false)); toggle->setToolTip(I18n::text(QStringLiteral("passwords.show_password")));
     });
   });
   return field;
@@ -380,8 +381,8 @@ PasswordManagerPage::PasswordManagerPage(CredentialVaultManager *vault,
     #password-manager-page QMenu::separator { height:1px; background:#334155; margin:6px 8px; }
   )"));
   auto *layout = new QVBoxLayout(this); layout->setContentsMargins(24, 24, 24, 24); layout->setSpacing(12);
-  auto *kicker = new QLabel(QStringLiteral("DaliNira güvenli kasa"), this); kicker->setStyleSheet("color:#aebdcd;font-size:12px;font-weight:600;"); layout->addWidget(kicker);
-  auto *title = new QLabel(QStringLiteral("Şifre Yöneticisi"), this); title->setStyleSheet("font-size:24px;font-weight:700;color:#eaf2ff;"); layout->addWidget(title);
+  auto *kicker = new QLabel(I18n::text(QStringLiteral("passwords.secure_vault_kicker")), this); kicker->setStyleSheet("color:#aebdcd;font-size:12px;font-weight:600;"); layout->addWidget(kicker);
+  auto *title = new QLabel(I18n::text(QStringLiteral("toolbar.passwords")), this); title->setStyleSheet("font-size:24px;font-weight:700;color:#eaf2ff;"); layout->addWidget(title);
   status_ = new QLabel(this); status_->setWordWrap(true); layout->addWidget(status_);
   connect(vault_, &CredentialVaultManager::lockStateChanged, this, &PasswordManagerPage::refresh);
   connect(vault_, &CredentialVaultManager::changed, this, &PasswordManagerPage::refresh);
@@ -403,7 +404,7 @@ void PasswordManagerPage::refresh() {
 }
 
 void PasswordManagerPage::showPrivateBrowsingNotice() {
-  status_->setText(QStringLiteral("Gizli gezinti modu"));
+  status_->setText(I18n::text(QStringLiteral("passwords.incognito_mode")));
   auto *card = new QFrame(this);
   card->setObjectName(QStringLiteral("vault-private-notice-card"));
   card->setMinimumWidth(560);
@@ -413,15 +414,15 @@ void PasswordManagerPage::showPrivateBrowsingNotice() {
   content->setContentsMargins(28, 24, 28, 24);
   content->setSpacing(12);
 
-  auto *badge = new QLabel(QStringLiteral("GİZLİ PENCERE"), card);
+  auto *badge = new QLabel(I18n::text(QStringLiteral("passwords.private_window_badge")), card);
   badge->setStyleSheet(QStringLiteral("color:#38bdf8;font-weight:700;border:1px solid #0284c7;border-radius:10px;padding:3px 9px;"));
   content->addWidget(badge, 0, Qt::AlignLeft);
 
-  auto *heading = new QLabel(QStringLiteral("Gizli Gezintide Şifre Yöneticisi Kullanılamaz"), card);
+  auto *heading = new QLabel(I18n::text(QStringLiteral("passwords.unavailable_in_private")), card);
   heading->setStyleSheet(QStringLiteral("font-size:20px;font-weight:700;color:#eef4fb;"));
   content->addWidget(heading);
 
-  auto *body = new QLabel(QStringLiteral("Gizli pencerelerdeki tüm veriler pencere kapatıldığında bellekten ve geçici depolamadan tamamen silinir. Veri kaybını ve gizlilik ihlallerini önlemek amacıyla, şifre kasaları gizli modda oluşturulamaz ve düzenlenemez. Şifrelerinizi görüntülemek ve yönetmek için lütfen normal bir pencere kullanın."), card);
+  auto *body = new QLabel(I18n::text(QStringLiteral("passwords.private_notice")), card);
   body->setWordWrap(true);
   body->setStyleSheet(QStringLiteral("color:#94a3b8;font-size:13px;line-height:1.5;"));
   content->addWidget(body);
@@ -454,7 +455,7 @@ void PasswordManagerPage::requestCachedFavicon(QLabel *label, const QString &ori
       });
 }
 void PasswordManagerPage::showConsent() {
-  status_->setText(QStringLiteral("DaliNira güvenli kasa"));
+  status_->setText(I18n::text(QStringLiteral("passwords.secure_vault_kicker")));
   auto *card = new ConsentCard(this);
   card->setObjectName(QStringLiteral("vault-consent-card"));
   card->setMinimumWidth(660);
@@ -467,24 +468,24 @@ void PasswordManagerPage::showConsent() {
   content->setContentsMargins(28, 24, 28, 24);
   content->setSpacing(0);
 
-  auto *badge = new QLabel(QStringLiteral("DENEYSEL"), card);
+  auto *badge = new QLabel(I18n::text(QStringLiteral("passwords.experimental_badge")), card);
   badge->setStyleSheet(QStringLiteral("color:#ffd54a;font-weight:700;border:1px solid #d69a00;border-radius:10px;padding:3px 9px;"));
   content->addWidget(badge, 0, Qt::AlignLeft);
   content->addSpacing(10);
 
-  auto *heading = new QLabel(QStringLiteral("Parola Yöneticisini Etkinleştir"), card);
+  auto *heading = new QLabel(I18n::text(QStringLiteral("passwords.enable_title")), card);
   heading->setStyleSheet(QStringLiteral("font-size:21px;font-weight:700;color:#eef4fb;"));
   content->addWidget(heading);
   content->addSpacing(8);
 
-  auto *body = new QLabel(QStringLiteral("Bu isteğe bağlı özellik, yalnızca onayladığınız kimlik bilgilerini bu cihazdaki şifrelenmiş kasada saklar. Kasa oluşturulmadan önce kaydetmeyi seçtiğiniz giriş bilgisi yalnızca kısa süreli olarak bellekte bekletilir; vazgeçerseniz veya süre dolarsa silinir."), card);
+  auto *body = new QLabel(I18n::text(QStringLiteral("passwords.enable_intro")), card);
   body->setWordWrap(true);
   content->addWidget(body);
   content->addSpacing(12);
 
   auto *noticeToggle = new QToolButton(card);
   noticeToggle->setObjectName(QStringLiteral("vault-notice-toggle"));
-  noticeToggle->setText(QStringLiteral("Ayrıntılı bildirimi kaydırarak okuyun"));
+  noticeToggle->setText(I18n::text(QStringLiteral("passwords.notice_scroll_hint")));
   noticeToggle->setCheckable(true);
   noticeToggle->setChecked(true);
   noticeToggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -498,7 +499,7 @@ void PasswordManagerPage::showConsent() {
   noticeScroll->setFixedHeight(200);
   noticeScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   noticeScroll->setStyleSheet(QStringLiteral("QScrollArea{background:#17202b;border:1px solid #34506b;border-radius:10px;} QScrollBar:vertical{width:12px;background:#101722;border-radius:5px;} QScrollBar::handle:vertical{min-height:28px;background:#4a6580;border-radius:5px;}"));
-  auto *notice = new QLabel(QStringLiteral("Yerel parola kasası bildirimi\n\n• Kaydedilen site adresleri, kullanıcı adları ve parolalar yalnızca bu cihazdaki şifrelenmiş kasada tutulur.\n\n• Kayıtlar DaliNira sunucusuna gönderilmez ve cihazlar arasında eşitlenmez.\n\n• Kasa, ana parolanızla korunur. Ana parolanızı unutursanız kayıtlar kurtarılamaz; geliştirici arka kapısı yoktur.\n\n• Hiçbir güvenlik sistemi mutlak koruma sağlamaz. Zararlı yazılım veya ele geçirilmiş bir cihaz risk oluşturmaya devam eder.\n\n• Özelliği istediğiniz zaman devre dışı bırakabilirsiniz. Devre dışı bırakmak kasayı silmez; kalıcı silme için ayrıca onay istenir.\n\n• Bu deneysel özellik bankacılık, devlet, birincil e-posta veya kripto hesapları için henüz önerilmez."), noticeScroll);
+  auto *notice = new QLabel(I18n::text(QStringLiteral("passwords.notice_body")), noticeScroll);
   notice->setObjectName(QStringLiteral("vault-notice"));
   notice->setWordWrap(true);
   notice->setAlignment(Qt::AlignTop | Qt::AlignLeft);
@@ -528,13 +529,13 @@ void PasswordManagerPage::showConsent() {
   rowLayout1->setContentsMargins(0, 0, 0, 0);
   rowLayout1->setSpacing(10); // Rule 3: Checkbox ile label arasında 10 px spacing
 
-  auto *noticeCheck = new ConsentCheckBox(QStringLiteral("Parola Yöneticisi bildirimini okudum ve anladım."), row1);
+  auto *noticeCheck = new ConsentCheckBox(I18n::text(QStringLiteral("passwords.notice_ack")), row1);
   noticeCheck->setObjectName(QStringLiteral("vault-notice-acknowledgement"));
   noticeCheck->setEnabled(false);
-  noticeCheck->setToolTip(QStringLiteral("Önce ayrıntılı bildirimin sonuna kadar kaydırın."));
+  noticeCheck->setToolTip(I18n::text(QStringLiteral("passwords.notice_scroll_first")));
 
   auto *noticeLabel = new ConsentLabel(
-      QStringLiteral("Parola Yöneticisi bildirimini okudum ve anladım."),
+      I18n::text(QStringLiteral("passwords.notice_ack")),
       [noticeCheck] { if (noticeCheck->isEnabled()) noticeCheck->toggle(); },
       row1);
   noticeCheck->setCompanionLabel(noticeLabel);
@@ -551,14 +552,14 @@ void PasswordManagerPage::showConsent() {
   rowLayout2->setSpacing(10); // Rule 3: Checkbox ile label arasında 10 px spacing
 
   auto *activationCheck = new ConsentCheckBox(
-      QStringLiteral("Kimlik bilgilerimin bu cihazdaki şifreli kasada işlenmesini ve özelliğin etkinleştirilmesini istiyorum."),
+      I18n::text(QStringLiteral("passwords.consent")),
       row2);
   activationCheck->setObjectName(QStringLiteral("vault-activation-acknowledgement"));
   activationCheck->setEnabled(false);
-  activationCheck->setToolTip(QStringLiteral("Önce ayrıntılı bildirimin sonuna kadar kaydırın."));
+  activationCheck->setToolTip(I18n::text(QStringLiteral("passwords.notice_scroll_first")));
 
   auto *activationLabel = new ConsentLabel(
-      QStringLiteral("Kimlik bilgilerimin bu cihazdaki şifreli kasada işlenmesini ve özelliğin etkinleştirilmesini istiyorum."),
+      I18n::text(QStringLiteral("passwords.consent")),
       [activationCheck] { if (activationCheck->isEnabled()) activationCheck->toggle(); },
       row2);
   activationCheck->setCompanionLabel(activationLabel);
@@ -575,10 +576,10 @@ void PasswordManagerPage::showConsent() {
   auto *buttons = new QHBoxLayout;
   buttons->setContentsMargins(0, 0, 0, 0);
   buttons->setSpacing(12);
-  auto *enable = new QPushButton(QStringLiteral("Deneysel özelliği etkinleştir"), card);
+  auto *enable = new QPushButton(I18n::text(QStringLiteral("passwords.enable_experimental")), card);
   enable->setObjectName(QStringLiteral("vault-enable-experimental"));
   enable->setEnabled(false);
-  auto *later = new QPushButton(QStringLiteral("Şimdi değil"), card);
+  auto *later = new QPushButton(I18n::text(QStringLiteral("passwords.not_now")), card);
   later->setProperty("ghost", true);
   buttons->addWidget(enable);
   buttons->addWidget(later);
@@ -602,27 +603,27 @@ void PasswordManagerPage::showConsent() {
   });
   connect(enable, &QPushButton::clicked, this, [this] {
     QSettings().setValue(QStringLiteral("browser/passwords/experimentalConsentAccepted"), true);
-    statusMessage_ = QStringLiteral("Deneysel özellik etkinleştirildi.");
+    statusMessage_ = I18n::text(QStringLiteral("passwords.experimental_enabled"));
     refresh();
   });
   connect(later, &QPushButton::clicked, this, [this] {
-    status_->setText(QStringLiteral("Parola Yöneticisi etkinleştirilmedi."));
+    status_->setText(I18n::text(QStringLiteral("passwords.not_enabled")));
   });
   static_cast<QVBoxLayout *>(layout())->addWidget(card, 0, Qt::AlignHCenter);
   layout()->addItem(new QSpacerItem(1, 1, QSizePolicy::Minimum, QSizePolicy::Expanding));
 }
 void PasswordManagerPage::showSetup() {
-  status_->setText(statusMessage_.isEmpty() ? QStringLiteral("Deneysel özellik etkinleştirildi.") : statusMessage_);
+  status_->setText(statusMessage_.isEmpty() ? I18n::text(QStringLiteral("passwords.experimental_enabled")) : statusMessage_);
   auto *card = new QFrame(this); card->setObjectName(QStringLiteral("vault-setup-card")); card->setStyleSheet(QStringLiteral("QFrame#vault-setup-card{background:#101722;border:1px solid #29364a;border-radius:18px;}")); card->setMaximumWidth(520); auto *form = new QVBoxLayout(card); form->setContentsMargins(22, 22, 22, 22); form->setSpacing(10);
-  auto *heading = new QLabel(QStringLiteral("Şifre Yöneticisi Kasası Oluştur"), card); heading->setStyleSheet(QStringLiteral("font-size:21px;font-weight:700;color:#eef4fb;")); form->addWidget(heading); form->addWidget(new QLabel(QStringLiteral("Şifrelerinizi güvenli şekilde kaydetmek için bir kasa oluşturun. Kasaya bir ad verin ve güçlü bir ana şifre seçin."), card));
-  form->addWidget(new QLabel(QStringLiteral("Kasa adı"), card)); auto *vaultName = new QLineEdit(card); vaultName->setObjectName(QStringLiteral("vault-name")); vaultName->setMaxLength(64); vaultName->setText(QStringLiteral("Kişisel")); form->addWidget(vaultName);
-  form->addWidget(new QLabel(QStringLiteral("Ana şifre"), card)); master_ = passwordField(card); master_->setObjectName(QStringLiteral("vault-master-password")); master_->setPlaceholderText(QStringLiteral("Ana şifre")); form->addWidget(master_);
-  auto *rules = new QGridLayout; rules->setHorizontalSpacing(24); rules->setVerticalSpacing(7); const QStringList ruleTexts{QStringLiteral("En az 12 karakter"), QStringLiteral("En az bir küçük harf"), QStringLiteral("En az bir büyük harf"), QStringLiteral("En az bir sayı"), QStringLiteral("En az bir sembol")}; const QStringList ruleNames{QStringLiteral("length"), QStringLiteral("lower"), QStringLiteral("upper"), QStringLiteral("number"), QStringLiteral("symbol")}; QVector<QLabel *> ruleLabels; for (int i = 0; i < ruleTexts.size(); ++i) { auto *label = new QLabel(QStringLiteral("●  %1").arg(ruleTexts.at(i)), card); label->setObjectName(QStringLiteral("vault-rule-%1").arg(ruleNames.at(i))); label->setStyleSheet(QStringLiteral("color:#f87171;font-size:12px;")); ruleLabels.append(label); rules->addWidget(label, i / 2, i % 2); } form->addLayout(rules);
-  form->addWidget(new QLabel(QStringLiteral("Şifreyi onayla"), card)); confirm_ = passwordField(card); confirm_->setObjectName(QStringLiteral("vault-confirm-password")); confirm_->setPlaceholderText(QStringLiteral("Şifreyi onayla")); form->addWidget(confirm_); auto *match = new QLabel(QStringLiteral("•  Şifreler eşleşmiyor"), card); match->setObjectName(QStringLiteral("vault-password-match")); match->setStyleSheet(QStringLiteral("color:#ff7676;")); form->addWidget(match);
-  auto *create = new QPushButton(QStringLiteral("Kasayı oluştur"), card); create->setObjectName(QStringLiteral("vault-create")); create->setEnabled(false); form->addWidget(create, 0, Qt::AlignLeft);
-  const auto validate = [this, ruleLabels, match, create] { const QString value = master_->text(); const QVector<bool> checks{value.size() >= 12, value.contains(QRegularExpression(QStringLiteral("[a-z]"))), value.contains(QRegularExpression(QStringLiteral("[A-Z]"))), value.contains(QRegularExpression(QStringLiteral("[0-9]"))), value.contains(QRegularExpression(QStringLiteral("[^A-Za-z0-9\\s]")))}; for (int i = 0; i < checks.size(); ++i) ruleLabels.at(i)->setStyleSheet(checks.at(i) ? QStringLiteral("color:#55e69a;") : QStringLiteral("color:#ff7676;")); const bool same = !value.isEmpty() && value == confirm_->text(); match->setText(same ? QStringLiteral("•  Şifreler eşleşiyor") : QStringLiteral("•  Şifreler eşleşmiyor")); match->setStyleSheet(same ? QStringLiteral("color:#55e69a;") : QStringLiteral("color:#ff7676;")); create->setEnabled(std::all_of(checks.cbegin(), checks.cend(), [](bool ok) { return ok; }) && same); };
+  auto *heading = new QLabel(I18n::text(QStringLiteral("passwords.create_vault_title")), card); heading->setStyleSheet(QStringLiteral("font-size:21px;font-weight:700;color:#eef4fb;")); form->addWidget(heading); form->addWidget(new QLabel(I18n::text(QStringLiteral("passwords.create_vault_intro")), card));
+  form->addWidget(new QLabel(I18n::text(QStringLiteral("passwords.vault_name")), card)); auto *vaultName = new QLineEdit(card); vaultName->setObjectName(QStringLiteral("vault-name")); vaultName->setMaxLength(64); vaultName->setText(I18n::text(QStringLiteral("passwords.default_vault_name"))); form->addWidget(vaultName);
+  form->addWidget(new QLabel(I18n::text(QStringLiteral("passwords.master_password_label")), card)); master_ = passwordField(card); master_->setObjectName(QStringLiteral("vault-master-password")); master_->setPlaceholderText(I18n::text(QStringLiteral("passwords.master_password_label"))); form->addWidget(master_);
+  auto *rules = new QGridLayout; rules->setHorizontalSpacing(24); rules->setVerticalSpacing(7); const QStringList ruleTexts{I18n::text(QStringLiteral("passwords.rule_min_length")), I18n::text(QStringLiteral("passwords.rule_lowercase")), I18n::text(QStringLiteral("passwords.rule_uppercase")), I18n::text(QStringLiteral("passwords.rule_digit")), I18n::text(QStringLiteral("passwords.rule_symbol"))}; const QStringList ruleNames{QStringLiteral("length"), QStringLiteral("lower"), QStringLiteral("upper"), QStringLiteral("number"), QStringLiteral("symbol")}; QVector<QLabel *> ruleLabels; for (int i = 0; i < ruleTexts.size(); ++i) { auto *label = new QLabel(QStringLiteral("●  %1").arg(ruleTexts.at(i)), card); label->setObjectName(QStringLiteral("vault-rule-%1").arg(ruleNames.at(i))); label->setStyleSheet(QStringLiteral("color:#f87171;font-size:12px;")); ruleLabels.append(label); rules->addWidget(label, i / 2, i % 2); } form->addLayout(rules);
+  form->addWidget(new QLabel(I18n::text(QStringLiteral("passwords.confirm_password")), card)); confirm_ = passwordField(card); confirm_->setObjectName(QStringLiteral("vault-confirm-password")); confirm_->setPlaceholderText(I18n::text(QStringLiteral("passwords.confirm_password"))); form->addWidget(confirm_); auto *match = new QLabel(I18n::text(QStringLiteral("passwords.passwords_mismatch")), card); match->setObjectName(QStringLiteral("vault-password-match")); match->setStyleSheet(QStringLiteral("color:#ff7676;")); form->addWidget(match);
+  auto *create = new QPushButton(I18n::text(QStringLiteral("passwords.create_vault")), card); create->setObjectName(QStringLiteral("vault-create")); create->setEnabled(false); form->addWidget(create, 0, Qt::AlignLeft);
+  const auto validate = [this, ruleLabels, match, create] { const QString value = master_->text(); const QVector<bool> checks{value.size() >= 12, value.contains(QRegularExpression(QStringLiteral("[a-z]"))), value.contains(QRegularExpression(QStringLiteral("[A-Z]"))), value.contains(QRegularExpression(QStringLiteral("[0-9]"))), value.contains(QRegularExpression(QStringLiteral("[^A-Za-z0-9\\s]")))}; for (int i = 0; i < checks.size(); ++i) ruleLabels.at(i)->setStyleSheet(checks.at(i) ? QStringLiteral("color:#55e69a;") : QStringLiteral("color:#ff7676;")); const bool same = !value.isEmpty() && value == confirm_->text(); match->setText(same ? I18n::text(QStringLiteral("passwords.passwords_match")) : I18n::text(QStringLiteral("passwords.passwords_mismatch"))); match->setStyleSheet(same ? QStringLiteral("color:#55e69a;") : QStringLiteral("color:#ff7676;")); create->setEnabled(std::all_of(checks.cbegin(), checks.cend(), [](bool ok) { return ok; }) && same); };
   connect(master_, &QLineEdit::textChanged, card, validate); connect(confirm_, &QLineEdit::textChanged, card, validate);
-  connect(create, &QPushButton::clicked, this, [this, create, vaultName] { const QString p = master_->text(); const QString name = vaultName->text(); master_->clear(); confirm_->clear(); create->setEnabled(false); status_->setText(QStringLiteral("Kasa güvenli biçimde oluşturuluyor…")); auto *watcher = new QFutureWatcher<bool>(this); connect(watcher, &QFutureWatcher<bool>::finished, this, [this, create, watcher] { const bool ok = watcher->result(); watcher->deleteLater(); create->setEnabled(true); if (ok) { statusMessage_ = QStringLiteral("Kasa oluşturuldu."); refresh(); } else status_->setText(QStringLiteral("Kasa oluşturulamadı: %1").arg(vault_->lastError())); }); watcher->setFuture(QtConcurrent::run([vault = vault_, name, p] { return vault->createVault(name, p); })); });
+  connect(create, &QPushButton::clicked, this, [this, create, vaultName] { const QString p = master_->text(); const QString name = vaultName->text(); master_->clear(); confirm_->clear(); create->setEnabled(false); status_->setText(I18n::text(QStringLiteral("passwords.creating_vault"))); auto *watcher = new QFutureWatcher<bool>(this); connect(watcher, &QFutureWatcher<bool>::finished, this, [this, create, watcher] { const bool ok = watcher->result(); watcher->deleteLater(); create->setEnabled(true); if (ok) { statusMessage_ = I18n::text(QStringLiteral("passwords.vault_created")); refresh(); } else status_->setText(I18n::text(QStringLiteral("passwords.vault_create_failed")).arg(vault_->lastError())); }); watcher->setFuture(QtConcurrent::run([vault = vault_, name, p] { return vault->createVault(name, p); })); });
   static_cast<QVBoxLayout *>(layout())->addWidget(card, 0, Qt::AlignHCenter); layout()->addItem(new QSpacerItem(1, 1, QSizePolicy::Minimum, QSizePolicy::Expanding));
 }
 void PasswordManagerPage::showUnlock() {
@@ -635,15 +636,15 @@ void PasswordManagerPage::showUnlock() {
   form->setContentsMargins(28, 26, 28, 28);
   form->setSpacing(9);
 
-  auto *heading = new QLabel(QStringLiteral("Kasanız kilitli"), card);
+  auto *heading = new QLabel(I18n::text(QStringLiteral("passwords.vault_locked_title")), card);
   heading->setStyleSheet(QStringLiteral("font-size:20px;font-weight:700;color:#f1f6fc;"));
-  auto *description = new QLabel(QStringLiteral("Devam etmek için ana parolanızı girin."), card);
+  auto *description = new QLabel(I18n::text(QStringLiteral("passwords.vault_locked_desc")), card);
   description->setStyleSheet(QStringLiteral("color:#8fa1b5;font-size:13px;"));
   form->addWidget(heading);
   form->addWidget(description);
   form->addSpacing(8);
 
-  auto *vaultLabel = new QLabel(QStringLiteral("Kasa"), card);
+  auto *vaultLabel = new QLabel(I18n::text(QStringLiteral("passwords.vault")), card);
   vaultLabel->setStyleSheet(QStringLiteral("color:#b9c6d5;font-size:12px;font-weight:600;"));
   auto *vaultPicker = new QComboBox(card);
   vaultPicker->setObjectName(QStringLiteral("vault-picker"));
@@ -672,12 +673,12 @@ void PasswordManagerPage::showUnlock() {
   form->addWidget(vaultSwitcher);
   form->addSpacing(5);
 
-  auto *passwordLabel = new QLabel(QStringLiteral("Ana parola"), card);
+  auto *passwordLabel = new QLabel(I18n::text(QStringLiteral("passwords.master_password")), card);
   passwordLabel->setStyleSheet(QStringLiteral("color:#b9c6d5;font-size:12px;font-weight:600;"));
   master_ = passwordField(card);
   master_->setObjectName(QStringLiteral("vault-master-password"));
-  master_->setPlaceholderText(QStringLiteral("Ana parolanız"));
-  auto *unlock = new QPushButton(QStringLiteral("Kasayı aç"), card);
+  master_->setPlaceholderText(I18n::text(QStringLiteral("passwords.your_master_password")));
+  auto *unlock = new QPushButton(I18n::text(QStringLiteral("passwords.open_vault")), card);
   unlock->setObjectName(QStringLiteral("vault-unlock"));
   form->addWidget(passwordLabel);
   form->addWidget(master_);
@@ -688,10 +689,10 @@ void PasswordManagerPage::showUnlock() {
   static_cast<QVBoxLayout *>(layout())->addWidget(card, 0, Qt::AlignHCenter);
   layout()->addItem(new QSpacerItem(1, 8, QSizePolicy::Minimum, QSizePolicy::Expanding));
   connect(vaultPicker, &QComboBox::currentIndexChanged, this, [this, vaultPicker](int) { vault_->setActiveVault(vaultPicker->currentData().toString()); });
-  connect(unlock, &QPushButton::clicked, this, [this, unlock] { const QString p = master_->text(); master_->clear(); unlock->setEnabled(false); status_->setText(QStringLiteral("Ana parola doğrulanıyor…")); auto *watcher = new QFutureWatcher<bool>(this); connect(watcher, &QFutureWatcher<bool>::finished, this, [this, unlock, watcher] { const bool ok = watcher->result(); watcher->deleteLater(); unlock->setEnabled(true); if (!ok) status_->setText(QStringLiteral("Kasa açılamadı: %1").arg(vault_->lastError())); }); watcher->setFuture(QtConcurrent::run([vault = vault_, p] { return vault->unlock(p); })); }); connect(master_, &QLineEdit::returnPressed, unlock, &QPushButton::click);
+  connect(unlock, &QPushButton::clicked, this, [this, unlock] { const QString p = master_->text(); master_->clear(); unlock->setEnabled(false); status_->setText(I18n::text(QStringLiteral("passwords.verifying_master"))); auto *watcher = new QFutureWatcher<bool>(this); connect(watcher, &QFutureWatcher<bool>::finished, this, [this, unlock, watcher] { const bool ok = watcher->result(); watcher->deleteLater(); unlock->setEnabled(true); if (!ok) status_->setText(I18n::text(QStringLiteral("passwords.vault_open_failed")).arg(vault_->lastError())); }); watcher->setFuture(QtConcurrent::run([vault = vault_, p] { return vault->unlock(p); })); }); connect(master_, &QLineEdit::returnPressed, unlock, &QPushButton::click);
 }
 void PasswordManagerPage::showRecords() {
-  status_->setText(statusMessage_.isEmpty() ? QStringLiteral("Kasa açık. Parolalar varsayılan olarak maskelidir.") : statusMessage_);
+  status_->setText(statusMessage_.isEmpty() ? I18n::text(QStringLiteral("passwords.vault_open_masked")) : statusMessage_);
   // Keep every manager control in one owned widget.  A vault-created signal can
   // refresh this page while creation completes; a single subtree prevents a
   // partially laid out toolbar or footer during that first paint.
@@ -700,33 +701,42 @@ void PasswordManagerPage::showRecords() {
   auto *managerLayout = new QVBoxLayout(manager);
   managerLayout->setContentsMargins(0, 0, 0, 0);
   managerLayout->setSpacing(12);
+  auto *protectionStatus = new QLabel(
+      I18n::text(vault_->isActiveVaultDeviceBound()
+                     ? QStringLiteral("passwords.protection_os_store")
+                     : QStringLiteral("passwords.protection_master_only")),
+      manager);
+  protectionStatus->setObjectName(QStringLiteral("vault-protection-status"));
+  protectionStatus->setWordWrap(true);
+  protectionStatus->setStyleSheet(QStringLiteral("color:#9fb0c3;font-size:12px;"));
+  managerLayout->addWidget(protectionStatus);
   auto *toolbar = new PasswordToolbar(manager);
   toolbar->setObjectName(QStringLiteral("vault-toolbar"));
   auto *vaultPicker = new QComboBox(manager); vaultPicker->setObjectName(QStringLiteral("vault-picker"));
-  for (const VaultMetadata &item : vault_->vaults()) vaultPicker->addItem(item.name + (item.locked ? QStringLiteral(" · kilitli") : QStringLiteral(" · açık")), item.id);
+  for (const VaultMetadata &item : vault_->vaults()) vaultPicker->addItem((item.locked ? I18n::text(QStringLiteral("passwords.vault_label_locked")) : I18n::text(QStringLiteral("passwords.vault_label_open"))).arg(item.name), item.id);
   vaultPicker->setCurrentIndex(vaultPicker->findData(vault_->activeVaultId()));
   vaultPicker->setMinimumWidth(110);
   vaultPicker->setMaximumWidth(180);
-  search_ = new QLineEdit(manager); search_->setObjectName(QStringLiteral("vault-search")); search_->setPlaceholderText(QStringLiteral("Site veya kullanıcı adı ara"));
+  search_ = new QLineEdit(manager); search_->setObjectName(QStringLiteral("vault-search")); search_->setPlaceholderText(I18n::text(QStringLiteral("passwords.search_placeholder")));
   search_->setMinimumWidth(60);
   search_->addAction(themedIcon({QStringLiteral("edit-find-symbolic"), QStringLiteral("edit-find")}, style()->standardIcon(QStyle::SP_FileDialogContentsView)), QLineEdit::LeadingPosition);
-  auto *add = new QPushButton(themedIcon({QStringLiteral("list-add-symbolic"), QStringLiteral("list-add")}, style()->standardIcon(QStyle::SP_FileDialogNewFolder)), QStringLiteral("Ekle"), manager); add->setObjectName(QStringLiteral("vault-add-credential"));
-  add->setToolTip(QStringLiteral("Kimlik bilgisi ekle"));
-  auto *lock = new QPushButton(themedIcon({QStringLiteral("system-lock-screen-symbolic"), QStringLiteral("changes-prevent-symbolic"), QStringLiteral("system-lock-screen")}, style()->standardIcon(QStyle::SP_DialogCloseButton)), QStringLiteral("Kilitle"), manager); lock->setObjectName(QStringLiteral("vault-lock")); lock->setProperty("ghost", true); lock->setToolTip(QStringLiteral("Kasayı kilitle"));
+  auto *add = new QPushButton(themedIcon({QStringLiteral("list-add-symbolic"), QStringLiteral("list-add")}, style()->standardIcon(QStyle::SP_FileDialogNewFolder)), I18n::text(QStringLiteral("common.add")), manager); add->setObjectName(QStringLiteral("vault-add-credential"));
+  add->setToolTip(I18n::text(QStringLiteral("passwords.add_credential")));
+  auto *lock = new QPushButton(themedIcon({QStringLiteral("system-lock-screen-symbolic"), QStringLiteral("changes-prevent-symbolic"), QStringLiteral("system-lock-screen")}, style()->standardIcon(QStyle::SP_DialogCloseButton)), I18n::text(QStringLiteral("passwords.lock")), manager); lock->setObjectName(QStringLiteral("vault-lock")); lock->setProperty("ghost", true); lock->setToolTip(I18n::text(QStringLiteral("passwords.lock_vault")));
   auto *options = new QToolButton(manager);
   options->setObjectName(QStringLiteral("vault-options"));
   options->setProperty("toolbarButton", true);
   options->setIcon(themedIcon({QStringLiteral("view-more-symbolic"), QStringLiteral("open-menu-symbolic"), QStringLiteral("open-menu")}, style()->standardIcon(QStyle::SP_TitleBarMenuButton)));
-  options->setToolTip(QStringLiteral("Kasa seçenekleri"));
+  options->setToolTip(I18n::text(QStringLiteral("passwords.vault_options")));
   options->setPopupMode(QToolButton::InstantPopup);
 
   // These controls retain the existing object names and signal wiring while
   // their visible entry points live in the compact options menu.
   auto *toggleUsernames = new QPushButton(passwordVisibilityIcon(usernamesVisible_), {}, manager); toggleUsernames->setObjectName(QStringLiteral("vault-toggle-usernames")); toggleUsernames->hide();
-  auto *newVault = new QPushButton(QStringLiteral("Yeni kasa"), manager); newVault->setObjectName(QStringLiteral("vault-create-new")); newVault->setProperty("ghost", true);
-  auto *changeMaster = new QPushButton(QStringLiteral("Ana parolayı değiştir"), manager);
-  auto *autoLock = new QComboBox(manager); autoLock->setObjectName(QStringLiteral("vault-auto-lock")); autoLock->setToolTip(QStringLiteral("Kasa otomatik kilit süresi"));
-  autoLock->addItem(QStringLiteral("1 dk"), 60000); autoLock->addItem(QStringLiteral("5 dk"), 5 * 60000); autoLock->addItem(QStringLiteral("15 dk"), 15 * 60000); autoLock->addItem(QStringLiteral("30 dk"), 30 * 60000); autoLock->setCurrentIndex(autoLock->findData(vault_->autoLockTimeoutMs()));
+  auto *newVault = new QPushButton(I18n::text(QStringLiteral("passwords.new_vault")), manager); newVault->setObjectName(QStringLiteral("vault-create-new")); newVault->setProperty("ghost", true);
+  auto *changeMaster = new QPushButton(I18n::text(QStringLiteral("passwords.change_master")), manager);
+  auto *autoLock = new QComboBox(manager); autoLock->setObjectName(QStringLiteral("vault-auto-lock")); autoLock->setToolTip(I18n::text(QStringLiteral("passwords.auto_lock_timeout")));
+  autoLock->addItem(I18n::text(QStringLiteral("time.minutes_short")).arg(1), 60000); autoLock->addItem(I18n::text(QStringLiteral("time.minutes_short")).arg(5), 5 * 60000); autoLock->addItem(I18n::text(QStringLiteral("time.minutes_short")).arg(15), 15 * 60000); autoLock->addItem(I18n::text(QStringLiteral("time.minutes_short")).arg(30), 30 * 60000); autoLock->setCurrentIndex(autoLock->findData(vault_->autoLockTimeoutMs()));
   toolbar->setControls(vaultPicker, search_, add, lock, options);
   managerLayout->addWidget(toolbar);
   records_ = new QListWidget(manager); records_->setMinimumHeight(64); records_->setMaximumHeight(520); records_->setSelectionMode(QAbstractItemView::NoSelection); records_->setFocusPolicy(Qt::NoFocus); records_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel); managerLayout->addWidget(records_);
@@ -735,7 +745,7 @@ void PasswordManagerPage::showRecords() {
     const QString q = search_->text().trimmed(); records_->clear();
     for (const CredentialMetadata &meta : vault_->list()) {
       if (!q.isEmpty() && !meta.origin.contains(q, Qt::CaseInsensitive) && !meta.username.contains(q, Qt::CaseInsensitive)) continue;
-      auto *item = new QListWidgetItem(records_); item->setData(Qt::UserRole, meta.id); item->setToolTip(QStringLiteral("%1\nGüncellendi: %2").arg(meta.origin, meta.updatedAt.toLocalTime().toString(Qt::ISODate)));
+      auto *item = new QListWidgetItem(records_); item->setData(Qt::UserRole, meta.id); item->setToolTip(I18n::text(QStringLiteral("passwords.record_updated")).arg(meta.origin, meta.updatedAt.toLocalTime().toString(Qt::ISODate)));
       auto *card = new QWidget(records_); auto *cardLayout = new QHBoxLayout(card); cardLayout->setContentsMargins(12, 8, 8, 8); cardLayout->setSpacing(12);
       auto *platform = new QLabel(card); platform->setObjectName(QStringLiteral("credential-site-icon")); platform->setFixedSize(32, 32); requestCachedFavicon(platform, meta.origin); cardLayout->addWidget(platform);
       auto *details = new QWidget(card); auto *detailsLayout = new QVBoxLayout(details); detailsLayout->setContentsMargins(0, 0, 0, 0); detailsLayout->setSpacing(2);
@@ -744,30 +754,30 @@ void PasswordManagerPage::showRecords() {
       auto *origin = new QLabel(host.isEmpty() ? meta.origin : host, details); origin->setStyleSheet(QStringLiteral("font-weight:600;color:#eef5fb;"));
       const QString displayedUsername = usernamesVisible_ ? meta.username : QString(std::max(8, int(meta.username.size())), QChar(0x2022));
       auto *username = new QLabel(displayedUsername, details); username->setStyleSheet(QStringLiteral("color:#9fb0c3;font-size:12px;")); detailsLayout->addWidget(origin); detailsLayout->addWidget(username); cardLayout->addWidget(details, 1);
-      auto *edit = new QToolButton(card); edit->setIcon(themedIcon({QStringLiteral("document-edit-symbolic"), QStringLiteral("document-edit")}, recordActionIcon(QStringLiteral("edit")))); edit->setToolTip(QStringLiteral("Kimlik bilgisini düzenle")); edit->setProperty("iconButton", true);
-      auto *copy = new QToolButton(card); copy->setIcon(themedIcon({QStringLiteral("edit-copy-symbolic"), QStringLiteral("edit-copy")}, recordActionIcon(QStringLiteral("copy")))); copy->setToolTip(QStringLiteral("Parolayı kopyala")); copy->setProperty("iconButton", true);
-      auto *remove = new QToolButton(card); remove->setIcon(themedIcon({QStringLiteral("edit-delete-symbolic"), QStringLiteral("user-trash-symbolic"), QStringLiteral("edit-delete")}, recordActionIcon(QStringLiteral("delete")))); remove->setToolTip(QStringLiteral("Kimlik bilgisini sil")); remove->setProperty("iconButton", true); remove->setProperty("danger", true);
+      auto *edit = new QToolButton(card); edit->setIcon(themedIcon({QStringLiteral("document-edit-symbolic"), QStringLiteral("document-edit")}, recordActionIcon(QStringLiteral("edit")))); edit->setToolTip(I18n::text(QStringLiteral("passwords.edit_credential"))); edit->setProperty("iconButton", true);
+      auto *copy = new QToolButton(card); copy->setIcon(themedIcon({QStringLiteral("edit-copy-symbolic"), QStringLiteral("edit-copy")}, recordActionIcon(QStringLiteral("copy")))); copy->setToolTip(I18n::text(QStringLiteral("passwords.copy_password"))); copy->setProperty("iconButton", true);
+      auto *remove = new QToolButton(card); remove->setIcon(themedIcon({QStringLiteral("edit-delete-symbolic"), QStringLiteral("user-trash-symbolic"), QStringLiteral("edit-delete")}, recordActionIcon(QStringLiteral("delete")))); remove->setToolTip(I18n::text(QStringLiteral("passwords.delete_credential"))); remove->setProperty("iconButton", true); remove->setProperty("danger", true);
       cardLayout->addWidget(edit); cardLayout->addWidget(copy); cardLayout->addWidget(remove);
       item->setSizeHint(QSize(0, 58)); records_->setItemWidget(item, card);
       connect(edit, &QToolButton::clicked, this, [this, id = meta.id] { addCredential(id); });
       connect(copy, &QToolButton::clicked, this, [this, id = meta.id] { copyPassword(id); });
-      connect(remove, &QToolButton::clicked, this, [this, id = meta.id] { if (QMessageBox::question(this, QStringLiteral("Şifre Yöneticisi"), QStringLiteral("Seçili kimlik bilgisi silinsin mi?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes && !vault_->remove(id)) QMessageBox::warning(this, QStringLiteral("Şifre Yöneticisi"), vault_->lastError()); });
+      connect(remove, &QToolButton::clicked, this, [this, id = meta.id] { if (QMessageBox::question(this, I18n::text(QStringLiteral("toolbar.passwords")), I18n::text(QStringLiteral("passwords.delete_credential_confirm")), QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes && !vault_->remove(id)) QMessageBox::warning(this, I18n::text(QStringLiteral("toolbar.passwords")), vault_->lastError()); });
     }
-    if (!records_->count()) { auto *empty = new QListWidgetItem(QStringLiteral("Kimlik bilgisi bulunamadı."), records_); empty->setFlags(Qt::NoItemFlags); }
+    if (!records_->count()) { auto *empty = new QListWidgetItem(I18n::text(QStringLiteral("passwords.no_credentials")), records_); empty->setFlags(Qt::NoItemFlags); }
     records_->setFixedHeight(std::min(520, std::max(64, records_->count() * 58 + 10)));
   };
-  auto *backup = new QPushButton(QStringLiteral("Yedek al"), manager); backup->setObjectName(QStringLiteral("vault-export-backup")); backup->setProperty("ghost", true); auto *restore = new QPushButton(QStringLiteral("Yedekten içe aktar"), manager); restore->setObjectName(QStringLiteral("vault-import-backup")); restore->setProperty("ghost", true); auto *disable = new QPushButton(QStringLiteral("Özelliği devre dışı bırak"), manager); disable->setObjectName(QStringLiteral("vault-disable")); disable->setProperty("ghost", true); auto *reset = new QPushButton(QStringLiteral("Kasayı sıfırla"), manager); reset->setObjectName(QStringLiteral("vault-reset")); reset->setProperty("danger", true); auto *deleteVault = new QPushButton(QStringLiteral("Kasayı sil"), manager); deleteVault->setObjectName(QStringLiteral("vault-delete")); deleteVault->setProperty("danger", true); changeMaster->setObjectName(QStringLiteral("vault-change-master")); changeMaster->setProperty("ghost", true);
+  auto *backup = new QPushButton(I18n::text(QStringLiteral("passwords.backup")), manager); backup->setObjectName(QStringLiteral("vault-export-backup")); backup->setProperty("ghost", true); auto *restore = new QPushButton(I18n::text(QStringLiteral("passwords.import_backup")), manager); restore->setObjectName(QStringLiteral("vault-import-backup")); restore->setProperty("ghost", true); auto *disable = new QPushButton(I18n::text(QStringLiteral("passwords.disable_feature")), manager); disable->setObjectName(QStringLiteral("vault-disable")); disable->setProperty("ghost", true); auto *reset = new QPushButton(I18n::text(QStringLiteral("passwords.reset_vault")), manager); reset->setObjectName(QStringLiteral("vault-reset")); reset->setProperty("danger", true); auto *deleteVault = new QPushButton(I18n::text(QStringLiteral("passwords.delete_vault")), manager); deleteVault->setObjectName(QStringLiteral("vault-delete")); deleteVault->setProperty("danger", true); changeMaster->setObjectName(QStringLiteral("vault-change-master")); changeMaster->setProperty("ghost", true);
   const QList<QWidget *> hiddenControls{toggleUsernames, newVault, changeMaster, autoLock, backup, restore, disable, reset, deleteVault};
   for (QWidget *control : hiddenControls) control->hide();
 
   auto *menu = new QMenu(options);
-  auto *newVaultAction = menu->addAction(themedIcon({QStringLiteral("folder-new-symbolic"), QStringLiteral("folder-new")}), QStringLiteral("Yeni kasa"));
-  auto *toggleUsernamesAction = menu->addAction(passwordVisibilityIcon(usernamesVisible_), usernamesVisible_ ? QStringLiteral("Kullanıcı adlarını maskele") : QStringLiteral("Kullanıcı adlarını göster"));
+  auto *newVaultAction = menu->addAction(themedIcon({QStringLiteral("folder-new-symbolic"), QStringLiteral("folder-new")}), I18n::text(QStringLiteral("passwords.new_vault")));
+  auto *toggleUsernamesAction = menu->addAction(passwordVisibilityIcon(usernamesVisible_), usernamesVisible_ ? I18n::text(QStringLiteral("passwords.mask_usernames")) : I18n::text(QStringLiteral("passwords.show_usernames")));
   menu->addSeparator();
-  auto *backupAction = menu->addAction(themedIcon({QStringLiteral("document-save-symbolic"), QStringLiteral("document-save")}), QStringLiteral("Yedek al"));
-  auto *restoreAction = menu->addAction(themedIcon({QStringLiteral("document-open-symbolic"), QStringLiteral("document-open")}), QStringLiteral("Yedekten içe aktar"));
-  auto *changeMasterAction = menu->addAction(themedIcon({QStringLiteral("dialog-password-symbolic"), QStringLiteral("dialog-password")}), QStringLiteral("Ana parolayı değiştir"));
-  auto *autoLockMenu = menu->addMenu(themedIcon({QStringLiteral("preferences-system-time-symbolic"), QStringLiteral("preferences-system-time")}), QStringLiteral("Otomatik kilit"));
+  auto *backupAction = menu->addAction(themedIcon({QStringLiteral("document-save-symbolic"), QStringLiteral("document-save")}), I18n::text(QStringLiteral("passwords.backup")));
+  auto *restoreAction = menu->addAction(themedIcon({QStringLiteral("document-open-symbolic"), QStringLiteral("document-open")}), I18n::text(QStringLiteral("passwords.import_backup")));
+  auto *changeMasterAction = menu->addAction(themedIcon({QStringLiteral("dialog-password-symbolic"), QStringLiteral("dialog-password")}), I18n::text(QStringLiteral("passwords.change_master")));
+  auto *autoLockMenu = menu->addMenu(themedIcon({QStringLiteral("preferences-system-time-symbolic"), QStringLiteral("preferences-system-time")}), I18n::text(QStringLiteral("passwords.auto_lock")));
   for (int index = 0; index < autoLock->count(); ++index) {
     auto *duration = autoLockMenu->addAction(autoLock->itemText(index));
     duration->setCheckable(true);
@@ -778,10 +788,10 @@ void PasswordManagerPage::showRecords() {
       if (QAction *entry = autoLockMenu->actions().value(index)) entry->setChecked(true);
     });
   }
-  auto *disableAction = menu->addAction(QStringLiteral("Özelliği devre dışı bırak"));
+  auto *disableAction = menu->addAction(I18n::text(QStringLiteral("passwords.disable_feature")));
   menu->addSeparator();
-  auto *resetAction = menu->addAction(themedIcon({QStringLiteral("edit-clear-all-symbolic"), QStringLiteral("edit-clear-all")}), QStringLiteral("Kasayı sıfırla"));
-  auto *deleteAction = menu->addAction(themedIcon({QStringLiteral("edit-delete-symbolic"), QStringLiteral("user-trash-symbolic"), QStringLiteral("edit-delete")}), QStringLiteral("Kasayı sil"));
+  auto *resetAction = menu->addAction(themedIcon({QStringLiteral("edit-clear-all-symbolic"), QStringLiteral("edit-clear-all")}), I18n::text(QStringLiteral("passwords.reset_vault")));
+  auto *deleteAction = menu->addAction(themedIcon({QStringLiteral("edit-delete-symbolic"), QStringLiteral("user-trash-symbolic"), QStringLiteral("edit-delete")}), I18n::text(QStringLiteral("passwords.delete_vault")));
   resetAction->setProperty("danger", true);
   deleteAction->setProperty("danger", true);
   options->setMenu(menu);
@@ -797,44 +807,49 @@ void PasswordManagerPage::showRecords() {
 
   static_cast<QVBoxLayout *>(layout())->addWidget(manager);
   layout()->addItem(new QSpacerItem(1, 1, QSizePolicy::Minimum, QSizePolicy::Expanding));
-  populate(); connect(vaultPicker, &QComboBox::currentIndexChanged, this, [this, vaultPicker](int) { vault_->setActiveVault(vaultPicker->currentData().toString()); }); connect(search_, &QLineEdit::textChanged, this, populate); connect(toggleUsernames, &QPushButton::clicked, this, [this, toggleUsernames, toggleUsernamesAction, populate] { usernamesVisible_ = !usernamesVisible_; const QIcon icon = passwordVisibilityIcon(usernamesVisible_); toggleUsernames->setIcon(icon); toggleUsernames->setToolTip(usernamesVisible_ ? QStringLiteral("Kullanıcı adlarını maskele") : QStringLiteral("Kullanıcı adlarını göster")); toggleUsernamesAction->setIcon(icon); toggleUsernamesAction->setText(usernamesVisible_ ? QStringLiteral("Kullanıcı adlarını maskele") : QStringLiteral("Kullanıcı adlarını göster")); populate(); }); connect(add, &QPushButton::clicked, this, [this] { addCredential(); }); connect(newVault, &QPushButton::clicked, this, &PasswordManagerPage::createVault); connect(lock, &QPushButton::clicked, vault_, &CredentialVaultManager::lock);
+  populate(); connect(vaultPicker, &QComboBox::currentIndexChanged, this, [this, vaultPicker](int) { vault_->setActiveVault(vaultPicker->currentData().toString()); }); connect(search_, &QLineEdit::textChanged, this, populate); connect(toggleUsernames, &QPushButton::clicked, this, [this, toggleUsernames, toggleUsernamesAction, populate] { usernamesVisible_ = !usernamesVisible_; const QIcon icon = passwordVisibilityIcon(usernamesVisible_); toggleUsernames->setIcon(icon); toggleUsernames->setToolTip(usernamesVisible_ ? I18n::text(QStringLiteral("passwords.mask_usernames")) : I18n::text(QStringLiteral("passwords.show_usernames"))); toggleUsernamesAction->setIcon(icon); toggleUsernamesAction->setText(usernamesVisible_ ? I18n::text(QStringLiteral("passwords.mask_usernames")) : I18n::text(QStringLiteral("passwords.show_usernames"))); populate(); }); connect(add, &QPushButton::clicked, this, [this] { addCredential(); }); connect(newVault, &QPushButton::clicked, this, &PasswordManagerPage::createVault); connect(lock, &QPushButton::clicked, vault_, &CredentialVaultManager::lock);
   connect(autoLock, &QComboBox::currentIndexChanged, this, [this, autoLock](int) { vault_->setAutoLockTimeoutMs(autoLock->currentData().toInt()); });
-  connect(changeMaster, &QPushButton::clicked, this, [this, changeMaster] { bool ok = false; const QString current = QInputDialog::getText(this, QStringLiteral("Ana parolayı değiştir"), QStringLiteral("Mevcut ana parola"), QLineEdit::Password, {}, &ok); if (!ok || current.isEmpty()) return; const QString next = QInputDialog::getText(this, QStringLiteral("Ana parolayı değiştir"), QStringLiteral("Yeni ana parola"), QLineEdit::Password, {}, &ok); if (!ok || next.isEmpty()) return; changeMaster->setEnabled(false); status_->setText(QStringLiteral("Ana parola değiştiriliyor…")); auto *watcher = new QFutureWatcher<bool>(this); connect(watcher, &QFutureWatcher<bool>::finished, this, [this, changeMaster, watcher] { const bool changed = watcher->result(); watcher->deleteLater(); changeMaster->setEnabled(true); status_->setText(changed ? QStringLiteral("Ana parola değiştirildi.") : QStringLiteral("Ana parola değiştirilemedi: %1").arg(vault_->lastError())); }); watcher->setFuture(QtConcurrent::run([vault = vault_, current, next] { return vault->changeMasterPassword(current, next); })); });
-  connect(disable, &QPushButton::clicked, this, [this] { if (QMessageBox::question(this, QStringLiteral("Şifre Yöneticisi"), QStringLiteral("Özellik devre dışı bırakılsın mı? Kasa silinmez."), QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) { vault_->lock(); QSettings().setValue(QStringLiteral("browser/passwords/experimentalConsentAccepted"), false); refresh(); } });
+  connect(changeMaster, &QPushButton::clicked, this, [this, changeMaster] { bool ok = false; const QString current = QInputDialog::getText(this, I18n::text(QStringLiteral("passwords.change_master")), I18n::text(QStringLiteral("passwords.current_master")), QLineEdit::Password, {}, &ok); if (!ok || current.isEmpty()) return; const QString next = QInputDialog::getText(this, I18n::text(QStringLiteral("passwords.change_master")), I18n::text(QStringLiteral("passwords.new_master")), QLineEdit::Password, {}, &ok); if (!ok || next.isEmpty()) return; changeMaster->setEnabled(false); status_->setText(I18n::text(QStringLiteral("passwords.changing_master"))); auto *watcher = new QFutureWatcher<bool>(this); connect(watcher, &QFutureWatcher<bool>::finished, this, [this, changeMaster, watcher] { const bool changed = watcher->result(); watcher->deleteLater(); changeMaster->setEnabled(true); status_->setText(changed ? I18n::text(QStringLiteral("passwords.master_changed")) : I18n::text(QStringLiteral("passwords.master_change_failed")).arg(vault_->lastError())); }); watcher->setFuture(QtConcurrent::run([vault = vault_, current, next] { return vault->changeMasterPassword(current, next); })); });
+  connect(disable, &QPushButton::clicked, this, [this] { if (QMessageBox::question(this, I18n::text(QStringLiteral("toolbar.passwords")), I18n::text(QStringLiteral("passwords.disable_feature_confirm")), QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) { vault_->lock(); QSettings().setValue(QStringLiteral("browser/passwords/experimentalConsentAccepted"), false); refresh(); } });
   connect(backup, &QPushButton::clicked, this, &PasswordManagerPage::exportBackup); connect(restore, &QPushButton::clicked, this, &PasswordManagerPage::importBackup);
-  connect(reset, &QPushButton::clicked, this, [this] { if (QMessageBox::warning(this, QStringLiteral("Kasayı sıfırla"), QStringLiteral("Bu kasadaki tüm kayıtlı kimlik bilgileri kalıcı olarak silinecek. Kasa adı ve ana parola korunur."), QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes && !vault_->clearActiveVault()) QMessageBox::warning(this, QStringLiteral("Şifre Yöneticisi"), vault_->lastError()); });
-  connect(deleteVault, &QPushButton::clicked, this, [this] { const bool lastVault = vault_->vaults().size() == 1; const QString warning = lastVault ? QStringLiteral("Son kasa ve içindeki tüm kayıtlar kalıcı olarak silinecek. Sonraki açılışta güvenlik koşullarını yeniden onaylamanız istenecek.") : QStringLiteral("Seçili kasa ve içindeki tüm kayıtlar kalıcı olarak silinecek."); if (QMessageBox::warning(this, QStringLiteral("Kasayı sil"), warning, QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) { if (!vault_->deleteVault(vault_->activeVaultId())) QMessageBox::warning(this, QStringLiteral("Şifre Yöneticisi"), vault_->lastError()); else if (lastVault) { QSettings().setValue(QStringLiteral("browser/passwords/experimentalConsentAccepted"), false); statusMessage_ = QStringLiteral("Kasa silindi. Yeni kasa için koşulları yeniden onaylayın."); refresh(); } } });
+  connect(reset, &QPushButton::clicked, this, [this] { if (QMessageBox::warning(this, I18n::text(QStringLiteral("passwords.reset_vault")), I18n::text(QStringLiteral("passwords.reset_vault_confirm")), QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes && !vault_->clearActiveVault()) QMessageBox::warning(this, I18n::text(QStringLiteral("toolbar.passwords")), vault_->lastError()); });
+  connect(deleteVault, &QPushButton::clicked, this, [this] { const bool lastVault = vault_->vaults().size() == 1; const QString warning = lastVault ? I18n::text(QStringLiteral("passwords.delete_last_vault_confirm")) : I18n::text(QStringLiteral("passwords.delete_vault_confirm")); if (QMessageBox::warning(this, I18n::text(QStringLiteral("passwords.delete_vault")), warning, QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) { if (!vault_->deleteVault(vault_->activeVaultId())) QMessageBox::warning(this, I18n::text(QStringLiteral("toolbar.passwords")), vault_->lastError()); else if (lastVault) { QSettings().setValue(QStringLiteral("browser/passwords/experimentalConsentAccepted"), false); statusMessage_ = I18n::text(QStringLiteral("passwords.vault_deleted_reaccept")); refresh(); } } });
 }
 void PasswordManagerPage::createVault() {
   bool ok = false;
-  const QString name = QInputDialog::getText(this, QStringLiteral("Yeni kasa"), QStringLiteral("Kasa adı"), QLineEdit::Normal, {}, &ok).trimmed();
+  const QString name = QInputDialog::getText(this, I18n::text(QStringLiteral("passwords.new_vault")), I18n::text(QStringLiteral("passwords.vault_name")), QLineEdit::Normal, {}, &ok).trimmed();
   if (!ok || name.isEmpty()) return;
-  const QString master = QInputDialog::getText(this, QStringLiteral("Yeni kasa"), QStringLiteral("Ana parola"), QLineEdit::Password, {}, &ok);
+  const QString master = QInputDialog::getText(this, I18n::text(QStringLiteral("passwords.new_vault")), I18n::text(QStringLiteral("passwords.master_password")), QLineEdit::Password, {}, &ok);
   if (!ok || master.isEmpty()) return;
-  const QString confirmation = QInputDialog::getText(this, QStringLiteral("Yeni kasa"), QStringLiteral("Ana parolayı onayla"), QLineEdit::Password, {}, &ok);
-  if (!ok || master != confirmation || !CredentialVaultManager::isStrongMasterPassword(master)) { QMessageBox::warning(this, QStringLiteral("Yeni kasa"), QStringLiteral("Ana parola güvenlik kurallarını karşılamıyor veya eşleşmiyor.")); return; }
-  if (!vault_->createVault(name, master)) QMessageBox::warning(this, QStringLiteral("Yeni kasa"), vault_->lastError());
+  const QString confirmation = QInputDialog::getText(this, I18n::text(QStringLiteral("passwords.new_vault")), I18n::text(QStringLiteral("passwords.confirm_master")), QLineEdit::Password, {}, &ok);
+  if (!ok || master != confirmation || !CredentialVaultManager::isStrongMasterPassword(master)) { QMessageBox::warning(this, I18n::text(QStringLiteral("passwords.new_vault")), I18n::text(QStringLiteral("passwords.master_rules_failed"))); return; }
+  if (!vault_->createVault(name, master)) QMessageBox::warning(this, I18n::text(QStringLiteral("passwords.new_vault")), vault_->lastError());
 }
 void PasswordManagerPage::exportBackup() {
-  QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Şifre kasalarını yedekle"), QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + QStringLiteral("/dalinira-kasalar.dalinira-vault-backup"), QStringLiteral("DaliNira kasa yedeği (*.dalinira-vault-backup)"));
+  for (const VaultMetadata &metadata : vault_->vaults()) {
+    if (!ensureSensitiveAuthorization(metadata.id)) return;
+  }
+  QString path = QFileDialog::getSaveFileName(this, I18n::text(QStringLiteral("passwords.backup_vaults_title")), QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + QStringLiteral("/dalinira-kasalar.dalinira-vault-backup"), I18n::text(QStringLiteral("passwords.backup_filter")));
   if (path.isEmpty()) return;
   if (!path.endsWith(QStringLiteral(".dalinira-vault-backup"), Qt::CaseInsensitive)) path += QStringLiteral(".dalinira-vault-backup");
-  bool ok = false; const QString password = QInputDialog::getText(this, QStringLiteral("Yedek parolası"), QStringLiteral("Yedek dosyası için güçlü parola"), QLineEdit::Password, {}, &ok); if (!ok || password.isEmpty()) return;
-  const QString confirmation = QInputDialog::getText(this, QStringLiteral("Yedek parolası"), QStringLiteral("Yedek parolasını onayla"), QLineEdit::Password, {}, &ok); if (!ok || password != confirmation || !CredentialVaultManager::isStrongMasterPassword(password)) { QMessageBox::warning(this, QStringLiteral("Yedek al"), QStringLiteral("Yedek parolası güvenlik kurallarını karşılamıyor veya eşleşmiyor.")); return; }
-  if (!vault_->exportBackup(path, password)) QMessageBox::warning(this, QStringLiteral("Yedek al"), vault_->lastError()); else status_->setText(QStringLiteral("Şifreli kasa yedeği oluşturuldu: %1").arg(path));
+  bool ok = false; const QString password = QInputDialog::getText(this, I18n::text(QStringLiteral("passwords.backup_password")), I18n::text(QStringLiteral("passwords.backup_password_prompt")), QLineEdit::Password, {}, &ok); if (!ok || password.isEmpty()) return;
+  const QString confirmation = QInputDialog::getText(this, I18n::text(QStringLiteral("passwords.backup_password")), I18n::text(QStringLiteral("passwords.confirm_backup_password")), QLineEdit::Password, {}, &ok); if (!ok || password != confirmation || !CredentialVaultManager::isStrongMasterPassword(password)) { QMessageBox::warning(this, I18n::text(QStringLiteral("passwords.backup")), I18n::text(QStringLiteral("passwords.backup_password_rules_failed"))); return; }
+  if (!vault_->exportBackup(path, password)) QMessageBox::warning(this, I18n::text(QStringLiteral("passwords.backup")), vault_->lastError()); else status_->setText(I18n::text(QStringLiteral("passwords.backup_created")).arg(path));
 }
 void PasswordManagerPage::importBackup() {
-  const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Kasa yedeğini içe aktar"), QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation), QStringLiteral("DaliNira kasa yedeği (*.dalinira-vault-backup)")); if (path.isEmpty()) return;
-  bool ok = false; const QString password = QInputDialog::getText(this, QStringLiteral("Yedekten içe aktar"), QStringLiteral("Yedek parolası"), QLineEdit::Password, {}, &ok); if (!ok || password.isEmpty()) return;
-  QStringList imported; if (!vault_->importBackup(path, password, &imported)) QMessageBox::warning(this, QStringLiteral("Yedekten içe aktar"), vault_->lastError()); else statusMessage_ = QStringLiteral("Yedekten içe aktarılan kasalar: %1").arg(imported.join(QStringLiteral(", ")));
+  const QString path = QFileDialog::getOpenFileName(this, I18n::text(QStringLiteral("passwords.import_backup_title")), QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation), I18n::text(QStringLiteral("passwords.backup_filter"))); if (path.isEmpty()) return;
+  bool ok = false; const QString password = QInputDialog::getText(this, I18n::text(QStringLiteral("passwords.import_backup")), I18n::text(QStringLiteral("passwords.backup_password")), QLineEdit::Password, {}, &ok); if (!ok || password.isEmpty()) return;
+  QStringList imported; if (!vault_->importBackup(path, password, &imported)) QMessageBox::warning(this, I18n::text(QStringLiteral("passwords.import_backup")), vault_->lastError()); else statusMessage_ = I18n::text(QStringLiteral("passwords.imported_vaults")).arg(imported.join(QStringLiteral(", ")));
 }
 void PasswordManagerPage::addCredential(const QString &id) {
   if (vault_->isLocked()) return;
-  QDialog dialog(this); dialog.setWindowTitle(id.isEmpty() ? QStringLiteral("Kimlik bilgisi ekle") : QStringLiteral("Kimlik bilgisini düzenle")); auto *form = new QFormLayout(&dialog); auto *origin = new QLineEdit(&dialog); auto *username = new QLineEdit(&dialog); auto *password = passwordField(&dialog); if (!id.isEmpty()) { CredentialSecret value; if (!vault_->reveal(id, &value)) return; origin->setText(value.origin); origin->setReadOnly(true); username->setText(value.username); password->setText(value.password); QTimer::singleShot(15000, password, &QLineEdit::clear); }
-  auto *generator = new QWidget(&dialog); auto *generatorLayout = new QHBoxLayout(generator); generatorLayout->setContentsMargins(0, 0, 0, 0); auto *length = new QSpinBox(generator); length->setRange(8, 128); length->setValue(20); auto *upper = new QCheckBox(QStringLiteral("A-Z"), generator); auto *lower = new QCheckBox(QStringLiteral("a-z"), generator); auto *digits = new QCheckBox(QStringLiteral("0-9"), generator); auto *symbols = new QCheckBox(QStringLiteral("Semboller"), generator); upper->setChecked(true); lower->setChecked(true); digits->setChecked(true); symbols->setChecked(true); auto *generate = new QPushButton(QStringLiteral("Üret"), generator); generatorLayout->addWidget(length); generatorLayout->addWidget(upper); generatorLayout->addWidget(lower); generatorLayout->addWidget(digits); generatorLayout->addWidget(symbols); generatorLayout->addWidget(generate);
-  form->addRow(QStringLiteral("HTTPS origin"), origin); form->addRow(QStringLiteral("Kullanıcı adı"), username); form->addRow(QStringLiteral("Parola"), password); form->addRow(QStringLiteral("Güvenli üretici"), generator); auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog); form->addRow(buttons); connect(generate, &QPushButton::clicked, &dialog, [password, length, upper, lower, digits, symbols] { password->setText(generatedPassword(length->value(), upper->isChecked(), lower->isChecked(), digits->isChecked(), symbols->isChecked())); }); connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept); connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject); if (dialog.exec() != QDialog::Accepted) return; bool update = false; const CredentialSecret candidate{origin->text(), username->text(), password->text(), {}}; const bool saved = id.isEmpty() ? vault_->save(candidate, &update) : vault_->update(id, candidate); password->clear(); if (!saved) QMessageBox::warning(this, QStringLiteral("Şifre Yöneticisi"), QStringLiteral("Kayıt başarısız: %1").arg(vault_->lastError()));
+  if (!id.isEmpty() && !ensureSensitiveAuthorization(vault_->owningVaultId(id))) return;
+  QDialog dialog(this); dialog.setWindowTitle(id.isEmpty() ? I18n::text(QStringLiteral("passwords.add_credential")) : I18n::text(QStringLiteral("passwords.edit_credential"))); auto *form = new QFormLayout(&dialog); auto *origin = new QLineEdit(&dialog); auto *username = new QLineEdit(&dialog); auto *password = passwordField(&dialog); if (!id.isEmpty()) { CredentialSecret value; if (!vault_->reveal(id, &value)) return; origin->setText(value.origin); origin->setReadOnly(true); username->setText(value.username); password->setText(value.password); QTimer::singleShot(15000, password, &QLineEdit::clear); }
+  auto *generator = new QWidget(&dialog); auto *generatorLayout = new QHBoxLayout(generator); generatorLayout->setContentsMargins(0, 0, 0, 0); auto *length = new QSpinBox(generator); length->setRange(8, 128); length->setValue(20); auto *upper = new QCheckBox(QStringLiteral("A-Z"), generator); auto *lower = new QCheckBox(QStringLiteral("a-z"), generator); auto *digits = new QCheckBox(QStringLiteral("0-9"), generator); auto *symbols = new QCheckBox(I18n::text(QStringLiteral("passwords.symbols")), generator); upper->setChecked(true); lower->setChecked(true); digits->setChecked(true); symbols->setChecked(true); auto *generate = new QPushButton(I18n::text(QStringLiteral("passwords.generate")), generator); generatorLayout->addWidget(length); generatorLayout->addWidget(upper); generatorLayout->addWidget(lower); generatorLayout->addWidget(digits); generatorLayout->addWidget(symbols); generatorLayout->addWidget(generate);
+  form->addRow(I18n::text(QStringLiteral("passwords.https_origin")), origin); form->addRow(I18n::text(QStringLiteral("passwords.username")), username); form->addRow(I18n::text(QStringLiteral("passwords.password")), password); form->addRow(I18n::text(QStringLiteral("passwords.secure_generator")), generator); auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog); form->addRow(buttons); connect(generate, &QPushButton::clicked, &dialog, [password, length, upper, lower, digits, symbols] { password->setText(generatedPassword(length->value(), upper->isChecked(), lower->isChecked(), digits->isChecked(), symbols->isChecked())); }); connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept); connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject); if (dialog.exec() != QDialog::Accepted) return; bool update = false; const CredentialSecret candidate{origin->text(), username->text(), password->text(), {}}; const bool saved = id.isEmpty() ? vault_->save(candidate, &update) : vault_->update(id, candidate); password->clear(); if (!saved) QMessageBox::warning(this, I18n::text(QStringLiteral("toolbar.passwords")), I18n::text(QStringLiteral("passwords.save_failed")).arg(vault_->lastError()));
 }
 void PasswordManagerPage::copyPassword(const QString &id) {
+  if (!ensureSensitiveAuthorization(vault_->owningVaultId(id))) return;
   CredentialSecret secret;
   if (!vault_->reveal(id, &secret)) return;
   QClipboard *clipboard = QGuiApplication::clipboard();
@@ -847,4 +862,26 @@ void PasswordManagerPage::copyPassword(const QString &id) {
       cb->clear();
     }
   });
+}
+
+bool PasswordManagerPage::ensureSensitiveAuthorization(const QString &vaultId) {
+  if (vaultId.isEmpty()) return false;
+  if (vault_->hasSensitiveAuthorization(vaultId)) return true;
+  QString vaultName;
+  for (const VaultMetadata &metadata : vault_->vaults()) {
+    if (metadata.id == vaultId) { vaultName = metadata.name; break; }
+  }
+  bool ok = false;
+  QString master = QInputDialog::getText(
+      this, I18n::text(QStringLiteral("passwords.reauthenticate_title")),
+      I18n::text(QStringLiteral("passwords.reauthenticate_prompt")).arg(vaultName),
+      QLineEdit::Password, {}, &ok);
+  if (!ok || master.isEmpty()) { master.fill(QChar()); return false; }
+  const bool authorized = vault_->authorizeSensitiveAction(vaultId, master);
+  master.fill(QChar());
+  if (!authorized) {
+    QMessageBox::warning(this, I18n::text(QStringLiteral("passwords.reauthenticate_title")),
+                         I18n::text(QStringLiteral("passwords.reauthenticate_failed")));
+  }
+  return authorized;
 }

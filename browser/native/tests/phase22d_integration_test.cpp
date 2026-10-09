@@ -17,6 +17,7 @@
 #include <QSharedPointer>
 #include <QWebEnginePage>
 #include <QWebEngineProfile>
+#include <QWebEngineSettings>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QKeyEvent>
@@ -136,6 +137,7 @@ int main(int argc, char **argv)
     registerDaliNiraUrlSchemes();
 
     QApplication app(argc, argv);
+    std::cerr << "Qt platform: " << QGuiApplication::platformName().toStdString() << std::endl;
     app.setApplicationName("DaliNiraPhase22dIntegration");
     app.setOrganizationName("DaliNiraTest");
 
@@ -169,9 +171,13 @@ int main(int argc, char **argv)
 
     wait(1000);
 
-    // Unified native download bubble stays anchored and reuses one popup widget.
-    auto *downloadButton =
-        window.findChild<DownloadToolbarButton *>("mediaDownloadButton");
+    // The Step 4 native-Wayland blocker smoke deliberately bypasses this
+    // unrelated X11-oriented popup-positioning case; the default integration
+    // test still executes it unchanged.
+    if (qEnvironmentVariableIntValue("DALINIRA_BLOCKER_WAYLAND_SMOKE") != 1) {
+      // Unified native download bubble stays anchored and reuses one popup widget.
+      auto *downloadButton =
+          window.findChild<DownloadToolbarButton *>("mediaDownloadButton");
 
     auto *downloadPopup =
         window.findChild<DownloadPopup *>();
@@ -258,7 +264,8 @@ int main(int argc, char **argv)
     assert(
         window.findChildren<DownloadPopup *>().size() == 1);
 
-    downloadPopup->hide();
+      downloadPopup->hide();
+    }
 
     auto *page = window.currentView()->page();
 
@@ -717,10 +724,14 @@ int main(int argc, char **argv)
        "query.value='stable x';query.dispatchEvent(new Event('input',{bubbles:true}));"
        "const stayedOpen=!document.querySelector('#search-suggestions').hidden;"
        "clearTimeout(suggestionRequestTimer);return stayedOpen})()").toBool());
+    // Rows offer removal only when BrowserWindow marks them removable
+    // (persistent profiles); an unmarked row must not show the button.
+    assert(js(pointerView->page(),
+              "!document.querySelector('#search-suggestions .suggestion-remove')").toBool());
     assert(js(pointerView->page(),
        "(()=>{const query=document.querySelector('#query');query.focus();query.value='remove';"
        "suggestionTypedValue='remove';window.daliniraShowSuggestions(suggestionId,'remove',["
-       "{text:'remove me',url:'https://duckduckgo.com/?q=remove%20me',type:'search-history'}]);"
+       "{text:'remove me',url:'https://duckduckgo.com/?q=remove%20me',type:'search-history',removable:true}]);"
        "const remove=document.querySelector('.suggestion-remove');query.blur();"
        "if(document.querySelector('#search-suggestions').hidden)return false;"
        "remove.dispatchEvent(new PointerEvent('pointerdown',{button:0,bubbles:true,cancelable:true}));return true})()").toBool());
@@ -1016,6 +1027,47 @@ int main(int argc, char **argv)
 
     window.closeTab(youtubeIndex);
     wait(100);
+
+    // Step 3 popup filtering must run on QtWebEngine's real new-window
+    // request path. A matching script-created popup creates no tab; a normal
+    // login-style popup and a browser-created New Tab remain functional.
+    profile.blockerService()->settings()->setAutoReloadOnModeChange(false);
+    profile.blockerService()->settings()->setCustomFilters({
+        QStringLiteral("||ads.popup.test^$popup"),
+        QStringLiteral("@@||login.ads.popup.test^$popup")});
+    profile.blockerService()->reloadRules();
+    auto *popupOpener = window.currentView();
+    assert(popupOpener && popupOpener->page());
+    popupOpener->page()->settings()->setAttribute(
+        QWebEngineSettings::JavascriptCanOpenWindows, true);
+    popupOpener->setHtml(
+        QStringLiteral("<!doctype html><title>popup opener</title>"
+                       "<a id='oauth' target='_blank' href='https://login.ads.popup.test/oauth'>login</a>"),
+        QUrl(QStringLiteral("https://opener.test/")));
+    assert(waitForJs(popupOpener->page(), QStringLiteral("document.readyState==='complete'"), 10000));
+    const int beforeBlockedPopup = window.tabCount();
+    js(popupOpener->page(), QStringLiteral("window.open('https://ads.popup.test/offer','_blank');true"));
+    wait(500);
+    assert(window.tabCount() == beforeBlockedPopup);
+
+    // A child initially opened at about:blank must not bypass $popup by
+    // assigning its real destination after creation.
+    js(popupOpener->page(),
+       QStringLiteral("{const p=window.open('about:blank','_blank');"
+                      "if(p)p.location='https://ads.popup.test/deferred';}true"));
+    wait(800);
+    assert(window.tabCount() == beforeBlockedPopup);
+
+    js(popupOpener->page(), QStringLiteral("document.querySelector('#oauth').click();true"));
+    QElapsedTimer popupTimer;
+    popupTimer.start();
+    while (window.tabCount() == beforeBlockedPopup && popupTimer.elapsed() < 5000) wait(20);
+    assert(window.tabCount() == beforeBlockedPopup + 1);
+    window.closeTab(window.tabCount() - 1);
+    const int beforeBrowserTab = window.tabCount();
+    const int browserTab = window.addNewTab();
+    assert(browserTab >= 0 && window.tabCount() == beforeBrowserTab + 1);
+    window.closeTab(browserTab);
 
 
     // Profile objects, stores, counters and suggestion policy stay separate.

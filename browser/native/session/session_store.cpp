@@ -1,9 +1,11 @@
 #include "session_store.h"
 
 #include "tab_manager.h"
+#include "tab_performance_manager.h"
 #include "browser_window.h"
 #include "security_utils.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -22,10 +24,38 @@ bool isRuntimeFixtureUrl(const QUrl &url) {
 }
 }  // namespace
 
-SessionStore::SessionStore(QString path) : path_(std::move(path)) {}
+SessionStore::SessionStore(QString path, QString defaultEngine)
+    : path_(std::move(path)), defaultEngine_(normalizeEngine(defaultEngine)) {}
 
-QVector<SavedTab> SessionStore::load() const {
-  QFile file(path_);
+QString SessionStore::normalizeEngine(const QString &engine) {
+  const QString lower = engine.toLower().trimmed();
+  if (lower == QLatin1String("webkit")) return QStringLiteral("webkit");
+  return QStringLiteral("chromium");
+}
+
+bool SessionStore::migrateLegacySessionIfNeeded(const QString &baseDir) {
+  if (baseDir.isEmpty()) return false;
+  const QString legacyPath = baseDir + QStringLiteral("/tabs.session.json");
+  const QString chromiumDir = baseDir + QStringLiteral("/session/chromium");
+  const QString chromiumPath = chromiumDir + QStringLiteral("/tabs.session.json");
+  if (!QFile::exists(legacyPath) || QFile::exists(chromiumPath)) return false;
+  if (!QDir().mkpath(chromiumDir) || !QFile::copy(legacyPath, chromiumPath)) return false;
+  QFile::setPermissions(chromiumPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+  // Keep the original for a downgrade, under a name no workspace reads.
+  QFile::remove(legacyPath + QStringLiteral(".migrated"));
+  QFile::rename(legacyPath, legacyPath + QStringLiteral(".migrated"));
+  return true;
+}
+
+QString SessionStore::sessionFilePath(const QString &engine) const {
+  if (path_.endsWith(QStringLiteral(".json"))) return path_;
+  const QString eng = normalizeEngine(engine.isEmpty() ? defaultEngine_ : engine);
+  return path_ + QStringLiteral("/session/") + eng + QStringLiteral("/tabs.session.json");
+}
+
+QVector<SavedTab> SessionStore::load(const QString &engine) const {
+  const QString targetPath = sessionFilePath(engine);
+  QFile file(targetPath);
   if (!file.open(QIODevice::ReadOnly)) return {};
   const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
   QVector<SavedTab> result;
@@ -57,19 +87,15 @@ QVector<SavedTab> SessionStore::load() const {
     const bool gcol = entry.value("groupCollapsed").toBool();
 
     result.push_back({url, entry.value("title").toString(), entry.value("active").toBool(),
-                      entry.value("pinned").toBool(), gid, gname, gcolor, gcol});
+                      entry.value("pinned").toBool(), gid, gname, gcolor, gcol,
+                      entry.value("sleeping").toBool()});
   }
-  if (storageChanged) {
-    QSaveFile sanitized(path_);
-    const QByteArray bytes = QJsonDocument(QJsonObject{{"version", 1}, {"tabs", sanitizedTabs}}).toJson(QJsonDocument::Compact);
-    if (sanitized.open(QIODevice::WriteOnly) && sanitized.write(bytes) == bytes.size() && sanitized.commit()) {
-      QFile::setPermissions(path_, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    }
-  }
+  if (storageChanged) writeTabs(targetPath, sanitizedTabs, nullptr);
   return result;
 }
 
-bool SessionStore::save(const TabManager &tabs, QObject *ownerWindow, QString *error) const {
+bool SessionStore::save(const TabManager &tabs, QObject *ownerWindow, const QString &engine, QString *error) const {
+  const dalinira::TabPerformanceManager *performance = tabs.performanceManager();
   QJsonArray savedTabs;
   QVector<TabManager::TabRecord> records = tabs.recordsFor(ownerWindow);
   if (const auto *bw = qobject_cast<const BrowserWindow *>(ownerWindow)) {
@@ -106,6 +132,9 @@ bool SessionStore::save(const TabManager &tabs, QObject *ownerWindow, QString *e
 
     QJsonObject tabObj{{"url", persistentUrl.toString(QUrl::FullyEncoded)}, {"title", record.title},
                         {"active", record.id == activePersistent}};
+    if (record.id != activePersistent && performance && performance->isTabDiscarded(record.id)) {
+      tabObj.insert(QStringLiteral("sleeping"), true);
+    }
     if (ownerWindow) {
       const auto *bw = qobject_cast<const BrowserWindow*>(ownerWindow);
       if (bw) {
@@ -127,16 +156,47 @@ bool SessionStore::save(const TabManager &tabs, QObject *ownerWindow, QString *e
     }
     savedTabs.push_back(tabObj);
   }
-  QSaveFile file(path_);
+  return writeTabs(sessionFilePath(engine), savedTabs, error);
+}
+
+bool SessionStore::saveSavedTabs(const QVector<SavedTab> &tabs, const QString &engine, QString *error) const {
+  QJsonArray savedTabs;
+  for (const auto &t : tabs) {
+    if (isRuntimeFixtureUrl(t.url)) continue;
+    const QUrl safeUrl = BrowserSecurity::sanitizeUrlForPersistence(t.url);
+    if (!safeUrl.isValid()) continue;
+    QJsonObject tabObj{
+        {QStringLiteral("url"), safeUrl.toString(QUrl::FullyEncoded)},
+        {QStringLiteral("title"), t.title},
+        {QStringLiteral("active"), t.active},
+        {QStringLiteral("pinned"), t.pinned}
+    };
+    if (t.sleeping && !t.active) tabObj.insert(QStringLiteral("sleeping"), true);
+    if (t.groupId.has_value() && !t.groupId->isNull()) {
+      tabObj.insert(QStringLiteral("groupId"), t.groupId->toString());
+      tabObj.insert(QStringLiteral("groupName"), t.groupName);
+      if (t.groupColor.isValid()) {
+        tabObj.insert(QStringLiteral("groupColor"), t.groupColor.name());
+      }
+      tabObj.insert(QStringLiteral("groupCollapsed"), t.groupCollapsed);
+    }
+    savedTabs.push_back(tabObj);
+  }
+  return writeTabs(sessionFilePath(engine), savedTabs, error);
+}
+
+bool SessionStore::writeTabs(const QString &targetPath, const QJsonArray &tabs, QString *error) {
+  QDir().mkpath(QFileInfo(targetPath).absolutePath());
+  QSaveFile file(targetPath);
   if (!file.open(QIODevice::WriteOnly)) {
     if (error) *error = QStringLiteral("Cannot write session file");
     return false;
   }
-  file.write(QJsonDocument(QJsonObject{{"version", 1}, {"tabs", savedTabs}}).toJson(QJsonDocument::Compact));
+  file.write(QJsonDocument(QJsonObject{{"version", 1}, {"tabs", tabs}}).toJson(QJsonDocument::Compact));
   if (!file.commit()) {
     if (error) *error = QStringLiteral("Cannot commit session file");
     return false;
   }
-  QFile::setPermissions(path_, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+  QFile::setPermissions(targetPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
   return true;
 }

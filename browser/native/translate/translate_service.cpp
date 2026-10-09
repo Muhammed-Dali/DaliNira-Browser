@@ -5,6 +5,8 @@
 #include "providers/deepl_provider.h"
 #include "providers/google_cloud_provider.h"
 #include "providers/google_gtx_provider.h"
+#include "i18n/i18n.h"
+#include "i18n/language_manager.h"
 
 namespace {
 QString normalizeLangCode(QString lang) {
@@ -161,7 +163,10 @@ void TranslateService::clearCache() {
 
 void TranslateService::loadPreferences(QSettings &prefs) {
   enabled_ = prefs.value(QStringLiteral("translation/enabled"), true).toBool();
-  defaultTargetLanguage_ = prefs.value(QStringLiteral("translation/targetLanguage"), QStringLiteral("tr")).toString();
+  // Until the user picks one, pages are translated into the interface language.
+  QString interfaceLanguage = dalinira::i18n::LanguageManager::instance().activeLanguageCode();
+  if (interfaceLanguage.isEmpty()) interfaceLanguage = QStringLiteral("en");
+  defaultTargetLanguage_ = prefs.value(QStringLiteral("translation/targetLanguage"), interfaceLanguage).toString();
   providerId_ = prefs.value(QStringLiteral("translation/provider"), QStringLiteral("google_gtx")).toString();
   if (providerId_ == QLatin1String("none")) {
     providerId_ = QStringLiteral("google_gtx");
@@ -225,37 +230,37 @@ void TranslateService::testConnection(const QString &testProviderId, std::functi
 
   if (testProvider->requiresApiKey() && !testProvider->isConfigured()) {
     if (secretStore_.isVaultLocked()) {
-      if (callback) callback(false, QStringLiteral("⚠ Çeviri API anahtarına erişmek için güvenli kasanın kilidini açın."));
+      if (callback) callback(false, I18n::text(QStringLiteral("translate.unlock_vault_warning")));
       return;
     }
-    if (callback) callback(false, QStringLiteral("⚠ Sağlayıcı için API anahtarı girilmemiş."));
+    if (callback) callback(false, I18n::text(QStringLiteral("translate.api_key_missing_warning")));
     return;
   }
 
   testProvider->translateBatch({QStringLiteral("Hello")}, QStringLiteral("en"), defaultTargetLanguage_, [callback](const TranslationResult &res) {
     if (!callback) return;
     if (res.success && !res.translatedTexts.isEmpty()) {
-      callback(true, QStringLiteral("✓ Bağlantı başarılı (%1)").arg(res.translatedTexts.first()));
+      callback(true, I18n::text(QStringLiteral("translate.connection_ok")).arg(res.translatedTexts.first()));
     } else {
       QString msg = res.errorMessage;
       switch (res.errorType) {
         case TranslationError::NotConfigured:
-          msg = QStringLiteral("Sağlayıcı bilgileri eksik veya yapılandırılmamış.");
+          msg = I18n::text(QStringLiteral("translate.provider_incomplete"));
           break;
         case TranslationError::AuthenticationFailed:
-          msg = QStringLiteral("API anahtarı geçersiz veya yetkisiz.");
+          msg = I18n::text(QStringLiteral("translate.api_key_invalid"));
           break;
         case TranslationError::RateLimited:
-          msg = QStringLiteral("Çeviri kotası doldu veya istek sınırı aşıldı (Rate limit).");
+          msg = I18n::text(QStringLiteral("translate.quota_exceeded"));
           break;
         case TranslationError::Timeout:
-          msg = QStringLiteral("Sunucu zaman aşımına uğradı (Timeout).");
+          msg = I18n::text(QStringLiteral("translate.server_timeout"));
           break;
         case TranslationError::NetworkError:
-          msg = QStringLiteral("Sunucuya ulaşılamıyor. Lütfen adresi veya ağ bağlantısını kontrol edin.");
+          msg = I18n::text(QStringLiteral("translate.server_unreachable"));
           break;
         default:
-          if (msg.isEmpty()) msg = QStringLiteral("Çeviri testi başarısız oldu.");
+          if (msg.isEmpty()) msg = I18n::text(QStringLiteral("translate.test_failed"));
           break;
       }
       callback(false, QStringLiteral("⚠ %1").arg(msg));
@@ -333,7 +338,7 @@ QString TranslateService::mapLanguageForProvider(const QString &providerId, cons
 
 void TranslateService::translateBatch(const QStringList &texts, const QString &sourceLang, const QString &targetLang, TranslationCallback callback) {
   if (!enabled_) {
-    if (callback) callback(false, {}, QStringLiteral("Sayfa çevirisi ayarlardan devre dışı bırakılmış."));
+    if (callback) callback(false, {}, I18n::text(QStringLiteral("translate.disabled_in_settings")));
     return;
   }
 
@@ -376,8 +381,7 @@ void TranslateService::translateBatch(const QStringList &texts, const QString &s
   std::shared_ptr<GoogleGtxProvider> fallbackProvider;
   if (providerToUse && providerToUse->requiresApiKey() &&
       !providerToUse->isConfigured() && secretStore_.isVaultLocked()) {
-    const QString error = QStringLiteral(
-        "Çeviri API anahtarına erişmek için güvenli kasanın kilidini açın.");
+    const QString error = I18n::text(QStringLiteral("translate.unlock_vault"));
     emit translationFailed(error);
     if (callback) callback(false, {}, error);
     return;
@@ -396,7 +400,7 @@ void TranslateService::translateBatch(const QStringList &texts, const QString &s
     if (!res.success || res.translatedTexts.size() != uncachedTexts.size()) {
       QString err = res.errorMessage;
       if (err.isEmpty()) {
-        err = QStringLiteral("Çeviri servisi hatası.");
+        err = I18n::text(QStringLiteral("translate.service_error"));
       }
       emit translationFailed(err);
       if (callback) callback(false, {}, err);

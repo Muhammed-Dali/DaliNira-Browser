@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Published release to submit to the AUR packages
         required: true
-        default: v7.2.1
+        default: v8.0.0
         type: string
 
 permissions:
@@ -73,5 +73,5 @@ jobs:
           git -C "${aur_dir}" add PKGBUILD .SRCINFO
           if git -C "${aur_dir}" diff --cached --quiet; then exit 0; fi
           git -C "${aur_dir}" -c user.name='Muhammed Dali' \
-            -c user.email='support@dalinira.app' commit -m "Update ${AUR_PACKAGE} to ${{ inputs.release_tag }}"
+            -c user.email='dali.nira.12.1453kerinyoli@gmail.com' commit -m "Update ${AUR_PACKAGE} to ${{ inputs.release_tag }}"
           git -C "${aur_dir}" push origin HEAD

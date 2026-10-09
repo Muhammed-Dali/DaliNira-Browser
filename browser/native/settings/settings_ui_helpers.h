@@ -1,6 +1,7 @@
 #pragma once
 
 #include "browser_icons.h"
+#include "i18n/i18n.h"
 
 #include <QAbstractButton>
 #include <QApplication>
@@ -261,8 +262,8 @@ inline void showOptionDialog(
   auto *btnLayout = new QHBoxLayout;
   btnLayout->setContentsMargins(20, 6, 20, 0);
   btnLayout->addStretch();
-  auto *cancelBtn = new QPushButton(QStringLiteral("İptal"), &dialog);
-  auto *saveBtn = new QPushButton(QStringLiteral("Kaydet"), &dialog);
+  auto *cancelBtn = new QPushButton(I18n::text(QStringLiteral("common.cancel")), &dialog);
+  auto *saveBtn = new QPushButton(I18n::text(QStringLiteral("common.save")), &dialog);
   saveBtn->setObjectName(QStringLiteral("primary"));
   btnLayout->addWidget(cancelBtn);
   btnLayout->addWidget(saveBtn);
@@ -393,25 +394,25 @@ inline QWidget *placeholderPanel(QWidget *parent, BrowserIcon icon, const QStrin
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
 inline QString permissionText(QWebEnginePermission::PermissionType type) {
   switch (type) {
-    case QWebEnginePermission::PermissionType::MediaAudioCapture: return QStringLiteral("Mikrofon");
-    case QWebEnginePermission::PermissionType::MediaVideoCapture: return QStringLiteral("Kamera");
-    case QWebEnginePermission::PermissionType::MediaAudioVideoCapture: return QStringLiteral("Kamera ve mikrofon");
-    case QWebEnginePermission::PermissionType::DesktopVideoCapture: return QStringLiteral("Ekran paylaşımı");
-    case QWebEnginePermission::PermissionType::DesktopAudioVideoCapture: return QStringLiteral("Ekran ve ses paylaşımı");
-    case QWebEnginePermission::PermissionType::Notifications: return QStringLiteral("Bildirimler");
-    case QWebEnginePermission::PermissionType::Geolocation: return QStringLiteral("Konum");
-    case QWebEnginePermission::PermissionType::ClipboardReadWrite: return QStringLiteral("Pano erişimi");
-    case QWebEnginePermission::PermissionType::LocalFontsAccess: return QStringLiteral("Yerel yazı tipleri");
-    case QWebEnginePermission::PermissionType::MouseLock: return QStringLiteral("Fare kilidi");
-    default: return QStringLiteral("Diğer izin");
+    case QWebEnginePermission::PermissionType::MediaAudioCapture: return I18n::text(QStringLiteral("settings.site.microphone"));
+    case QWebEnginePermission::PermissionType::MediaVideoCapture: return I18n::text(QStringLiteral("settings.site.camera"));
+    case QWebEnginePermission::PermissionType::MediaAudioVideoCapture: return I18n::text(QStringLiteral("settings.site.camera_and_microphone"));
+    case QWebEnginePermission::PermissionType::DesktopVideoCapture: return I18n::text(QStringLiteral("settings.site.screen_sharing"));
+    case QWebEnginePermission::PermissionType::DesktopAudioVideoCapture: return I18n::text(QStringLiteral("settings.site.screen_and_audio_sharing"));
+    case QWebEnginePermission::PermissionType::Notifications: return I18n::text(QStringLiteral("settings.site.notifications"));
+    case QWebEnginePermission::PermissionType::Geolocation: return I18n::text(QStringLiteral("settings.site.location"));
+    case QWebEnginePermission::PermissionType::ClipboardReadWrite: return I18n::text(QStringLiteral("site.clipboard_access"));
+    case QWebEnginePermission::PermissionType::LocalFontsAccess: return I18n::text(QStringLiteral("settings.site.local_fonts"));
+    case QWebEnginePermission::PermissionType::MouseLock: return I18n::text(QStringLiteral("settings.site.pointer_lock"));
+    default: return I18n::text(QStringLiteral("settings.site.other_permission"));
   }
 }
 
 inline QString permissionState(const QWebEnginePermission &permission) {
   switch (permission.state()) {
-    case QWebEnginePermission::State::Granted: return QStringLiteral("İzin verildi");
-    case QWebEnginePermission::State::Denied: return QStringLiteral("Engellendi");
-    default: return QStringLiteral("Sorulacak");
+    case QWebEnginePermission::State::Granted: return I18n::text(QStringLiteral("settings.site.state_allowed"));
+    case QWebEnginePermission::State::Denied: return I18n::text(QStringLiteral("shield.cookies_blocked"));
+    default: return I18n::text(QStringLiteral("settings.site.state_ask"));
   }
 }
 
@@ -462,9 +463,19 @@ inline QString settingsStyleSheet() {
     #settings-page QPushButton:focus { border:2px solid #62a9c8; padding:1px 11px; }
     #settings-page QPushButton[danger="true"] { background:#272f38; color:#d8e0e8; border-color:#4a5662; }
     #settings-page QPushButton[danger="true"]:hover { background:#343d47; }
-    #settings-page QLineEdit, #settings-page QComboBox { min-height:32px; background:#111820; color:#e6edf5; border:1px solid #3a4958; border-radius:7px; padding:0 10px; }
-    #settings-page QLineEdit:focus, #settings-page QComboBox:focus { border:2px solid #58a6c7; padding:0 9px; }
-    #settings-page QComboBox QAbstractItemView { background:#202a34; color:#e6edf5; selection-background-color:#324b60; border:1px solid #46596b; }
+    #settings-page QLineEdit { min-height:32px; background:#111820; color:#e6edf5; border:1px solid #3a4958; border-radius:7px; padding:0 10px; }
+    #settings-page QLineEdit:focus { border:2px solid #58a6c7; padding:0 9px; }
+    #settings-page QComboBox { combobox-popup: 0; min-height:36px; background:#131c26; color:#e6edf5; border:1px solid #324354; border-radius:8px; padding:2px 12px; font-size:14px; }
+    #settings-page QComboBox:hover { background:#182330; border-color:#485e75; }
+    #settings-page QComboBox:focus { border:2px solid #58a6c7; padding:1px 11px; }
+    #settings-page QComboBox::drop-down { subcontrol-origin:padding; subcontrol-position:top right; width:26px; border:none; }
+    #settings-page QComboBox QAbstractItemView { background:#141c26; color:#e6edf5; border:1px solid #2f4052; border-radius:8px; padding:6px; outline:none; }
+    #settings-page QComboBox QAbstractItemView::item { min-height:38px; padding:6px 12px; border-radius:6px; margin:2px 0; font-size:14px; }
+    #settings-page QComboBox QAbstractItemView::item:hover { background:#1d2938; color:#ffffff; }
+    #settings-page QComboBox QAbstractItemView::item:selected { background:#253a4f; color:#79c0ff; font-weight:550; }
+    #settings-page QComboBox#settings-browser-engine { min-height:42px; font-size:14px; font-weight:500; padding:2px 14px; }
+    #settings-page QComboBox#settings-browser-engine QAbstractItemView { background:#151d27; border:1px solid #334455; border-radius:8px; padding:6px; min-height:104px; }
+    #settings-page QComboBox#settings-browser-engine QAbstractItemView::item { min-height:44px; padding:6px 14px; font-size:14px; font-weight:500; }
     #settings-page QListWidget#settings-data-list, #settings-page QListWidget#settings-allowlist-list { background:#151c24; color:#e1e8f0; border:1px solid #2e3b49; border-radius:9px; outline:0; padding:4px; }
     #settings-page QListWidget#settings-data-list::item, #settings-page QListWidget#settings-allowlist-list::item { min-height:46px; padding:5px 8px; border-radius:6px; }
     #settings-page QListWidget#settings-data-list::item:hover, #settings-page QListWidget#settings-allowlist-list::item:hover { background:#202b36; }

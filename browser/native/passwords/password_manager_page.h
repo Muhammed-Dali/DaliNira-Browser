@@ -35,6 +35,7 @@ class PasswordManagerPage final : public QWidget {
   void importBackup();
   void addCredential(const QString &id = {});
   void copyPassword(const QString &id);
+  bool ensureSensitiveAuthorization(const QString &vaultId);
   void requestCachedFavicon(QLabel *label, const QString &origin);
   CredentialVaultManager *vault_ = nullptr;
   QWebEngineProfile *webProfile_ = nullptr;

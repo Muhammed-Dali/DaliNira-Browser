@@ -4,6 +4,7 @@
 #include "desktop_tabs/tab_layout_model.h"
 #include "desktop_tabs/tab_strip_widget.h"
 #include "desktop_tabs/tab_window_registry.h"
+#include "desktop_tabs/window_drag_geometry.h"
 
 #include <QApplication>
 #include <QPointer>
@@ -32,6 +33,12 @@ int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
 
   std::cout << "[TEST] Running dalinira::desktop_tabs::TabDragController unit test...\n";
+
+  const QRect restored = restoredWindowGeometryForDrag(
+      QRect(0, 24, 1920, 1056), QSize(1200, 800), QPoint(960, 40), QPoint(1020, 110));
+  assert(restored.size() == QSize(1200, 800));
+  assert(restored.topLeft() == QPoint(420, 94));
+  assert(QPoint(1020, 110) - restored.topLeft() == QPoint(600, 16));
 
   auto &controller = TabDragController::instance();
   assert(!controller.isActive());

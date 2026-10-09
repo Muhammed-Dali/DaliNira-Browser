@@ -1,6 +1,7 @@
 #include "download_toolbar_ui.h"
 
 #include "core/browser_icons.h"
+#include "download_desktop_actions.h"
 
 #include <QApplication>
 #include <QDesktopServices>
@@ -20,6 +21,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include "i18n/i18n.h"
 
 namespace {
 QString bytesLabel(qint64 bytes) {
@@ -33,20 +35,20 @@ QString bytesLabel(qint64 bytes) {
 
 QString stateLabel(DownloadUiState state) {
   switch (state) {
-    case DownloadUiState::Queued: return QStringLiteral("Sırada");
-    case DownloadUiState::Downloading: return QStringLiteral("İndiriliyor");
-    case DownloadUiState::Paused: return QStringLiteral("Duraklatıldı");
-    case DownloadUiState::Processing: return QStringLiteral("İşleniyor");
-    case DownloadUiState::Completed: return QStringLiteral("Tamamlandı");
-    case DownloadUiState::Failed: return QStringLiteral("İndirme başarısız");
-    case DownloadUiState::Cancelled: return QStringLiteral("İptal edildi");
+    case DownloadUiState::Queued: return I18n::text(QStringLiteral("downloads.state_queued"));
+    case DownloadUiState::Downloading: return I18n::text(QStringLiteral("downloads.state_downloading"));
+    case DownloadUiState::Paused: return I18n::text(QStringLiteral("downloads.state_paused"));
+    case DownloadUiState::Processing: return I18n::text(QStringLiteral("downloads.state_processing"));
+    case DownloadUiState::Completed: return I18n::text(QStringLiteral("downloads.state_completed"));
+    case DownloadUiState::Failed: return I18n::text(QStringLiteral("downloads.state_failed"));
+    case DownloadUiState::Cancelled: return I18n::text(QStringLiteral("downloads.state_cancelled"));
   }
   return {};
 }
 
 QString progressLabel(const DownloadUiItem &item) {
   if (item.converting || item.state == DownloadUiState::Processing) {
-    return !item.statusText.isEmpty() ? item.statusText : QStringLiteral("Dönüştürülüyor");
+    return !item.statusText.isEmpty() ? item.statusText : I18n::text(QStringLiteral("downloads.converting"));
   }
   QStringList parts;
   if (item.source == DownloadUiSource::Media
@@ -56,18 +58,18 @@ QString progressLabel(const DownloadUiItem &item) {
     parts << QStringLiteral("%1%").arg(qRound(std::clamp(item.percent, 0.0, 100.0)));
   if (item.source == DownloadUiSource::Media && item.state == DownloadUiState::Downloading
       && item.downloadedBytes <= 0)
-    parts << QStringLiteral("Medya akışı bekleniyor");
+    parts << I18n::text(QStringLiteral("media.waiting_for_stream"));
   if (item.totalBytes > 0) parts << QStringLiteral("%1 / %2").arg(bytesLabel(item.downloadedBytes), bytesLabel(item.totalBytes));
   else if (item.downloadedBytes > 0) parts << bytesLabel(item.downloadedBytes);
   if (item.bytesPerSecond > 0) parts << QStringLiteral("%1/s").arg(bytesLabel(item.bytesPerSecond));
-  if (item.etaSeconds >= 0) parts << QStringLiteral("%1 sn kaldı").arg(item.etaSeconds);
+  if (item.etaSeconds >= 0) parts << I18n::text(QStringLiteral("downloads.time_left")).arg(item.etaSeconds);
   return parts.isEmpty() ? stateLabel(item.state) : parts.join(QStringLiteral(" • "));
 }
 }  // namespace
 
 DownloadToolbarButton::DownloadToolbarButton(QWidget *parent) : QToolButton(parent) {
   setIcon(BrowserIcons::icon(BrowserIcon::Download));
-  setToolTip(QStringLiteral("İndirmeler"));
+  setToolTip(I18n::text(QStringLiteral("newtab.downloads")));
 }
 
 void DownloadToolbarButton::setModelState(int activeCount, double progress, bool paused, bool error) {
@@ -75,8 +77,8 @@ void DownloadToolbarButton::setModelState(int activeCount, double progress, bool
   progress_ = std::clamp(progress, 0.0, 100.0);
   paused_ = paused;
   error_ = error;
-  setToolTip(activeCount_ > 0 ? QStringLiteral("İndirmeler • %1 etkin").arg(activeCount_)
-      : paused_ ? QStringLiteral("İndirmeler • duraklatıldı") : QStringLiteral("İndirmeler"));
+  setToolTip(activeCount_ > 0 ? I18n::text(QStringLiteral("downloads.toolbar_active")).arg(activeCount_)
+      : paused_ ? I18n::text(QStringLiteral("downloads.toolbar_paused")) : I18n::text(QStringLiteral("newtab.downloads")));
   update();
 }
 
@@ -154,9 +156,9 @@ DownloadPopup::DownloadPopup(DownloadUiModel *model, QWidget *parent)
   root->setContentsMargins(12, 10, 12, 10);
   root->setSpacing(8);
   auto *header = new QHBoxLayout;
-  auto *title = new QLabel(QStringLiteral("İndirmeler"), this);
+  auto *title = new QLabel(I18n::text(QStringLiteral("newtab.downloads")), this);
   QFont titleFont = title->font(); titleFont.setBold(true); titleFont.setPointSize(titleFont.pointSize() + 1); title->setFont(titleFont);
-  auto *details = new QPushButton(QStringLiteral("Tümünü Aç"), this);
+  auto *details = new QPushButton(I18n::text(QStringLiteral("downloads.open_all")), this);
   connect(details, &QPushButton::clicked, this, [this] { hide(); emit openDownloadsRequested(); });
   header->addWidget(title); header->addStretch(); header->addWidget(details);
   root->addLayout(header);
@@ -174,7 +176,7 @@ DownloadPopup::DownloadPopup(DownloadUiModel *model, QWidget *parent)
   suggestedIcon->setPixmap(BrowserIcons::icon(BrowserIcon::Video).pixmap(20, 20));
   auto *suggestedInfo = new QVBoxLayout;
   suggestedInfo->setSpacing(1);
-  auto *suggestedHeader = new QLabel(QStringLiteral("Sayfadaki Medyayı İndir"), suggestedMediaCard_);
+  auto *suggestedHeader = new QLabel(I18n::text(QStringLiteral("downloads.page_media")), suggestedMediaCard_);
   QFont shFont = suggestedHeader->font(); shFont.setBold(true); shFont.setPointSize(std::max(8, shFont.pointSize() - 1));
   suggestedHeader->setFont(shFont);
   auto *suggestedDetail = new QLabel(suggestedMediaCard_);
@@ -182,7 +184,7 @@ DownloadPopup::DownloadPopup(DownloadUiModel *model, QWidget *parent)
   suggestedDetail->setProperty("muted", true);
   suggestedInfo->addWidget(suggestedHeader);
   suggestedInfo->addWidget(suggestedDetail);
-  auto *suggestedBtn = new QPushButton(QStringLiteral("İndir"), suggestedMediaCard_);
+  auto *suggestedBtn = new QPushButton(I18n::text(QStringLiteral("downloads.download_btn")), suggestedMediaCard_);
   connect(suggestedBtn, &QPushButton::clicked, this, [this] {
     const QUrl url = suggestedMediaUrl_;
     hide();
@@ -201,7 +203,7 @@ DownloadPopup::DownloadPopup(DownloadUiModel *model, QWidget *parent)
   itemsLayout_ = new QVBoxLayout(content);
   itemsLayout_->setContentsMargins(0, 0, 0, 0);
   itemsLayout_->setSpacing(7);
-  emptyLabel_ = new QLabel(QStringLiteral("Henüz indirme yok."), content);
+  emptyLabel_ = new QLabel(I18n::text(QStringLiteral("downloads.empty")), content);
   emptyLabel_->setProperty("muted", true);
   itemsLayout_->addWidget(emptyLabel_);
   itemsLayout_->addStretch();
@@ -334,38 +336,53 @@ void DownloadPopup::refresh() {
     auto *actions = new QHBoxLayout; actions->setSpacing(5); actions->addStretch();
     if (item.state == DownloadUiState::Downloading || item.state == DownloadUiState::Queued) {
       if (item.source == DownloadUiSource::General) {
-        auto *pause = new QPushButton(QStringLiteral("Duraklat"), card);
+        auto *pause = new QPushButton(I18n::text(QStringLiteral("common.pause")), card);
         connect(pause, &QPushButton::clicked, model_, [model = model_, key = item.key] { model->pause(key); });
         actions->addWidget(pause);
       }
-      auto *cancel = new QPushButton(QStringLiteral("İptal"), card);
+      auto *cancel = new QPushButton(I18n::text(QStringLiteral("common.cancel")), card);
       connect(cancel, &QPushButton::clicked, model_, [model = model_, key = item.key] { model->cancel(key); });
       actions->addWidget(cancel);
     } else if (item.state == DownloadUiState::Paused) {
-      auto *resume = new QPushButton(QStringLiteral("Devam Et"), card);
+      auto *resume = new QPushButton(I18n::text(QStringLiteral("common.resume")), card);
       connect(resume, &QPushButton::clicked, model_, [model = model_, key = item.key] { model->resume(key); });
       actions->addWidget(resume);
-      auto *cancel = new QPushButton(QStringLiteral("İptal"), card);
+      auto *cancel = new QPushButton(I18n::text(QStringLiteral("common.cancel")), card);
       connect(cancel, &QPushButton::clicked, model_, [model = model_, key = item.key] { model->cancel(key); });
       actions->addWidget(cancel);
     } else if (item.state == DownloadUiState::Failed) {
-      auto *retry = new QPushButton(QStringLiteral("Yeniden Dene"), card);
+      auto *retry = new QPushButton(I18n::text(QStringLiteral("common.retry")), card);
       connect(retry, &QPushButton::clicked, model_, [model = model_, key = item.key] { model->retry(key); });
       actions->addWidget(retry);
     } else if (item.state == DownloadUiState::Completed) {
       const QFileInfo file(item.localPath);
       if (file.isAbsolute() && file.exists() && file.isFile()) {
-        auto *open = new QPushButton(QStringLiteral("Dosyayı Aç"), card);
-        connect(open, &QPushButton::clicked, card, [path = file.absoluteFilePath()] { QDesktopServices::openUrl(QUrl::fromLocalFile(path)); });
+        auto *open = new QPushButton(I18n::text(QStringLiteral("common.open_file")), card);
+        connect(open, &QPushButton::clicked, this, [this, item, path = file.absoluteFilePath()] {
+          const LocalMediaPlayerKind kind = LocalMediaRouting::classify(path);
+          if (kind != LocalMediaPlayerKind::External) {
+            LocalMediaOpenRequest req;
+            req.path = path;
+            req.allowedRoot = QFileInfo(path).absolutePath();
+            req.title = item.title;
+            req.playerKind = kind;
+            emit openLocalMediaRequested(req);
+            hide();
+          } else {
+            DownloadDesktopActions::openFile(path);
+          }
+        });
         actions->addWidget(open);
-        auto *reveal = new QPushButton(QStringLiteral("Klasörde Göster"), card);
-        connect(reveal, &QPushButton::clicked, card, [path = file.absolutePath()] { QDesktopServices::openUrl(QUrl::fromLocalFile(path)); });
+        auto *reveal = new QPushButton(I18n::text(QStringLiteral("common.show_in_folder")), card);
+        connect(reveal, &QPushButton::clicked, card, [path = file.absoluteFilePath()] {
+          DownloadDesktopActions::revealInFolder(path, QFileInfo(path).absolutePath());
+        });
         actions->addWidget(reveal);
       }
     }
     if (item.state == DownloadUiState::Completed || item.state == DownloadUiState::Failed
         || item.state == DownloadUiState::Cancelled) {
-      auto *remove = new QPushButton(QStringLiteral("Kaldır"), card);
+      auto *remove = new QPushButton(I18n::text(QStringLiteral("common.remove")), card);
       remove->setEnabled(item.source != DownloadUiSource::NativeFallback);
       connect(remove, &QPushButton::clicked, model_, [model = model_, key = item.key] { model->remove(key); });
       actions->addWidget(remove);

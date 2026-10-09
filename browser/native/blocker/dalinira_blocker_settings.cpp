@@ -87,6 +87,30 @@ void DaliNiraBlockerSettings::setStrictBlock(bool enable) {
   emit settingsChanged();
 }
 
+bool DaliNiraBlockerSettings::httpsByDefault() const {
+  QMutexLocker locker(&mutex_); return httpsByDefault_; }
+
+void DaliNiraBlockerSettings::setHttpsByDefault(bool enable) {
+  QMutexLocker locker(&mutex_);
+  if (httpsByDefault_ == enable && settings_.contains(QStringLiteral("blocker/httpsByDefault"))) return;
+  httpsByDefault_ = enable;
+  settings_.setValue(QStringLiteral("blocker/httpsByDefault"), httpsByDefault_);
+  settings_.sync();
+  emit settingsChanged();
+}
+
+bool DaliNiraBlockerSettings::fingerprintProtection() const {
+  QMutexLocker locker(&mutex_); return fingerprintProtection_; }
+
+void DaliNiraBlockerSettings::setFingerprintProtection(bool enable) {
+  QMutexLocker locker(&mutex_);
+  if (fingerprintProtection_ == enable && settings_.contains(QStringLiteral("blocker/fingerprintProtection"))) return;
+  fingerprintProtection_ = enable;
+  settings_.setValue(QStringLiteral("blocker/fingerprintProtection"), fingerprintProtection_);
+  settings_.sync();
+  emit settingsChanged();
+}
+
 bool DaliNiraBlockerSettings::popupBlock() const {
   QMutexLocker locker(&mutex_); return popupBlock_; }
 
@@ -246,6 +270,9 @@ void DaliNiraBlockerSettings::load() {
   autoReload_ = readSetting(QStringLiteral("autoReload"), DaliNiraBlockerDefaults::AutoReload).toBool();
   showCount_ = readSetting(QStringLiteral("showBlockedCount"), DaliNiraBlockerDefaults::ShowCount).toBool();
   strictBlock_ = readSetting(QStringLiteral("strictBlock"), DaliNiraBlockerDefaults::StrictBlock).toBool();
+  httpsByDefault_ = readSetting(QStringLiteral("httpsByDefault"), DaliNiraBlockerDefaults::HttpsByDefault).toBool();
+  fingerprintProtection_ = readSetting(QStringLiteral("fingerprintProtection"),
+                                       DaliNiraBlockerDefaults::FingerprintProtection).toBool();
   popupBlock_ = readSetting(QStringLiteral("popupBlock"), DaliNiraBlockerDefaults::PopupBlock).toBool();
   developerMode_ = readSetting(QStringLiteral("developerMode"), DaliNiraBlockerDefaults::DeveloperMode).toBool();
   autoUpdateRulesets_ = readSetting(QStringLiteral("autoUpdateRulesets"), DaliNiraBlockerDefaults::AutoUpdateRulesets).toBool();
@@ -323,6 +350,8 @@ QJsonObject DaliNiraBlockerSettings::exportBackupJson() const {
   root[QStringLiteral("autoReload")] = autoReload_;
   root[QStringLiteral("showBlockedCount")] = showCount_;
   root[QStringLiteral("strictBlock")] = strictBlock_;
+  root[QStringLiteral("httpsByDefault")] = httpsByDefault_;
+  root[QStringLiteral("fingerprintProtection")] = fingerprintProtection_;
   root[QStringLiteral("popupBlock")] = popupBlock_;
   root[QStringLiteral("developerMode")] = developerMode_;
   root[QStringLiteral("autoUpdateRulesets")] = autoUpdateRulesets_;
@@ -376,6 +405,9 @@ bool DaliNiraBlockerSettings::importBackupJson(const QJsonObject &json) {
       blockerObj.value(QStringLiteral("autoRefreshOnModeChange")).toBool(DaliNiraBlockerDefaults::AutoReload));
   showCount_ = blockerObj.value(QStringLiteral("showBlockedCount")).toBool(DaliNiraBlockerDefaults::ShowCount);
   strictBlock_ = blockerObj.value(QStringLiteral("strictBlock")).toBool(DaliNiraBlockerDefaults::StrictBlock);
+  httpsByDefault_ = blockerObj.value(QStringLiteral("httpsByDefault")).toBool(DaliNiraBlockerDefaults::HttpsByDefault);
+  fingerprintProtection_ = blockerObj.value(QStringLiteral("fingerprintProtection"))
+                               .toBool(DaliNiraBlockerDefaults::FingerprintProtection);
   popupBlock_ = blockerObj.value(QStringLiteral("popupBlock")).toBool(DaliNiraBlockerDefaults::PopupBlock);
   developerMode_ = blockerObj.value(QStringLiteral("developerMode")).toBool(DaliNiraBlockerDefaults::DeveloperMode);
   autoUpdateRulesets_ = blockerObj.value(QStringLiteral("autoUpdateRulesets")).toBool(DaliNiraBlockerDefaults::AutoUpdateRulesets);
@@ -425,6 +457,8 @@ bool DaliNiraBlockerSettings::importBackupJson(const QJsonObject &json) {
   settings_.setValue(QStringLiteral("blocker/autoReload"), autoReload_);
   settings_.setValue(QStringLiteral("blocker/showBlockedCount"), showCount_);
   settings_.setValue(QStringLiteral("blocker/strictBlock"), strictBlock_);
+  settings_.setValue(QStringLiteral("blocker/httpsByDefault"), httpsByDefault_);
+  settings_.setValue(QStringLiteral("blocker/fingerprintProtection"), fingerprintProtection_);
   settings_.setValue(QStringLiteral("blocker/popupBlock"), popupBlock_);
   settings_.setValue(QStringLiteral("blocker/developerMode"), developerMode_);
   settings_.setValue(QStringLiteral("blocker/autoUpdateRulesets"), autoUpdateRulesets_);
@@ -469,6 +503,8 @@ void DaliNiraBlockerSettings::resetToDefaults() {
   autoReload_ = DaliNiraBlockerDefaults::AutoReload;
   showCount_ = DaliNiraBlockerDefaults::ShowCount;
   strictBlock_ = DaliNiraBlockerDefaults::StrictBlock;
+  httpsByDefault_ = DaliNiraBlockerDefaults::HttpsByDefault;
+  fingerprintProtection_ = DaliNiraBlockerDefaults::FingerprintProtection;
   popupBlock_ = DaliNiraBlockerDefaults::PopupBlock;
   developerMode_ = DaliNiraBlockerDefaults::DeveloperMode;
   autoUpdateRulesets_ = DaliNiraBlockerDefaults::AutoUpdateRulesets;
@@ -485,6 +521,8 @@ void DaliNiraBlockerSettings::resetToDefaults() {
   settings_.setValue(QStringLiteral("blocker/autoReload"), autoReload_);
   settings_.setValue(QStringLiteral("blocker/showBlockedCount"), showCount_);
   settings_.setValue(QStringLiteral("blocker/strictBlock"), strictBlock_);
+  settings_.setValue(QStringLiteral("blocker/httpsByDefault"), httpsByDefault_);
+  settings_.setValue(QStringLiteral("blocker/fingerprintProtection"), fingerprintProtection_);
   settings_.setValue(QStringLiteral("blocker/popupBlock"), popupBlock_);
   settings_.setValue(QStringLiteral("blocker/developerMode"), developerMode_);
   settings_.setValue(QStringLiteral("blocker/autoUpdateRulesets"), autoUpdateRulesets_);

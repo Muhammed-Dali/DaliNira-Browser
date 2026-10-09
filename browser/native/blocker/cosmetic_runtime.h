@@ -8,7 +8,11 @@ inline constexpr auto kDaliNiraCosmeticRuntime = R"JS(
  const hiddenNodes=new WeakSet();
  function report(count,type){
   if(count>0){
-   console.log('__DALINIRA_ADBLOCK_HIT__:'+count+':'+(type||'cosmetic'));
+   // WebKit registers this handler only in DaliNira's isolated world, so page
+   // scripts cannot post fake hits. Chromium keeps the console sentinel.
+   const bridge=window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.daliniraBlocker;
+   if(bridge)bridge.postMessage({count:count,type:type||'cosmetic'});
+   else console.log('__DALINIRA_ADBLOCK_HIT__:'+count+':'+(type||'cosmetic'));
   }
  }
  const state={css:%1,style:null,observer:null,timer:0,active:true,callbacks:[],roots:new Set(),hiddenNodes:hiddenNodes,reportBlock:report};

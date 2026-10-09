@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "description": "Filter lists the native blocker may download between application releases, keyed by the immutable ruleset ID. Only lists named here are ever downloaded, and only when ruleset-attributions.json does not mark them reviewRequired. Each URL is the list file already recorded as the list's sourceUrl in ruleset-attributions.json. Every other list uses only the ruleset bundled with the application. A downloaded copy replaces the list's bundled network rules after validation; its bundled cosmetic, scriptlet and strictblock data stay in use.",
+  "sources": {
+    "easylist": {
+      "url": "https://easylist.to/easylist/easylist.txt",
+      "format": "adblock-plus-text",
+      "minimumNetworkRules": 1000
+    },
+    "easyprivacy": {
+      "url": "https://easylist.to/easylist/easyprivacy.txt",
+      "format": "adblock-plus-text",
+      "minimumNetworkRules": 1000
+    }
+  }
+}

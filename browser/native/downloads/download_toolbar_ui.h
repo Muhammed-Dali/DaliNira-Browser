@@ -1,6 +1,7 @@
 #pragma once
 
 #include "download_ui_model.h"
+#include "local_media_routing.h"
 
 #include <QFrame>
 #include <QPointer>
@@ -48,6 +49,7 @@ class DownloadPopup final : public QFrame {
  signals:
   void openDownloadsRequested();
   void openMediaDownloadRequested(const QUrl &url);
+  void openLocalMediaRequested(const LocalMediaOpenRequest &request);
 
  protected:
   void enterEvent(QEnterEvent *event) override;

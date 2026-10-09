@@ -1,6 +1,7 @@
 #include "credential_vault_manager.h"
 
 #include <QDir>
+#include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -15,6 +16,7 @@
 
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include "i18n/i18n.h"
 
 namespace {
 constexpr int kMaxVaults = 32;
@@ -24,6 +26,7 @@ constexpr int kBackupKeyBytes = 32;
 constexpr int kBackupNonceBytes = 12;
 constexpr int kBackupTagBytes = 16;
 constexpr qint64 kMaxBackupBytes = 64 * 1024 * 1024;
+constexpr qint64 kSensitiveAuthorizationMs = 60 * 1000;
 QString normalizedName(const QString &name) { return name.simplified().left(kMaxVaultNameLength); }
 QByteArray encoded(const QByteArray &value) { return value.toBase64(); }
 QByteArray decoded(const QJsonValue &value) { return QByteArray::fromBase64(value.toString().toLatin1()); }
@@ -35,7 +38,7 @@ bool backupCipher(bool encrypt, const QByteArray &key, const QByteArray &nonce, 
   do { if (EVP_CipherInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr, encrypt ? 1 : 0) != 1) break; if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, nonce.size(), nullptr) != 1) break; if (EVP_CipherInit_ex(ctx, nullptr, nullptr, reinterpret_cast<const unsigned char *>(key.constData()), reinterpret_cast<const unsigned char *>(nonce.constData()), -1) != 1) break; if (EVP_CipherUpdate(ctx, reinterpret_cast<unsigned char *>(output->data()), &size, reinterpret_cast<const unsigned char *>(input.constData()), input.size()) != 1) break; if (!encrypt && (tag->size() != kBackupTagBytes || EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, kBackupTagBytes, tag->data()) != 1)) break; if (EVP_CipherFinal_ex(ctx, reinterpret_cast<unsigned char *>(output->data()) + size, &finalSize) != 1) break; output->resize(size + finalSize); if (encrypt) { tag->resize(kBackupTagBytes); if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, kBackupTagBytes, tag->data()) != 1) break; } ok = true; } while (false);
   EVP_CIPHER_CTX_free(ctx); return ok;
 }
-bool validEnvelope(const QByteArray &bytes) { const QJsonObject root = QJsonDocument::fromJson(bytes).object(); const int ver = root.value(QStringLiteral("schemaVersion")).toInt(); return (ver == 2 || ver == 3) && root.value(QStringLiteral("kdf")).toString() == QLatin1String("PBKDF2-HMAC-SHA256") && root.value(QStringLiteral("records")).isArray(); }
+bool validEnvelope(const QByteArray &bytes) { const QJsonObject root = QJsonDocument::fromJson(bytes).object(); const int ver = root.value(QStringLiteral("schemaVersion")).toInt(); return (ver == 2 || ver == 3 || ver == 4) && root.value(QStringLiteral("kdf")).toString() == QLatin1String("PBKDF2-HMAC-SHA256") && root.value(QStringLiteral("records")).isArray(); }
 }
 
 CredentialVaultManager::CredentialVaultManager(const QString &dataDirectory, QObject *parent)
@@ -54,7 +57,12 @@ bool CredentialVaultManager::splitId(const QString &id, QString *vaultId, QStrin
 void CredentialVaultManager::attach(Entry *candidate) {
   if (!candidate || !candidate->vault) return;
   connect(candidate->vault, &CredentialVault::changed, this, [this] { emit changed(); });
-  connect(candidate->vault, &CredentialVault::lockStateChanged, this, [this] { emit lockStateChanged(isLocked()); emit changed(); });
+  const QString vaultId = candidate->id;
+  connect(candidate->vault, &CredentialVault::lockStateChanged, this, [this, vaultId](bool locked) {
+    if (locked) clearSensitiveAuthorization(vaultId);
+    emit lockStateChanged(isLocked());
+    emit changed();
+  });
 }
 
 bool CredentialVaultManager::loadIndex() {
@@ -81,7 +89,7 @@ bool CredentialVaultManager::loadIndex() {
   // Non-destructive migration: the pre-multi-vault file becomes Kişisel.
   if (QFileInfo::exists(dataDirectory_ + QStringLiteral("/credential-vault/vault-v2.json"))) {
     const QString legacyId = QStringLiteral("00000000-0000-0000-0000-000000000001");
-    if (!add(legacyId, QStringLiteral("Kişisel"), true)) return false;
+    if (!add(legacyId, I18n::text(QStringLiteral("passwords.default_vault_name")), true)) return false;
     activeId_ = legacyId;
     return persistIndex();
   }
@@ -93,7 +101,7 @@ bool CredentialVaultManager::persistIndex() {
   QJsonArray vaults;
   for (const Entry &candidate : entries_) vaults.append(QJsonObject{{QStringLiteral("id"), candidate.id}, {QStringLiteral("name"), candidate.name}, {QStringLiteral("legacyStorage"), candidate.legacyStorage}});
   QSaveFile file(indexPath_); const QByteArray bytes = QJsonDocument(QJsonObject{{QStringLiteral("schemaVersion"), 1}, {QStringLiteral("activeVaultId"), activeId_}, {QStringLiteral("vaults"), vaults}}).toJson(QJsonDocument::Compact);
-  if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) return setError(QStringLiteral("vault-index-write-failed"));
+  if (!file.open(QIODevice::WriteOnly) || !file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) || file.write(bytes) != bytes.size() || !file.commit()) return setError(QStringLiteral("vault-index-write-failed"));
   QFile::setPermissions(indexPath_, QFileDevice::ReadOwner | QFileDevice::WriteOwner); return true;
 }
 
@@ -109,6 +117,26 @@ bool CredentialVaultManager::exists() const {
 }
 bool CredentialVaultManager::isLocked() const { const Entry *candidate = activeEntry(); return !candidate || candidate->vault->isLocked(); }
 bool CredentialVaultManager::isVaultLocked(const QString &id) const { const Entry *candidate = entry(id); return !candidate || candidate->vault->isLocked(); }
+bool CredentialVaultManager::isActiveVaultDeviceBound() const { const Entry *candidate = activeEntry(); return candidate && candidate->vault && candidate->vault->isDeviceBound(); }
+bool CredentialVaultManager::authorizeSensitiveAction(const QString &vaultId, const QString &masterPassword) {
+  if (vaultId.isEmpty() || masterPassword.isEmpty() || !unlockVault(vaultId, masterPassword)) {
+    sensitiveAuthorizationExpiry_.remove(vaultId);
+    return false;
+  }
+  const qint64 now = timeProvider_ ? timeProvider_() : QDateTime::currentMSecsSinceEpoch();
+  sensitiveAuthorizationExpiry_.insert(vaultId, now + kSensitiveAuthorizationMs);
+  return true;
+}
+bool CredentialVaultManager::hasSensitiveAuthorization(const QString &vaultId) const {
+  const Entry *candidate = entry(vaultId);
+  if (!candidate || !candidate->vault || candidate->vault->isLocked()) return false;
+  const qint64 now = timeProvider_ ? timeProvider_() : QDateTime::currentMSecsSinceEpoch();
+  return sensitiveAuthorizationExpiry_.value(vaultId, 0) > now;
+}
+void CredentialVaultManager::clearSensitiveAuthorization(const QString &vaultId) {
+  if (vaultId.isEmpty()) sensitiveAuthorizationExpiry_.clear();
+  else sensitiveAuthorizationExpiry_.remove(vaultId);
+}
 QString CredentialVaultManager::lastError() const { if (!lastError_.isEmpty()) return lastError_; const Entry *candidate = activeEntry(); return candidate ? candidate->vault->lastError() : QStringLiteral("vault-not-found"); }
 int CredentialVaultManager::autoLockTimeoutMs() const { const Entry *candidate = activeEntry(); return candidate ? candidate->vault->autoLockTimeoutMs() : 5 * 60000; }
 bool CredentialVaultManager::setAutoLockTimeoutMs(int timeoutMs) { Entry *candidate = activeEntry(); return candidate ? candidate->vault->setAutoLockTimeoutMs(timeoutMs) : setError(QStringLiteral("vault-not-found")); }
@@ -154,7 +182,7 @@ void CredentialVaultManager::setTimeProviderForTesting(std::function<qint64()> p
   }
 }
 
-bool CredentialVaultManager::create(const QString &masterPassword) { return createVault(QStringLiteral("Kişisel"), masterPassword); }
+bool CredentialVaultManager::create(const QString &masterPassword) { return createVault(I18n::text(QStringLiteral("passwords.default_vault_name")), masterPassword); }
 bool CredentialVaultManager::createVault(const QString &rawName, const QString &masterPassword, QString *id) {
   const QString name = normalizedName(rawName); if (name.isEmpty() || entries_.size() >= kMaxVaults) return setError(QStringLiteral("invalid-vault-name"));
   for (const Entry &candidate : entries_) if (candidate.name.compare(name, Qt::CaseInsensitive) == 0) return setError(QStringLiteral("duplicate-vault-name"));
@@ -169,9 +197,10 @@ bool CredentialVaultManager::createVault(const QString &rawName, const QString &
 }
 bool CredentialVaultManager::unlock(const QString &masterPassword) { return unlockVault(activeId_, masterPassword); }
 bool CredentialVaultManager::unlockVault(const QString &id, const QString &masterPassword) { Entry *candidate = entry(id); if (!candidate) return setError(QStringLiteral("vault-not-found")); const bool ok = candidate->vault->unlock(masterPassword); if (!ok) lastError_ = candidate->vault->lastError(); return ok; }
-void CredentialVaultManager::lock() { for (Entry &candidate : entries_) candidate.vault->lock(); }
-void CredentialVaultManager::lockVault(const QString &id) { if (Entry *candidate = entry(id)) candidate->vault->lock(); }
-bool CredentialVaultManager::deleteVault(const QString &id) { Entry *candidate = entry(id); if (!candidate) return setError(QStringLiteral("vault-not-found")); if (!candidate->vault->reset()) { lastError_ = candidate->vault->lastError(); return false; } const int index = int(candidate - entries_.data()); candidate->vault->deleteLater(); entries_.removeAt(index); if (activeId_ == id) activeId_ = entries_.isEmpty() ? QString{} : entries_.front().id; if (!persistIndex()) return false; emit changed(); return true; }
+QString CredentialVaultManager::owningVaultId(const QString &recordId) const { QString vaultId, localId; if (splitId(recordId, &vaultId, &localId) && entry(vaultId)) return vaultId; return entry(activeId_) ? activeId_ : QString{}; }
+void CredentialVaultManager::lock() { clearSensitiveAuthorization(); for (Entry &candidate : entries_) candidate.vault->lock(); }
+void CredentialVaultManager::lockVault(const QString &id) { clearSensitiveAuthorization(id); if (Entry *candidate = entry(id)) candidate->vault->lock(); }
+bool CredentialVaultManager::deleteVault(const QString &id) { Entry *candidate = entry(id); if (!candidate) return setError(QStringLiteral("vault-not-found")); if (!candidate->vault->reset()) { lastError_ = candidate->vault->lastError(); return false; } clearSensitiveAuthorization(id); const int index = int(candidate - entries_.data()); candidate->vault->deleteLater(); entries_.removeAt(index); if (activeId_ == id) activeId_ = entries_.isEmpty() ? QString{} : entries_.front().id; if (!persistIndex()) return false; emit changed(); return true; }
 bool CredentialVaultManager::clearActiveVault() { Entry *candidate = activeEntry(); if (!candidate || candidate->vault->isLocked()) return setError(QStringLiteral("vault-locked")); for (const CredentialMetadata &record : candidate->vault->list()) if (!candidate->vault->remove(record.id)) { lastError_ = candidate->vault->lastError(); return false; } return true; }
 bool CredentialVaultManager::exportBackup(const QString &filePath, const QString &backupPassword) const {
   if (filePath.isEmpty() || !CredentialVault::isStrongMasterPassword(backupPassword)) return setError(QStringLiteral("weak-backup-password"));
@@ -182,10 +211,13 @@ bool CredentialVaultManager::exportBackup(const QString &filePath, const QString
     if (bytes.isEmpty() || bytes.size() > 16 * 1024 * 1024 || !validEnvelope(bytes)) return setError(QStringLiteral("invalid-vault"));
     QJsonObject vaultObj{{QStringLiteral("name"), candidate.name}, {QStringLiteral("vault"), QString::fromLatin1(encoded(bytes))}};
     if (candidate.vault) {
-      const QByteArray devSecret = candidate.vault->deviceSecret();
-      if (!devSecret.isEmpty()) {
-        vaultObj.insert(QStringLiteral("deviceSecret"), QString::fromLatin1(encoded(devSecret)));
+      QByteArray devSecret;
+      if (!candidate.vault->exportDeviceSecret(&devSecret)) {
+        wipe(&devSecret);
+        return setError(QStringLiteral("backup-device-secret-unavailable"));
       }
+      if (!devSecret.isEmpty()) vaultObj.insert(QStringLiteral("deviceSecret"), QString::fromLatin1(encoded(devSecret)));
+      wipe(&devSecret);
     }
     vaults.append(vaultObj);
   }
@@ -193,7 +225,7 @@ bool CredentialVaultManager::exportBackup(const QString &filePath, const QString
   const bool ok = randomBytes(&salt, 16) && randomBytes(&nonce, kBackupNonceBytes) && backupKey(backupPassword, salt, &key) && backupCipher(true, key, nonce, plain, &ciphertext, &tag);
   wipe(&plain); wipe(&key); if (!ok) { wipe(&ciphertext); return setError(QStringLiteral("backup-crypto-failed")); }
   const QJsonObject archive{{QStringLiteral("format"), QStringLiteral("DaliNira encrypted vault backup")}, {QStringLiteral("schemaVersion"), 1}, {QStringLiteral("kdf"), QStringLiteral("PBKDF2-HMAC-SHA256")}, {QStringLiteral("iterations"), kBackupIterations}, {QStringLiteral("salt"), QString::fromLatin1(encoded(salt))}, {QStringLiteral("nonce"), QString::fromLatin1(encoded(nonce))}, {QStringLiteral("tag"), QString::fromLatin1(encoded(tag))}, {QStringLiteral("ciphertext"), QString::fromLatin1(encoded(ciphertext))}};
-  QSaveFile target(filePath); const QByteArray output = QJsonDocument(archive).toJson(QJsonDocument::Compact); const bool written = target.open(QIODevice::WriteOnly) && target.write(output) == output.size() && target.commit(); QFile::setPermissions(filePath, QFileDevice::ReadOwner | QFileDevice::WriteOwner); wipe(&ciphertext); wipe(&tag); return written ? true : setError(QStringLiteral("backup-write-failed"));
+  QSaveFile target(filePath); const QByteArray output = QJsonDocument(archive).toJson(QJsonDocument::Compact); const bool written = target.open(QIODevice::WriteOnly) && target.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) && target.write(output) == output.size() && target.commit(); QFile::setPermissions(filePath, QFileDevice::ReadOwner | QFileDevice::WriteOwner); wipe(&ciphertext); wipe(&tag); return written ? true : setError(QStringLiteral("backup-write-failed"));
 }
 bool CredentialVaultManager::importBackup(const QString &filePath, const QString &backupPassword, QStringList *importedVaultNames) {
   if (importedVaultNames) importedVaultNames->clear();
@@ -206,14 +238,25 @@ bool CredentialVaultManager::importBackup(const QString &filePath, const QString
   QVector<Entry> imported;
   for (const QJsonValue &value : vaults) {
     const QJsonObject object = value.toObject(); const QString name = normalizedName(object.value(QStringLiteral("name")).toString()); const QByteArray bytes = decoded(object.value(QStringLiteral("vault")));
-    const QByteArray devSecret = decoded(object.value(QStringLiteral("deviceSecret")));
+    QByteArray devSecret = decoded(object.value(QStringLiteral("deviceSecret")));
     bool duplicate = name.isEmpty(); for (const Entry &candidate : entries_) duplicate = duplicate || candidate.name.compare(name, Qt::CaseInsensitive) == 0; for (const Entry &candidate : imported) duplicate = duplicate || candidate.name.compare(name, Qt::CaseInsensitive) == 0;
     if (duplicate || bytes.isEmpty() || bytes.size() > 16 * 1024 * 1024 || !validEnvelope(bytes)) continue;
-    const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces); const QString path = dataDirectory_ + QStringLiteral("/credential-vault/vaults/") + id; QDir().mkpath(path); QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner); QSaveFile target(path + QStringLiteral("/vault-v2.json")); if (!target.open(QIODevice::WriteOnly) || target.write(bytes) != bytes.size() || !target.commit()) { for (const Entry &created : imported) QDir(dataDirectory_ + QStringLiteral("/credential-vault/vaults/") + created.id).removeRecursively(); return setError(QStringLiteral("backup-import-write-failed")); } QFile::setPermissions(path + QStringLiteral("/vault-v2.json"), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces); const QString path = dataDirectory_ + QStringLiteral("/credential-vault/vaults/") + id; QDir().mkpath(path); QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner); QSaveFile target(path + QStringLiteral("/vault-v2.json")); if (!target.open(QIODevice::WriteOnly) || !target.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) || target.write(bytes) != bytes.size() || !target.commit()) { for (const Entry &created : imported) QDir(dataDirectory_ + QStringLiteral("/credential-vault/vaults/") + created.id).removeRecursively(); return setError(QStringLiteral("backup-import-write-failed")); } QFile::setPermissions(path + QStringLiteral("/vault-v2.json"), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     auto *vault = new CredentialVault(dataDirectory_, this, id);
-    if (!devSecret.isEmpty()) {
-      vault->importDeviceSecret(devSecret);
+    const QJsonObject importedEnvelope = QJsonDocument::fromJson(bytes).object();
+    const bool deviceBound = importedEnvelope.value(QStringLiteral("schemaVersion")).toInt() >= 3 &&
+        importedEnvelope.value(QStringLiteral("deviceBinding")).toString() == QLatin1String("secret-service");
+    if (deviceBound && (devSecret.size() != kBackupKeyBytes || !vault->importDeviceSecret(devSecret))) {
+      wipe(&devSecret);
+      vault->deleteLater();
+      QDir(path).removeRecursively();
+      for (const Entry &created : imported) {
+        if (created.vault) created.vault->reset();
+        QDir(dataDirectory_ + QStringLiteral("/credential-vault/vaults/") + created.id).removeRecursively();
+      }
+      return setError(QStringLiteral("backup-device-secret-unavailable"));
     }
+    wipe(&devSecret);
     if (timeProvider_) vault->setTimeProviderForTesting(timeProvider_);
     imported.append({id, name, vault, false});
   }
@@ -238,6 +281,10 @@ QVector<VaultMetadata> CredentialVaultManager::vaultsForOrigin(const QUrl &url) 
   if (origin.isEmpty()) return result;
   for (const Entry &candidate : entries_) {
     if (!candidate.vault || !candidate.vault->exists()) continue;
+    if (candidate.vault->isLocked()) {
+      result.append({candidate.id, candidate.name, true});
+      continue;
+    }
     if (candidate.vault->hasOrigin(origin)) {
       result.append({candidate.id, candidate.name, candidate.vault->isLocked()});
     }
@@ -249,7 +296,8 @@ bool CredentialVaultManager::hasMatchingCredential(const QUrl &url) const {
   const QString origin = canonicalHttpsOrigin(url);
   if (origin.isEmpty()) return false;
   for (const Entry &candidate : entries_) {
-    if (candidate.vault && candidate.vault->exists() && candidate.vault->hasOrigin(origin)) {
+    if (candidate.vault && candidate.vault->exists() &&
+        (candidate.vault->isLocked() || candidate.vault->hasOrigin(origin))) {
       return true;
     }
   }

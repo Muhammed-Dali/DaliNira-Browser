@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include "i18n/i18n.h"
 
 namespace {
 constexpr int kBandCount = 32;
@@ -113,8 +114,8 @@ bool EqPresetRepository::load() {
   QVector<EqPreset> featuredPresets;
   EqPreset flatPreset;
   flatPreset.id = QStringLiteral("__flat__");
-  flatPreset.name = QStringLiteral("Düz (Flat)");
-  flatPreset.description = QStringLiteral("Tüm bantlar 0.0 dB");
+  flatPreset.name = I18n::text(QStringLiteral("eq.flat_preset_name"));
+  flatPreset.description = I18n::text(QStringLiteral("eq.flat_preset_desc"));
   flatPreset.groups = {QStringLiteral("flat")};
   flatPreset.bands = QVector<double>(kBandCount, 0.0);
   featuredPresets.append(flatPreset);

@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QFrame>
 #include <QLabel>
 #include <QLineEdit>
@@ -70,61 +71,61 @@ int main(int argc, char **argv) {
   auto radioButtons = modeContainer->findChildren<QRadioButton *>();
   assert(radioButtons.size() == 3);
 
-  // Balanced (index 0) must be checked by default
-  assert(radioButtons[0]->isChecked());
-  assert(!radioButtons[1]->isChecked());
+  // Cards: Off (0), Balanced (1, default), Aggressive (2) — one policy for both engines.
+  assert(!radioButtons[0]->isChecked());
+  assert(radioButtons[1]->isChecked());
   assert(!radioButtons[2]->isChecked());
   assert(perfManager->policyMode() == PerformancePolicyMode::Balanced);
 
   // --------------------------------------------------------------------------
-  // Test 2: Mode Switching (MemorySaver and MaximumPerformance)
+  // Test 2: Mode Switching (Aggressive, Off, Balanced)
   // --------------------------------------------------------------------------
-  // Click MemorySaver (index 1)
-  radioButtons[1]->click();
-  QApplication::processEvents();
-  assert(!radioButtons[0]->isChecked());
-  assert(radioButtons[1]->isChecked());
-  assert(!radioButtons[2]->isChecked());
-  assert(perfManager->policyMode() == PerformancePolicyMode::MemorySaver);
-  assert(settings.value(QStringLiteral("performance/policyMode")).toString() == QStringLiteral("memory_saver"));
-
-  // Click MaximumPerformance (index 2)
   radioButtons[2]->click();
   QApplication::processEvents();
   assert(!radioButtons[0]->isChecked());
   assert(!radioButtons[1]->isChecked());
   assert(radioButtons[2]->isChecked());
-  assert(perfManager->policyMode() == PerformancePolicyMode::MaximumPerformance);
-  assert(settings.value(QStringLiteral("performance/policyMode")).toString() == QStringLiteral("maximum_performance"));
+  assert(perfManager->policyMode() == PerformancePolicyMode::MemorySaver);
+  assert(settings.value(QStringLiteral("performance/policyMode")).toString() == QStringLiteral("memory_saver"));
 
-  // Switch back to Balanced
   radioButtons[0]->click();
   QApplication::processEvents();
   assert(radioButtons[0]->isChecked());
+  assert(perfManager->policyMode() == PerformancePolicyMode::Off);
+  assert(!perfManager->automaticLifecycleEnabled());
+  assert(settings.value(QStringLiteral("performance/policyMode")).toString() == QStringLiteral("off"));
+
+  radioButtons[1]->click();
+  QApplication::processEvents();
+  assert(radioButtons[1]->isChecked());
   assert(perfManager->policyMode() == PerformancePolicyMode::Balanced);
+  assert(perfManager->automaticLifecycleEnabled());
   assert(settings.value(QStringLiteral("performance/policyMode")).toString() == QStringLiteral("balanced"));
 
   // --------------------------------------------------------------------------
-  // Test 3: Discard Kill-Switch Toggle
+  // Test 3: Inactivity timeout and media-tab option
   // --------------------------------------------------------------------------
-  auto *discardToggle = page.findChild<QCheckBox *>(QStringLiteral("settings-discard-toggle"));
-  assert(discardToggle != nullptr);
-  assert(discardToggle->isChecked());
-  assert(perfManager->isDiscardEnabled());
-
-  // Toggle off
-  discardToggle->click();
+  auto *sleepAfter = page.findChild<QComboBox *>(QStringLiteral("settings-sleep-after-combo"));
+  assert(sleepAfter != nullptr);
+  assert(sleepAfter->currentData().toInt() == 0 && "mode default");
+  assert(perfManager->effectiveSleepDelayMs() == TabPerformanceManager::modeDefaultSleepDelayMs(PerformancePolicyMode::Balanced));
+  sleepAfter->setCurrentIndex(sleepAfter->findData(5 * 60));
   QApplication::processEvents();
-  assert(!discardToggle->isChecked());
-  assert(!perfManager->isDiscardEnabled());
-  assert(settings.value(QStringLiteral("performance/discardEnabled")).toBool() == false);
+  assert(perfManager->sleepAfterMs() == 5 * 60 * 1000);
+  assert(perfManager->effectiveSleepDelayMs() == 5 * 60 * 1000);
+  assert(settings.value(QStringLiteral("performance/sleepAfterSeconds")).toInt() == 5 * 60);
 
-  // Toggle on
-  discardToggle->click();
+  auto *mediaToggle = page.findChild<QCheckBox *>(QStringLiteral("settings-sleep-media-toggle"));
+  assert(mediaToggle != nullptr);
+  assert(!mediaToggle->isChecked() && !perfManager->sleepMediaTabs());
+  mediaToggle->click();
   QApplication::processEvents();
-  assert(discardToggle->isChecked());
-  assert(perfManager->isDiscardEnabled());
-  assert(settings.value(QStringLiteral("performance/discardEnabled")).toBool() == true);
+  assert(perfManager->sleepMediaTabs());
+  assert(settings.value(QStringLiteral("performance/sleepMediaTabs")).toBool());
+  mediaToggle->click();
+  QApplication::processEvents();
+  assert(!perfManager->sleepMediaTabs());
+  assert(page.findChild<QLabel *>(QStringLiteral("settings-sleeping-count-label")) != nullptr);
 
   // --------------------------------------------------------------------------
   // Test 4: Site Exceptions Allowlist Editor
@@ -250,6 +251,7 @@ int main(int argc, char **argv) {
   // Change settings before reset
   perfManager->setPolicyMode(PerformancePolicyMode::MemorySaver);
   perfManager->setDiscardEnabled(false);
+  perfManager->setSleepMediaTabs(true);
   assert(perfManager->policyMode() == PerformancePolicyMode::MemorySaver);
   assert(!perfManager->isDiscardEnabled());
 
@@ -260,6 +262,8 @@ int main(int argc, char **argv) {
   assert(perfManager->policyMode() == PerformancePolicyMode::Balanced);
   assert(perfManager->isDiscardEnabled());
   assert(perfManager->siteAllowlist().isEmpty());
+  assert(perfManager->sleepAfterMs() == 0);
+  assert(!perfManager->sleepMediaTabs());
 
   // --------------------------------------------------------------------------
   // Test 7: Zero Forbidden Technical Terms in UI

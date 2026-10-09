@@ -10,6 +10,10 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <QSet>
+#include <QThread>
+
+#include <algorithm>
 
 namespace dalinira::i18n {
 
@@ -36,6 +40,8 @@ void LanguageManager::populateDefaultFallbackLanguages() {
                      QStringLiteral("Türkçe"), QStringLiteral("ltr")});
   languages_.append({QStringLiteral("ar"), QStringLiteral("Arabic"),
                      QStringLiteral("العربية"), QStringLiteral("rtl")});
+  languages_.append({QStringLiteral("fr"), QStringLiteral("French"),
+                     QStringLiteral("Français"), QStringLiteral("ltr")});
 }
 
 QString LanguageManager::resolveFilePath(const QString &preferredPath,
@@ -73,6 +79,9 @@ void LanguageManager::initialize(const QString &languagesJsonPath,
   QWriteLocker locker(&lock_);
   configPath_ = languagesJsonPath;
   translationsDir_ = translationsDir;
+  allCatalogsLoaded_ = false;
+  allCatalogs_.clear();
+  allReverse_.clear();
 
   locker.unlock();
   loadLanguagesConfig(configPath_);
@@ -240,6 +249,14 @@ LanguageInfo LanguageManager::languageInfo(const QString &code) const {
 }
 
 QString LanguageManager::systemLocaleLanguageCode() const {
+  // Deterministic override for tests and controlled GUI validation runs. It
+  // replaces the *system* language only; an explicit user preference still
+  // wins, so live switching keeps working.
+  const QString forced = qEnvironmentVariable("DALINIRA_UI_LANGUAGE").trimmed().toLower();
+  if (!forced.isEmpty() && isLanguageSupported(forced)) {
+    return forced;
+  }
+
   const QLocale sys;
   const QString name = sys.name().toLower();
   const auto lang = sys.language();
@@ -252,6 +269,9 @@ QString LanguageManager::systemLocaleLanguageCode() const {
   }
   if (lang == QLocale::English || name.startsWith(QLatin1String("en"))) {
     return QStringLiteral("en");
+  }
+  if (lang == QLocale::French || name.startsWith(QLatin1String("fr"))) {
+    return QStringLiteral("fr");
   }
 
   QReadLocker locker(&lock_);
@@ -304,11 +324,22 @@ void LanguageManager::determineAndApplyActiveLanguage(bool notify) {
     loadCatalog(QStringLiteral("en"), enCatalog);
   }
 
+  QStringList keys = newCatalog.keys();
+  std::sort(keys.begin(), keys.end());
+  QHash<QString, QString> reverse;
+  reverse.reserve(keys.size());
+  for (const QString &key : std::as_const(keys)) {
+    const QString &value = newCatalog[key];
+    if (!value.isEmpty() && !reverse.contains(value)) reverse.insert(value, key);
+  }
+
   {
     QWriteLocker locker(&lock_);
     activeLanguageCode_ = chosenCode;
     currentCatalog_ = std::move(newCatalog);
     fallbackCatalog_ = std::move(enCatalog);
+    currentReverse_ = std::move(reverse);
+    initialized_ = true;
   }
 
   applyLayoutDirection();
@@ -319,11 +350,13 @@ void LanguageManager::determineAndApplyActiveLanguage(bool notify) {
 }
 
 QString LanguageManager::activeLanguageCode() const {
+  ensureInitialized();
   QReadLocker locker(&lock_);
   return activeLanguageCode_;
 }
 
 LanguageInfo LanguageManager::activeLanguage() const {
+  ensureInitialized();
   QReadLocker locker(&lock_);
   for (const auto &info : languages_) {
     if (info.code == activeLanguageCode_) return info;
@@ -332,16 +365,21 @@ LanguageInfo LanguageManager::activeLanguage() const {
 }
 
 bool LanguageManager::isRtl() const {
-  return activeLanguage().isRtl();
+  // DaliNira deliberately keeps its browser chrome and internal-page
+  // structure stable in every locale. Arabic shaping/bidi is handled by Qt
+  // in individual text runs; it must not mirror the application layout.
+  return false;
 }
 
 Qt::LayoutDirection LanguageManager::layoutDirection() const {
-  return isRtl() ? Qt::RightToLeft : Qt::LeftToRight;
+  return Qt::LeftToRight;
 }
 
 void LanguageManager::applyLayoutDirection() {
-  if (qApp) {
-    qApp->setLayoutDirection(layoutDirection());
+  // Browser chrome never mirrors, in any language. Only the GUI thread may
+  // touch the application object (lazy initialization can happen elsewhere).
+  if (qApp && QThread::currentThread() == qApp->thread()) {
+    qApp->setLayoutDirection(Qt::LeftToRight);
   }
 }
 
@@ -351,6 +389,7 @@ void LanguageManager::reloadTranslations() {
 
 QString LanguageManager::translate(const QString &key, const QString &fallback) const {
   if (key.isEmpty()) return {};
+  ensureInitialized();
 
   QReadLocker locker(&lock_);
   auto it = currentCatalog_.constFind(key);
@@ -381,6 +420,78 @@ QString LanguageManager::translate(const QString &key,
     text.replace(placeholder2, val);
   }
   return text;
+}
+
+void LanguageManager::ensureInitialized() const {
+  {
+    QReadLocker locker(&lock_);
+    if (initialized_) return;
+  }
+  // Components created before main() configured the manager (tests, static
+  // helpers) still get real catalogs instead of raw keys.
+  const_cast<LanguageManager *>(this)->initialize();
+}
+
+void LanguageManager::ensureAllCatalogs() const {
+  {
+    QReadLocker locker(&lock_);
+    if (allCatalogsLoaded_) return;
+  }
+  QHash<QString, QHash<QString, QString>> catalogs;
+  QHash<QString, QString> reverse;
+  const QList<LanguageInfo> languages = supportedLanguages();
+  for (const LanguageInfo &info : languages) {
+    QHash<QString, QString> catalog;
+    if (!loadCatalog(info.code, catalog)) continue;
+    QStringList keys = catalog.keys();
+    std::sort(keys.begin(), keys.end());
+    for (const QString &key : std::as_const(keys)) {
+      const QString &value = catalog[key];
+      if (!value.isEmpty() && !reverse.contains(value)) reverse.insert(value, key);
+    }
+    catalogs.insert(info.code, std::move(catalog));
+  }
+  QWriteLocker locker(&lock_);
+  if (allCatalogsLoaded_) return;
+  allCatalogs_ = std::move(catalogs);
+  allReverse_ = std::move(reverse);
+  allCatalogsLoaded_ = true;
+}
+
+QString LanguageManager::translateIn(const QString &code, const QString &key) const {
+  ensureInitialized();
+  ensureAllCatalogs();
+  QReadLocker locker(&lock_);
+  const QString lower = code.toLower();
+  const QString value = allCatalogs_.value(lower).value(key);
+  if (!value.isEmpty()) return value;
+  const QString english = allCatalogs_.value(QStringLiteral("en")).value(key);
+  return english.isEmpty() ? key : english;
+}
+
+QStringList LanguageManager::translationsOf(const QString &key) const {
+  ensureInitialized();
+  ensureAllCatalogs();
+  QReadLocker locker(&lock_);
+  QStringList values;
+  for (auto it = allCatalogs_.cbegin(); it != allCatalogs_.cend(); ++it) {
+    const QString value = it.value().value(key);
+    if (!value.isEmpty() && !values.contains(value)) values.append(value);
+  }
+  return values;
+}
+
+QString LanguageManager::keyForText(const QString &text) const {
+  if (text.isEmpty()) return {};
+  ensureInitialized();
+  {
+    QReadLocker locker(&lock_);
+    const auto current = currentReverse_.constFind(text);
+    if (current != currentReverse_.cend()) return current.value();
+  }
+  ensureAllCatalogs();
+  QReadLocker locker(&lock_);
+  return allReverse_.value(text);
 }
 
 QString LanguageManager::formatSystemLanguageLabel() const {

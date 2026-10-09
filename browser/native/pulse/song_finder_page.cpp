@@ -25,6 +25,7 @@
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
+#include "i18n/i18n.h"
 
 namespace {
 void loadCoverImage(QLabel *label, const QString &coverUrl, const QString &searchQuery, int size = 58, int radius = 10) {
@@ -437,12 +438,12 @@ class PulseMenuPopup final : public QFrame {
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(2);
 
-    prefBtn_ = new QPushButton(QStringLiteral("Tercihler"), this);
+    prefBtn_ = new QPushButton(I18n::text(QStringLiteral("pulse.preferences")), this);
     prefBtn_->setProperty("class", "sf-popup-btn");
     prefBtn_->setCursor(Qt::PointingHandCursor);
     layout->addWidget(prefBtn_);
 
-    aboutBtn_ = new QPushButton(QStringLiteral("Hakkında"), this);
+    aboutBtn_ = new QPushButton(I18n::text(QStringLiteral("common.about")), this);
     aboutBtn_->setProperty("class", "sf-popup-btn");
     aboutBtn_->setCursor(Qt::PointingHandCursor);
     layout->addWidget(aboutBtn_);
@@ -452,15 +453,15 @@ class PulseMenuPopup final : public QFrame {
     sep->setStyleSheet(QStringLiteral("background: #233140; min-height: 1px; max-height: 1px; margin: 4px 6px;"));
     layout->addWidget(sep);
 
-    auto *themeLabel = new QLabel(QStringLiteral("Tema"), this);
+    auto *themeLabel = new QLabel(I18n::text(QStringLiteral("pulse.theme")), this);
     themeLabel->setObjectName(QStringLiteral("sf-theme-label"));
     layout->addWidget(themeLabel);
 
     themeCombo_ = new QComboBox(this);
     themeCombo_->setObjectName(QStringLiteral("sf-theme-combo"));
-    themeCombo_->addItem(QStringLiteral("Uygulama temasını kullan"));
-    themeCombo_->addItem(QStringLiteral("Koyu tema"));
-    themeCombo_->addItem(QStringLiteral("Açık tema"));
+    themeCombo_->addItem(I18n::text(QStringLiteral("pulse.theme_app")));
+    themeCombo_->addItem(I18n::text(QStringLiteral("pulse.theme_dark")));
+    themeCombo_->addItem(I18n::text(QStringLiteral("pulse.theme_light")));
     layout->addWidget(themeCombo_);
   }
 
@@ -536,7 +537,7 @@ void SongFinderPage::setupUi() {
   headerLayout->addWidget(titleLabel);
   headerLayout->addStretch(1);
 
-  statusLabel_ = new QLabel(QStringLiteral("Hazır"), header);
+  statusLabel_ = new QLabel(I18n::text(QStringLiteral("common.ready")), header);
   statusLabel_->setObjectName(QStringLiteral("sf-status"));
   headerLayout->addWidget(statusLabel_);
 
@@ -546,7 +547,7 @@ void SongFinderPage::setupUi() {
   menuBtn_->setIconSize(QSize(30, 30));
   menuBtn_->setFixedSize(34, 34);
   menuBtn_->setCursor(Qt::PointingHandCursor);
-  menuBtn_->setToolTip(QStringLiteral("Seçenekler"));
+  menuBtn_->setToolTip(I18n::text(QStringLiteral("common.options")));
   connect(menuBtn_, &QPushButton::clicked, this, &SongFinderPage::toggleMenuPopup);
 
   headerLayout->addWidget(menuBtn_);
@@ -577,7 +578,7 @@ void SongFinderPage::setupUi() {
   signalLayout->setSpacing(4);
 
   auto *signalHeader = new QHBoxLayout();
-  signalTitle_ = new QLabel(QStringLiteral("Kaynak sinyali"), signalContainer);
+  signalTitle_ = new QLabel(I18n::text(QStringLiteral("pulse.source_signal")), signalContainer);
   signalTitle_->setObjectName(QStringLiteral("sf-signal-label"));
   signalHeader->addWidget(signalTitle_);
   signalHeader->addStretch(1);
@@ -608,13 +609,13 @@ void SongFinderPage::setupUi() {
   statusLayout->setSpacing(4);
   statusLayout->setAlignment(Qt::AlignCenter);
 
-  stateTitle_ = new QLabel(QStringLiteral("Dinlemeye hazır"), statusContainer);
+  stateTitle_ = new QLabel(I18n::text(QStringLiteral("pulse.ready_to_listen")), statusContainer);
   stateTitle_->setObjectName(QStringLiteral("sf-state-title"));
   stateTitle_->setAlignment(Qt::AlignCenter);
   stateTitle_->setMinimumHeight(32);
   statusLayout->addWidget(stateTitle_, 0, Qt::AlignCenter);
 
-  stateSub_ = new QLabel(QStringLiteral("Ortadaki düğmeye bas bilgisayarda çalan şarkıyı bulmaya başlayayım"), statusContainer);
+  stateSub_ = new QLabel(I18n::text(QStringLiteral("pulse.press_to_start")), statusContainer);
   stateSub_->setObjectName(QStringLiteral("sf-state-sub"));
   stateSub_->setAlignment(Qt::AlignCenter);
   stateSub_->setMinimumHeight(24);
@@ -640,7 +641,7 @@ void SongFinderPage::setupUi() {
   activeTextLayout->setContentsMargins(0, 0, 0, 0);
   activeTextLayout->setSpacing(2);
 
-  auto *badgeLabel = new QLabel(QStringLiteral("SON BULUNAN ŞARKI"), activeCard_);
+  auto *badgeLabel = new QLabel(I18n::text(QStringLiteral("pulse.last_found_song")), activeCard_);
   badgeLabel->setObjectName(QStringLiteral("sf-active-badge"));
   activeTextLayout->addWidget(badgeLabel);
 
@@ -687,7 +688,7 @@ void SongFinderPage::setupUi() {
   activeDismissBtn_->setObjectName(QStringLiteral("sf-delete-card-btn"));
   activeDismissBtn_->setIcon(BrowserIcons::icon(BrowserIcon::Trash));
   activeDismissBtn_->setIconSize(QSize(15, 15));
-  activeDismissBtn_->setToolTip(QStringLiteral("Kartı kapat ve listeye aktar"));
+  activeDismissBtn_->setToolTip(I18n::text(QStringLiteral("pulse.dismiss_card")));
   activeDismissBtn_->setCursor(Qt::PointingHandCursor);
   connect(activeDismissBtn_, &QPushButton::clicked, this, [this]() {
     if (hasActiveResult_) {
@@ -709,7 +710,7 @@ void SongFinderPage::setupUi() {
   listToggleBtn_ = new QPushButton(centerColumn);
   listToggleBtn_->setObjectName(QStringLiteral("sf-list-toggle-btn"));
   listToggleBtn_->setCursor(Qt::PointingHandCursor);
-  listToggleBtn_->setText(QStringLiteral("📜 Bulunan Sonuçlar Listesi (0)    ▾"));
+  listToggleBtn_->setText(I18n::text(QStringLiteral("pulse.results_list_toggle_empty")));
   connect(listToggleBtn_, &QPushButton::clicked, this, [this]() {
     setListExpanded(!isListExpanded_);
   });
@@ -728,12 +729,12 @@ void SongFinderPage::setupUi() {
   resHeaderLayout->setContentsMargins(2, 0, 2, 4);
   resHeaderLayout->setSpacing(8);
 
-  resultsTitleLabel_ = new QLabel(QStringLiteral("Bulunan Sonuçlar"), resultsHeaderWidget_);
+  resultsTitleLabel_ = new QLabel(I18n::text(QStringLiteral("pulse.found_results")), resultsHeaderWidget_);
   resultsTitleLabel_->setObjectName(QStringLiteral("sf-results-title"));
   resHeaderLayout->addWidget(resultsTitleLabel_);
   resHeaderLayout->addStretch(1);
 
-  clearAllBtn_ = new QPushButton(QStringLiteral(" Tümünü Temizle"), resultsHeaderWidget_);
+  clearAllBtn_ = new QPushButton(I18n::text(QStringLiteral("pulse.clear_all")), resultsHeaderWidget_);
   clearAllBtn_->setObjectName(QStringLiteral("sf-clear-all-btn"));
   clearAllBtn_->setIcon(BrowserIcons::icon(BrowserIcon::Trash));
   clearAllBtn_->setIconSize(QSize(13, 13));
@@ -755,7 +756,7 @@ void SongFinderPage::setupUi() {
   resultsHeaderWidget_->hide();
   resultsLayout_->addWidget(resultsHeaderWidget_);
 
-  emptyResultsLabel_ = new QLabel(QStringLiteral("Henüz listede şarkı yok."), resultsContainer_);
+  emptyResultsLabel_ = new QLabel(I18n::text(QStringLiteral("pulse.no_songs")), resultsContainer_);
   emptyResultsLabel_->setObjectName(QStringLiteral("sf-empty-label"));
   emptyResultsLabel_->setAlignment(Qt::AlignCenter);
   resultsLayout_->addWidget(emptyResultsLabel_);
@@ -775,7 +776,7 @@ void SongFinderPage::setupUi() {
   deviceLayout->setContentsMargins(0, 0, 0, 0);
   deviceLayout->setSpacing(10);
 
-  auto *deviceLabel = new QLabel(QStringLiteral("Ses kaynağı:"), deviceField);
+  auto *deviceLabel = new QLabel(I18n::text(QStringLiteral("pulse.audio_source")), deviceField);
   deviceLabel->setObjectName(QStringLiteral("sf-device-label"));
   deviceLayout->addWidget(deviceLabel);
 
@@ -785,7 +786,7 @@ void SongFinderPage::setupUi() {
   connect(deviceCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SongFinderPage::onDeviceSelectionChanged);
   deviceLayout->addWidget(deviceCombo_, 1);
 
-  refreshBtn_ = new QPushButton(QStringLiteral("Cihazları yenile"), deviceField);
+  refreshBtn_ = new QPushButton(I18n::text(QStringLiteral("pulse.refresh_devices")), deviceField);
   refreshBtn_->setObjectName(QStringLiteral("sf-refresh-btn"));
   refreshBtn_->setCursor(Qt::PointingHandCursor);
   connect(refreshBtn_, &QPushButton::clicked, this, &SongFinderPage::onRefreshDevicesClicked);
@@ -795,7 +796,7 @@ void SongFinderPage::setupUi() {
 
   hintLabel_ = new QLabel(controlsCard);
   hintLabel_->setObjectName(QStringLiteral("sf-hint-label"));
-  hintLabel_->setText(QStringLiteral("Ses seviyesi ve arabellek boyutu ayarlarını Pulse Tercihleri üzerinden değiştirebilirsiniz."));
+  hintLabel_->setText(I18n::text(QStringLiteral("pulse.volume_hint")));
   controlsLayout->addWidget(hintLabel_);
 
   bodyLayout->addWidget(controlsCard);
@@ -850,12 +851,12 @@ void SongFinderPage::updateHistoryListHeader() {
     } else {
       if (emptyResultsLabel_) emptyResultsLabel_->hide();
       if (resultsHeaderWidget_) resultsHeaderWidget_->show();
-      if (resultsTitleLabel_) resultsTitleLabel_->setText(QStringLiteral("Bulunan Sonuçlar (%1)").arg(count));
+      if (resultsTitleLabel_) resultsTitleLabel_->setText(I18n::text(QStringLiteral("pulse.found_results_count")).arg(count));
     }
   }
 
   if (listToggleBtn_) {
-    listToggleBtn_->setText(QStringLiteral("📜 Bulunan Sonuçlar Listesi (%1)    %2")
+    listToggleBtn_->setText(I18n::text(QStringLiteral("pulse.results_list_toggle"))
                                 .arg(count)
                                 .arg(isListExpanded_ ? QStringLiteral("▴") : QStringLiteral("▾")));
   }
@@ -864,8 +865,8 @@ void SongFinderPage::updateHistoryListHeader() {
 void SongFinderPage::showActiveResult(const SongResult &result) {
   currentActiveResult_ = result;
   hasActiveResult_ = true;
-  activeTitleLabel_->setText(result.title.isEmpty() ? QStringLiteral("Bilinmeyen Başlık") : result.title);
-  activeArtistLabel_->setText(result.artist.isEmpty() ? QStringLiteral("Bilinmeyen Sanatçı") : result.artist);
+  activeTitleLabel_->setText(result.title.isEmpty() ? I18n::text(QStringLiteral("pulse.unknown_title")) : result.title);
+  activeArtistLabel_->setText(result.artist.isEmpty() ? I18n::text(QStringLiteral("pulse.unknown_artist")) : result.artist);
 
   QString metaStr = result.timestamp.toString(QStringLiteral("dd.MM.yyyy hh:mm"));
   if (!result.album.isEmpty()) {
@@ -895,7 +896,7 @@ void SongFinderPage::updateDeviceList(const QVector<AudioDeviceInfo> &devices, c
   deviceCombo_->clear();
 
   // 1. Smart Auto-Route Option
-  QString autoSummary = QStringLiteral("⭐ Otomatik — Sistem sesi + mikrofon");
+  QString autoSummary = I18n::text(QStringLiteral("pulse.auto_source_summary"));
   deviceCombo_->addItem(autoSummary, QStringLiteral("auto"));
 
   // 2. Individual hardware devices
@@ -907,7 +908,7 @@ void SongFinderPage::updateDeviceList(const QVector<AudioDeviceInfo> &devices, c
       label = QStringLiteral("🎤 ") + label;
     }
     if (dev.isDefault) {
-      label += QStringLiteral(" (Varsayılan)");
+      label += I18n::text(QStringLiteral("pulse.default_suffix"));
     }
     deviceCombo_->addItem(label, dev.id);
   }
@@ -928,7 +929,7 @@ void SongFinderPage::updateDeviceList(const QVector<AudioDeviceInfo> &devices, c
   if (route.hasSystemMonitor || route.hasMicrophone) {
     hintLabel_->setText(route.summaryDescription());
   } else {
-    hintLabel_->setText(QStringLiteral("Ses cihazları hazır"));
+    hintLabel_->setText(I18n::text(QStringLiteral("pulse.devices_ready")));
   }
 
   updatingDevices_ = false;
@@ -971,42 +972,42 @@ void SongFinderPage::onServiceStateChanged(SongRecognitionService::State state, 
 
   switch (state) {
     case SongRecognitionService::State::Ready:
-      statusLabel_->setText(QStringLiteral("Hazır"));
-      stateTitle_->setText(QStringLiteral("Dinlemeye hazır"));
-      stateSub_->setText(QStringLiteral("Ortadaki düğmeye bas bilgisayarda çalan şarkıyı bulmaya başlayayım"));
+      statusLabel_->setText(I18n::text(QStringLiteral("common.ready")));
+      stateTitle_->setText(I18n::text(QStringLiteral("pulse.ready_to_listen")));
+      stateSub_->setText(I18n::text(QStringLiteral("pulse.press_to_start")));
       signalBar_->setValue(0);
-      signalTitle_->setText(QStringLiteral("Kaynak sinyali"));
+      signalTitle_->setText(I18n::text(QStringLiteral("pulse.source_signal")));
       break;
 
     case SongRecognitionService::State::Listening: {
-      statusLabel_->setText(QStringLiteral("Dinliyor"));
-      stateTitle_->setText(QStringLiteral("Dinliyorum"));
-      stateSub_->setText(QStringLiteral("Canlı örnek birikiyor, şarkı çalındığında tanınacaktır"));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.listening_status")));
+      stateTitle_->setText(I18n::text(QStringLiteral("pulse.listening_title")));
+      stateSub_->setText(I18n::text(QStringLiteral("pulse.listening_desc")));
       break;
     }
 
     case SongRecognitionService::State::Recognizing:
-      statusLabel_->setText(QStringLiteral("Şarkı aranıyor"));
-      stateTitle_->setText(QStringLiteral("Şarkı aranıyor"));
-      stateSub_->setText(QStringLiteral("Ses parmak izi Shazam sunucularında taranıyor..."));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.searching_song")));
+      stateTitle_->setText(I18n::text(QStringLiteral("pulse.searching_song")));
+      stateSub_->setText(I18n::text(QStringLiteral("pulse.scanning_fingerprint")));
       break;
 
     case SongRecognitionService::State::Found:
-      statusLabel_->setText(QStringLiteral("Şarkı bulundu"));
-      stateTitle_->setText(QStringLiteral("Şarkı bulundu"));
-      stateSub_->setText(QStringLiteral("Sonuç ekranda görüntülendi"));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.song_found")));
+      stateTitle_->setText(I18n::text(QStringLiteral("pulse.song_found")));
+      stateSub_->setText(I18n::text(QStringLiteral("pulse.result_shown")));
       break;
 
     case SongRecognitionService::State::NotFound:
-      statusLabel_->setText(QStringLiteral("Şarkı bulunamadı"));
-      stateTitle_->setText(QStringLiteral("Şarkı bulunamadı"));
-      stateSub_->setText(QStringLiteral("Dinlemeye devam ediliyor..."));
+      statusLabel_->setText(I18n::text(QStringLiteral("pulse.song_not_found")));
+      stateTitle_->setText(I18n::text(QStringLiteral("pulse.song_not_found")));
+      stateSub_->setText(I18n::text(QStringLiteral("pulse.still_listening")));
       break;
 
     case SongRecognitionService::State::Error:
-      statusLabel_->setText(QStringLiteral("Hata"));
-      stateTitle_->setText(QStringLiteral("Dinleme Hatası"));
-      stateSub_->setText(message.isEmpty() ? QStringLiteral("Ses kaynağına erişilemedi") : message);
+      statusLabel_->setText(I18n::text(QStringLiteral("common.error")));
+      stateTitle_->setText(I18n::text(QStringLiteral("pulse.listening_error")));
+      stateSub_->setText(message.isEmpty() ? I18n::text(QStringLiteral("pulse.source_unavailable")) : message);
       break;
   }
 }
@@ -1017,13 +1018,13 @@ void SongFinderPage::onServiceVolumeChanged(double levelPercent, double bufferFi
 
   if (service_ && service_->isListening()) {
     if (!activeSourceName.isEmpty()) {
-      signalTitle_->setText(QStringLiteral("Kaynak sinyali — %1").arg(activeSourceName));
+      signalTitle_->setText(I18n::text(QStringLiteral("pulse.source_signal_named")).arg(activeSourceName));
     } else {
-      signalTitle_->setText(QStringLiteral("Kaynak sinyali"));
+      signalTitle_->setText(I18n::text(QStringLiteral("pulse.source_signal")));
     }
 
     if (bufferFillPercent > 0.0 && bufferFillPercent < 70.0) {
-      stateSub_->setText(QStringLiteral("Canlı örnek doluyor %%%1").arg(static_cast<int>(bufferFillPercent)));
+      stateSub_->setText(I18n::text(QStringLiteral("pulse.sample_filling")).arg(static_cast<int>(bufferFillPercent)));
     }
   }
 }
@@ -1081,11 +1082,11 @@ void SongFinderPage::addResultCard(const SongResult &result) {
   textLayout->setContentsMargins(0, 0, 0, 0);
   textLayout->setSpacing(2);
 
-  auto *titleLabel = new QLabel(result.title.isEmpty() ? QStringLiteral("Bilinmeyen Başlık") : result.title, itemWidget);
+  auto *titleLabel = new QLabel(result.title.isEmpty() ? I18n::text(QStringLiteral("pulse.unknown_title")) : result.title, itemWidget);
   titleLabel->setObjectName(QStringLiteral("sf-result-title"));
   textLayout->addWidget(titleLabel);
 
-  auto *artistLabel = new QLabel(result.artist.isEmpty() ? QStringLiteral("Bilinmeyen Sanatçı") : result.artist, itemWidget);
+  auto *artistLabel = new QLabel(result.artist.isEmpty() ? I18n::text(QStringLiteral("pulse.unknown_artist")) : result.artist, itemWidget);
   artistLabel->setObjectName(QStringLiteral("sf-result-artist"));
   textLayout->addWidget(artistLabel);
 
@@ -1134,7 +1135,7 @@ void SongFinderPage::addResultCard(const SongResult &result) {
   deleteBtn->setObjectName(QStringLiteral("sf-delete-card-btn"));
   deleteBtn->setIcon(BrowserIcons::icon(BrowserIcon::Trash));
   deleteBtn->setIconSize(QSize(15, 15));
-  deleteBtn->setToolTip(QStringLiteral("Bu sonucu listeden ve hafızadan tamamen sil"));
+  deleteBtn->setToolTip(I18n::text(QStringLiteral("pulse.delete_result")));
   deleteBtn->setCursor(Qt::PointingHandCursor);
   connect(deleteBtn, &QPushButton::clicked, this, [this, itemWidget, result]() {
     itemWidget->deleteLater();
@@ -1160,15 +1161,6 @@ void SongFinderPage::addResultCard(const SongResult &result) {
 }
 
 void SongFinderPage::showAboutDialog() {
-  QMessageBox::about(this, QStringLiteral("DaliNira Pulse Hakkında"),
-                     QStringLiteral("<h3>DaliNira Pulse — Şarkı Bulma</h3>"
-                                    "<p>DaliNira Browser için dahili ses tanıma ve müzik keşif aracı.</p>"
-                                    "<p><b>Özellikler:</b></p>"
-                                    "<ul>"
-                                    "<li>Akıllı Ses Yönlendirme (Sistem Sesi + Mikrofon)</li>"
-                                    "<li>Otomatik Kulaklık Algılama ve Eşleştirme</li>"
-                                    "<li>Gerçek Zamanlı Akustik Parmak İzi (Shazam Uyumlu)</li>"
-                                    "<li>YouTube & YouTube Music Entegrasyonu</li>"
-                                    "</ul>"
-                                    "<p>© 2026 DaliNira Project</p>"));
+  QMessageBox::about(this, I18n::text(QStringLiteral("pulse.about_title")),
+                     I18n::text(QStringLiteral("pulse.about_html")));
 }

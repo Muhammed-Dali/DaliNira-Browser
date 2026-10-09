@@ -1,12 +1,13 @@
 #include "tab_performance_manager.h"
 
+#include <QPointer>
 #include <QSettings>
-#include <QWebEnginePage>
-#include <QWebEngineView>
+#include <QTimer>
 #include <QWidget>
 #include <algorithm>
 #include <chrono>
 #include <limits>
+#include <optional>
 
 namespace dalinira {
 
@@ -46,7 +47,9 @@ TabPerformanceManager::~TabPerformanceManager() {
 void TabPerformanceManager::loadPersistedSettings() {
   QSettings settings;
   const QString modeStr = settings.value(QStringLiteral("performance/policyMode"), QStringLiteral("balanced")).toString().toLower();
-  if (modeStr == QLatin1String("memory_saver")) {
+  if (modeStr == QLatin1String("off")) {
+    setPolicyMode(PerformancePolicyMode::Off);
+  } else if (modeStr == QLatin1String("memory_saver")) {
     setPolicyMode(PerformancePolicyMode::MemorySaver);
   } else if (modeStr == QLatin1String("maximum_performance")) {
     setPolicyMode(PerformancePolicyMode::MaximumPerformance);
@@ -61,6 +64,43 @@ void TabPerformanceManager::loadPersistedSettings() {
   if (!allowlist.isEmpty()) {
     setSiteAllowlist(allowlist);
   }
+  sleepAfterMs_ = std::max<int64_t>(0, settings.value(QStringLiteral("performance/sleepAfterSeconds"), 0).toLongLong() * 1000);
+  sleepMediaTabs_ = settings.value(QStringLiteral("performance/sleepMediaTabs"), false).toBool();
+}
+
+int64_t TabPerformanceManager::modeDefaultSleepDelayMs(PerformancePolicyMode mode) {
+  switch (mode) {
+    case PerformancePolicyMode::MemorySaver: return 30 * 1000;
+    case PerformancePolicyMode::MaximumPerformance: return 2 * kDefaultBackgroundDiscardDelayMs;
+    case PerformancePolicyMode::Balanced:
+    case PerformancePolicyMode::Off: break;
+  }
+  return kDefaultBackgroundDiscardDelayMs;
+}
+
+void TabPerformanceManager::setSleepAfterMs(int64_t delayMs) {
+  sleepAfterMs_ = std::max<int64_t>(0, delayMs);
+  QSettings().setValue(QStringLiteral("performance/sleepAfterSeconds"), static_cast<qlonglong>(sleepAfterMs_ / 1000));
+  emit sleepSettingsChanged();
+  scheduleNextDeadlineCheck();
+}
+
+int64_t TabPerformanceManager::effectiveSleepDelayMs() const {
+  // The system is running out of memory: sleep eligible background tabs now.
+  const auto pressure = memoryMonitor_ ? memoryMonitor_->currentPressureLevel() : MemoryPressureLevel::Normal;
+  if (pressure == MemoryPressureLevel::Critical ||
+      (policyMode_ == PerformancePolicyMode::MemorySaver && pressure == MemoryPressureLevel::Moderate)) {
+    return 0;
+  }
+  return sleepAfterMs_ > 0 ? sleepAfterMs_ : backgroundDiscardDelayMs_;
+}
+
+void TabPerformanceManager::setSleepMediaTabs(bool allowed) {
+  if (sleepMediaTabs_ == allowed) return;
+  sleepMediaTabs_ = allowed;
+  QSettings().setValue(QStringLiteral("performance/sleepMediaTabs"), allowed);
+  emit sleepSettingsChanged();
+  scheduleNextDeadlineCheck();
 }
 
 int64_t TabPerformanceManager::currentMonotonicMs() {
@@ -69,11 +109,31 @@ int64_t TabPerformanceManager::currentMonotonicMs() {
 }
 
 int64_t TabPerformanceManager::backgroundFreezeDelayMs() const {
-  return backgroundFreezeDelayMs_;
+  return backgroundFreezeDelayOverrideMs_ >= 0 ? backgroundFreezeDelayOverrideMs_ : effectiveSleepDelayMs();
 }
 
 void TabPerformanceManager::setBackgroundFreezeDelayMs(int64_t delayMs) {
-  backgroundFreezeDelayMs_ = std::max<int64_t>(0, delayMs);
+  backgroundFreezeDelayOverrideMs_ = std::max<int64_t>(0, delayMs);
+  scheduleNextDeadlineCheck();
+}
+
+int64_t TabPerformanceManager::fullSleepDelayMs() const {
+  const int64_t timeout = effectiveSleepDelayMs();
+  if (discardRequirement_ != DiscardPolicyRequirement::LongIdleOrMemoryPressure) return timeout;
+  // Balanced: memory pressure brings full sleep forward to the timeout
+  // (MaximumPerformance only for critical pressure); otherwise only long
+  // inactivity escalates a light-sleeping tab.
+  const auto pressure = memoryMonitor_ ? memoryMonitor_->currentPressureLevel() : MemoryPressureLevel::Normal;
+  const bool pressured = policyMode_ == PerformancePolicyMode::MaximumPerformance
+                             ? pressure == MemoryPressureLevel::Critical
+                             : pressure != MemoryPressureLevel::Normal;
+  if (pressured) return timeout;
+  if (balancedFullSleepAfterMs_ > 0) return std::max(balancedFullSleepAfterMs_, timeout);
+  return std::max<int64_t>(kBalancedFullSleepMinMs, kBalancedFullSleepFactor * timeout);
+}
+
+void TabPerformanceManager::setBalancedFullSleepAfterMs(int64_t delayMs) {
+  balancedFullSleepAfterMs_ = std::max<int64_t>(0, delayMs);
   scheduleNextDeadlineCheck();
 }
 
@@ -101,25 +161,28 @@ PerformancePolicyMode TabPerformanceManager::policyMode() const {
 
 void TabPerformanceManager::setPolicyMode(PerformancePolicyMode mode) {
   policyMode_ = mode;
+  backgroundFreezeDelayOverrideMs_ = -1;  // light sleep follows the timeout
   QSettings settings;
   switch (mode) {
     case PerformancePolicyMode::Balanced:
-      backgroundFreezeDelayMs_ = kDefaultBackgroundFreezeDelayMs;
       backgroundDiscardDelayMs_ = kDefaultBackgroundDiscardDelayMs;
-      discardRequirement_ = DiscardPolicyRequirement::IdleOnly;
+      discardRequirement_ = DiscardPolicyRequirement::LongIdleOrMemoryPressure;
       settings.setValue(QStringLiteral("performance/policyMode"), QStringLiteral("balanced"));
       break;
     case PerformancePolicyMode::MemorySaver:
-      backgroundFreezeDelayMs_ = 0;
       backgroundDiscardDelayMs_ = 30 * 1000;
       discardRequirement_ = DiscardPolicyRequirement::IdleOnly;
       settings.setValue(QStringLiteral("performance/policyMode"), QStringLiteral("memory_saver"));
       break;
     case PerformancePolicyMode::MaximumPerformance:
-      backgroundFreezeDelayMs_ = 0;
       backgroundDiscardDelayMs_ = 2 * kDefaultBackgroundDiscardDelayMs;
-      discardRequirement_ = DiscardPolicyRequirement::IdleOnly;
+      discardRequirement_ = DiscardPolicyRequirement::LongIdleOrMemoryPressure;
       settings.setValue(QStringLiteral("performance/policyMode"), QStringLiteral("maximum_performance"));
+      break;
+    case PerformancePolicyMode::Off:
+      backgroundDiscardDelayMs_ = kDefaultBackgroundDiscardDelayMs;
+      discardRequirement_ = DiscardPolicyRequirement::IdleOnly;
+      settings.setValue(QStringLiteral("performance/policyMode"), QStringLiteral("off"));
       break;
   }
   emit policyModeChanged(mode);
@@ -201,32 +264,42 @@ QList<TabManager::TabId> TabPerformanceManager::trackedWebTabs() const {
 }
 
 bool TabPerformanceManager::isAggressiveStatePermitted(
-    TabManager::TabId id, QWebEnginePage::LifecycleState targetState) const {
+    TabManager::TabId id, TabLifecycleState targetState) const {
   auto it = metadataMap_.constFind(id);
   if (it == metadataMap_.cend() || it->tabKind != TabManager::TabKind::Web) {
     return false;
   }
 
-  if (isTabProtected(id) && targetState != QWebEnginePage::LifecycleState::Active) {
+  ProtectedReasons blocking = protectedReasons(id);
+  // Playing tabs may sleep when the user allows it; freezing one would only
+  // stop its sound, so that stays forbidden.
+  if (sleepMediaTabs_ && targetState == TabLifecycleState::Discarded) {
+    blocking &= ~ProtectedReasons(ProtectedReason::RecentlyAudible | ProtectedReason::MediaPlayback);
+  }
+  // Unsaved input survives light sleep; it only rules out full sleep.
+  if (targetState == TabLifecycleState::Frozen) {
+    blocking &= ~ProtectedReasons(ProtectedReason::FormOrEditState);
+  }
+  if (blocking != ProtectedReason::None && targetState != TabLifecycleState::Active) {
     return false;
   }
 
   const auto recState = it->recommendedState;
   switch (recState) {
-    case QWebEnginePage::LifecycleState::Active:
-      return targetState == QWebEnginePage::LifecycleState::Active;
-    case QWebEnginePage::LifecycleState::Frozen:
-      return targetState == QWebEnginePage::LifecycleState::Active ||
-             targetState == QWebEnginePage::LifecycleState::Frozen;
-    case QWebEnginePage::LifecycleState::Discarded:
+    case TabLifecycleState::Active:
+      return targetState == TabLifecycleState::Active;
+    case TabLifecycleState::Frozen:
+      return targetState == TabLifecycleState::Active ||
+             targetState == TabLifecycleState::Frozen;
+    case TabLifecycleState::Discarded:
       return true;
     default:
-      return targetState == QWebEnginePage::LifecycleState::Active;
+      return targetState == TabLifecycleState::Active;
   }
 }
 
 bool TabPerformanceManager::canFreeze(TabManager::TabId id) const {
-  if (isTearingDown_) return false;
+  if (isTearingDown_ || !automaticLifecycleEnabled()) return false;
 
   auto it = metadataMap_.constFind(id);
   if (it == metadataMap_.cend() || it->tabKind != TabManager::TabKind::Web) {
@@ -238,36 +311,37 @@ bool TabPerformanceManager::canFreeze(TabManager::TabId id) const {
     return false;
   }
 
-  // 2. Must not be producing audio
+  // 2. Must not be producing audio (freezing would only stop the sound)
   if (it->recentlyAudible) {
     return false;
   }
 
-  // 3. Must not have any active protected reasons
-  if (isTabProtected(id)) {
+  // 3. No protected reason, except unsaved input: light sleep keeps the page,
+  //    and with it the input, in memory.
+  if (lightSleepBlockingReasons(id) != ProtectedReason::None) {
     return false;
   }
 
-  // 4. Must be idle for at least backgroundFreezeDelayMs_
+  // 4. Must have been in the background for the light sleep delay
   const int64_t now = currentMonotonicMs();
-  if (it->elapsedSinceLastVisibleMs(now) < backgroundFreezeDelayMs_) {
+  if (it->elapsedSinceLastUseMs(now) < backgroundFreezeDelayMs()) {
     return false;
   }
 
   // 5. Must satisfy Qt recommendedState boundary (Active is forbidden; Frozen/Discarded permitted)
-  if (!isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Frozen)) {
+  if (!isAggressiveStatePermitted(id, TabLifecycleState::Frozen)) {
     return false;
   }
 
   // 6. Page/view must still be valid
   if (!tabManager_) return false;
   const TabManager::TabRecord *record = tabManager_->record(id);
-  if (!isLifecycleEligible(record) || record->page->isLoading()) {
+  if (!isLifecycleEligible(record) || record->lifecycle->isLoading()) {
     return false;
   }
 
   // 7. Must currently be in Active lifecycle state (not already Frozen or Discarded)
-  if (it->lifecycleState != QWebEnginePage::LifecycleState::Active) {
+  if (it->lifecycleState != TabLifecycleState::Active) {
     return false;
   }
 
@@ -280,7 +354,7 @@ bool TabPerformanceManager::freezeTab(TabManager::TabId id) {
   }
 
   const TabManager::TabRecord *record = tabManager_->record(id);
-  if (!record || !record->page) {
+  if (!record || !record->lifecycle) {
     return false;
   }
 
@@ -292,15 +366,15 @@ bool TabPerformanceManager::freezeTab(TabManager::TabId id) {
   const int64_t now = currentMonotonicMs();
 
   // Apply Frozen lifecycle to the underlying Qt WebEnginePage
-  record->page->setLifecycleState(QWebEnginePage::LifecycleState::Frozen);
+  record->lifecycle->setLifecycleState(TabLifecycleState::Frozen);
 
-  it->lifecycleState = QWebEnginePage::LifecycleState::Frozen;
+  it->lifecycleState = TabLifecycleState::Frozen;
   it->frozenByDaliNira = true;
   it->lastFreezeMonotonicMs = now;
   it->freezeCount++;
 
   emit tabFrozen(id);
-  emit tabLifecycleStateChanged(id, QWebEnginePage::LifecycleState::Frozen);
+  emit tabLifecycleStateChanged(id, TabLifecycleState::Frozen);
   emit tabMetadataChanged(id, it.value());
 
   scheduleNextDeadlineCheck();
@@ -308,7 +382,7 @@ bool TabPerformanceManager::freezeTab(TabManager::TabId id) {
 }
 
 bool TabPerformanceManager::canDiscard(TabManager::TabId id) const {
-  if (isTearingDown_ || !discardEnabled_) return false;
+  if (isTearingDown_ || !discardEnabled_ || !automaticLifecycleEnabled()) return false;
 
   auto it = metadataMap_.constFind(id);
   if (it == metadataMap_.cend() || it->tabKind != TabManager::TabKind::Web) {
@@ -320,13 +394,13 @@ bool TabPerformanceManager::canDiscard(TabManager::TabId id) const {
     return false;
   }
 
-  // 2. Must not be producing audio
-  if (it->recentlyAudible) {
-    return false;
+  // 2 + 3. No protected reason (media only when the user did not allow
+  // sleeping playing tabs, dirty forms, allowlist, downloads, dialogs, ...)
+  ProtectedReasons blocking = protectedReasons(id);
+  if (sleepMediaTabs_) {
+    blocking &= ~ProtectedReasons(ProtectedReason::RecentlyAudible | ProtectedReason::MediaPlayback);
   }
-
-  // 3. Must not have any active protected reasons (no dirty forms, allowlist, media, etc.)
-  if (isTabProtected(id)) {
+  if (blocking != ProtectedReason::None || (it->recentlyAudible && !sleepMediaTabs_)) {
     return false;
   }
 
@@ -336,14 +410,14 @@ bool TabPerformanceManager::canDiscard(TabManager::TabId id) const {
   }
 
   // 5. Must satisfy Qt recommendedState boundary (Discarded must be permitted by Qt)
-  if (!isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Discarded)) {
+  if (!isAggressiveStatePermitted(id, TabLifecycleState::Discarded)) {
     return false;
   }
 
   // 6. Page/view must still be valid
   if (!tabManager_) return false;
   const TabManager::TabRecord *record = tabManager_->record(id);
-  if (!isLifecycleEligible(record) || record->page->isLoading()) {
+  if (!isLifecycleEligible(record) || record->lifecycle->isLoading()) {
     return false;
   }
 
@@ -353,14 +427,15 @@ bool TabPerformanceManager::canDiscard(TabManager::TabId id) const {
   }
 
   // 8. Must not already be Discarded
-  if (it->lifecycleState == QWebEnginePage::LifecycleState::Discarded) {
+  if (it->lifecycleState == TabLifecycleState::Discarded) {
     return false;
   }
 
-  // 9. Idle threshold and Memory Pressure criteria
+  // 9. Idle threshold: the timeout, or Balanced's long-inactivity threshold
+  //    unless memory pressure brings it forward (fullSleepDelayMs).
   const int64_t now = currentMonotonicMs();
-  const int64_t elapsed = it->elapsedSinceLastVisibleMs(now);
-  if (elapsed < backgroundDiscardDelayMs_) {
+  const int64_t elapsed = it->elapsedSinceLastUseMs(now);
+  if (elapsed < fullSleepDelayMs()) {
     return false;
   }
 
@@ -384,9 +459,12 @@ bool TabPerformanceManager::discardTab(TabManager::TabId id) {
   if (!canDiscard(id)) {
     return false;
   }
+  return applySleep(id, false);
+}
 
+bool TabPerformanceManager::applySleep(TabManager::TabId id, bool manual) {
   const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
-  if (!record || !record->page) {
+  if (!record || !record->lifecycle) {
     return false;
   }
 
@@ -395,23 +473,156 @@ bool TabPerformanceManager::discardTab(TabManager::TabId id) {
     return false;
   }
 
+  // The engine releases the page's renderer / web process resources. Only a
+  // state the engine actually reached is recorded.
+  // Last chance to observe the page's resources (TabResourceModel keeps the
+  // figure, so the hover card can show what sleeping released).
+  emit tabAboutToSleep(id);
+  if (!record->lifecycle->setLifecycleState(TabLifecycleState::Discarded)) {
+    return false;
+  }
+
   const int64_t now = currentMonotonicMs();
-
-  // Apply Discarded lifecycle state via centralized performance manager
-  record->page->setLifecycleState(QWebEnginePage::LifecycleState::Discarded);
-
-  it->lifecycleState = QWebEnginePage::LifecycleState::Discarded;
+  it->lifecycleState = TabLifecycleState::Discarded;
   it->discardedByDaliNira = true;
+  it->sleptManually = manual;
   it->frozenByDaliNira = false;
   it->lastDiscardMonotonicMs = now;
   it->discardCount++;
 
   emit tabDiscarded(id);
-  emit tabLifecycleStateChanged(id, QWebEnginePage::LifecycleState::Discarded);
+  emit tabLifecycleStateChanged(id, TabLifecycleState::Discarded);
   emit tabMetadataChanged(id, it.value());
 
   scheduleNextDeadlineCheck();
   return true;
+}
+
+bool TabPerformanceManager::isHardProtected(TabManager::TabId id) const {
+  const ProtectedReasons reasons = protectedReasons(id);
+  const ProtectedReasons hard = ProtectedReason::Visible | ProtectedReason::InternalScheme |
+                                ProtectedReason::BrowserDownload | ProtectedReason::PageDialog |
+                                ProtectedReason::WebRTC | ProtectedReason::Camera |
+                                ProtectedReason::Microphone | ProtectedReason::ScreenCapture;
+  return (reasons & hard) != ProtectedReason::None;
+}
+
+bool TabPerformanceManager::canSleepNow(TabManager::TabId id) const {
+  if (isTearingDown_) return false;
+  auto it = metadataMap_.constFind(id);
+  if (it == metadataMap_.cend() || it->tabKind != TabManager::TabKind::Web) return false;
+  if (it->visible || it->lifecycleState == TabLifecycleState::Discarded) return false;
+  const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
+  if (!isLifecycleEligible(record) || record->lifecycle->isLoading()) return false;
+  return !isHardProtected(id);
+}
+
+bool TabPerformanceManager::sleepTab(TabManager::TabId id) {
+  return canSleepNow(id) && applySleep(id, true);
+}
+
+bool TabPerformanceManager::canWakeNow(TabManager::TabId id) const {
+  return !isTearingDown_ && (isTabDiscarded(id) || isTabFrozen(id));
+}
+
+ProtectedReasons TabPerformanceManager::lightSleepBlockingReasons(TabManager::TabId id) const {
+  return protectedReasons(id) & ~ProtectedReasons(ProtectedReason::FormOrEditState);
+}
+
+void TabPerformanceManager::resetUnsavedInputCheck(TabManager::TabId id) {
+  unsavedInputChecks_.remove(id);
+  if (explicitFormDirty_.value(id, false)) setTabFormDirty(id, false);
+}
+
+void TabPerformanceManager::requestUnsavedInputCheck(TabManager::TabId id) {
+  const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
+  if (!record || !record->lifecycle) {
+    unsavedInputChecks_.insert(id, UnsavedInputCheck::Checked);  // nothing to ask
+    return;
+  }
+  unsavedInputChecks_.insert(id, UnsavedInputCheck::Pending);
+  const quint64 serial = ++unsavedInputSerial_;
+  unsavedInputRequestSerial_.insert(id, serial);
+  QPointer<TabPerformanceManager> self(this);
+  const auto finish = [self, id, serial](std::optional<bool> dirty) {
+    if (!self || self->isTearingDown_ || !self->metadataMap_.contains(id)) return;
+    // Only the answer to the current request, while it is still pending (not
+    // shown, answered or timed out meanwhile).
+    if (self->unsavedInputRequestSerial_.value(id) != serial ||
+        self->unsavedInputChecks_.value(id) != UnsavedInputCheck::Pending)
+      return;
+    self->unsavedInputChecks_.insert(id, UnsavedInputCheck::Checked);
+    // No answer (engine could not run the check): nothing detected, and
+    // nothing is invented either.
+    self->setTabFormDirty(id, dirty.value_or(false));
+    self->scheduleNextDeadlineCheck();
+  };
+  record->lifecycle->checkUnsavedInput(finish);
+  QTimer::singleShot(kUnsavedInputCheckTimeoutMs, this, [finish] { finish(std::nullopt); });
+}
+
+bool TabPerformanceManager::wakeTab(TabManager::TabId id) {
+  return canWakeNow(id) && resumeTab(id);
+}
+
+int TabPerformanceManager::sleepOtherTabs(QObject *ownerWindow, TabManager::TabId keep) {
+  if (!tabManager_) return 0;
+  const ProtectedReasons keepAwake = ProtectedReason::UserPinned | ProtectedReason::UserAllowlisted |
+                                     ProtectedReason::FormOrEditState |
+                                     (sleepMediaTabs_ ? ProtectedReason::None
+                                                      : ProtectedReasons(ProtectedReason::RecentlyAudible |
+                                                                         ProtectedReason::MediaPlayback));
+  int slept = 0;
+  const QList<TabManager::TabId> ids = metadataMap_.keys();
+  for (const TabManager::TabId &id : ids) {
+    if (id == keep) continue;
+    const TabManager::TabRecord *record = tabManager_->record(id);
+    if (!record || record->ownerWindow != ownerWindow) continue;
+    if ((protectedReasons(id) & keepAwake) != ProtectedReason::None) continue;
+    if (sleepTab(id)) ++slept;
+  }
+  return slept;
+}
+
+QList<TabManager::TabId> TabPerformanceManager::sleepingTabs() const {
+  QList<TabManager::TabId> result;
+  for (auto it = metadataMap_.cbegin(); it != metadataMap_.cend(); ++it) {
+    if (it->lifecycleState == TabLifecycleState::Discarded) result.append(it.key());
+  }
+  return result;
+}
+
+void TabPerformanceManager::setPermissionPromptActive(TabManager::TabId id, bool active) {
+  explicitPermissionPrompt_[id] = active;
+  auto it = metadataMap_.find(id);
+  if (it == metadataMap_.end()) return;
+  const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
+  recomputeProtectedReasons(it.value(), record);
+  scheduleNextDeadlineCheck();
+}
+
+void TabPerformanceManager::setPageDialogActive(TabManager::TabId id, bool active) {
+  explicitPageDialog_[id] = active;
+  auto it = metadataMap_.find(id);
+  if (it == metadataMap_.end()) return;
+  const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
+  recomputeProtectedReasons(it.value(), record);
+  scheduleNextDeadlineCheck();
+}
+
+void TabPerformanceManager::onPageDialogStateChanged(bool open) {
+  Q_UNUSED(open);
+  const TabManager::TabId id = idForSender();
+  auto it = metadataMap_.find(id);
+  if (id.isNull() || it == metadataMap_.end()) return;
+  const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
+  recomputeProtectedReasons(it.value(), record);
+  scheduleNextDeadlineCheck();
+}
+
+TabManager::TabId TabPerformanceManager::idForSender() const {
+  auto *page = qobject_cast<TabLifecycleAdapter *>(sender());
+  return page ? pageToIdMap_.value(page) : TabManager::TabId();
 }
 
 bool TabPerformanceManager::resumeTab(TabManager::TabId id) {
@@ -420,24 +631,24 @@ bool TabPerformanceManager::resumeTab(TabManager::TabId id) {
     return false;
   }
 
-  if (it->lifecycleState == QWebEnginePage::LifecycleState::Active) {
+  if (it->lifecycleState == TabLifecycleState::Active) {
     return false; // Already active
   }
 
   if (!tabManager_) return false;
   const TabManager::TabRecord *record = tabManager_->record(id);
-  if (!record || !record->page) {
+  if (!record || !record->lifecycle) {
     return false;
   }
 
   const int64_t now = currentMonotonicMs();
-  const bool wasDiscarded = (it->lifecycleState == QWebEnginePage::LifecycleState::Discarded);
+  const bool wasDiscarded = (it->lifecycleState == TabLifecycleState::Discarded);
 
   // Restore Active lifecycle on the underlying Qt WebEnginePage
   // (Qt automatically triggers native reload if page was Discarded)
-  record->page->setLifecycleState(QWebEnginePage::LifecycleState::Active);
+  record->lifecycle->setLifecycleState(TabLifecycleState::Active);
 
-  it->lifecycleState = QWebEnginePage::LifecycleState::Active;
+  it->lifecycleState = TabLifecycleState::Active;
   it->frozenByDaliNira = false;
   it->discardedByDaliNira = false;
   it->lastResumeMonotonicMs = now;
@@ -450,7 +661,7 @@ bool TabPerformanceManager::resumeTab(TabManager::TabId id) {
     emit tabResumed(id);
   }
 
-  emit tabLifecycleStateChanged(id, QWebEnginePage::LifecycleState::Active);
+  emit tabLifecycleStateChanged(id, TabLifecycleState::Active);
   emit tabMetadataChanged(id, it.value());
 
   scheduleNextDeadlineCheck();
@@ -460,13 +671,13 @@ bool TabPerformanceManager::resumeTab(TabManager::TabId id) {
 bool TabPerformanceManager::isTabFrozen(TabManager::TabId id) const {
   auto it = metadataMap_.constFind(id);
   if (it == metadataMap_.cend()) return false;
-  return it->lifecycleState == QWebEnginePage::LifecycleState::Frozen;
+  return it->lifecycleState == TabLifecycleState::Frozen;
 }
 
 bool TabPerformanceManager::isTabDiscarded(TabManager::TabId id) const {
   auto it = metadataMap_.constFind(id);
   if (it == metadataMap_.cend()) return false;
-  return it->lifecycleState == QWebEnginePage::LifecycleState::Discarded;
+  return it->lifecycleState == TabLifecycleState::Discarded;
 }
 
 QString TabPerformanceManager::normalizeSitePattern(const QString &pattern) {
@@ -577,6 +788,8 @@ void TabPerformanceManager::setTabVisible(TabManager::TabId id, bool visible) {
   if (it->visible != visible) {
     it->visible = visible;
     it->lastVisibleMonotonicMs = now;
+    // On screen the user may type or submit: check again before the next sleep.
+    if (visible) resetUnsavedInputCheck(id);
     const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
     recomputeProtectedReasons(it.value(), record);
 
@@ -633,7 +846,7 @@ void TabPerformanceManager::onTabRegistered(TabManager::TabId id, TabManager::Ta
   if (kind != TabManager::TabKind::Web || !tabManager_) return;
 
   const TabManager::TabRecord *record = tabManager_->record(id);
-  if (!record || !record->page) return;
+  if (!record || !record->lifecycle) return;
 
   const int64_t now = currentMonotonicMs();
   TabPerformanceMetadata meta;
@@ -644,15 +857,15 @@ void TabPerformanceManager::onTabRegistered(TabManager::TabId id, TabManager::Ta
   meta.lastVisibleMonotonicMs = now;
   meta.lastAudibleChangeMonotonicMs = now;
   meta.visible = record->active;
-  meta.recentlyAudible = record->page->recentlyAudible();
-  meta.recommendedState = record->page->recommendedState();
-  meta.lifecycleState = record->page->lifecycleState();
+  meta.recentlyAudible = record->lifecycle->isAudible();
+  meta.recommendedState = record->lifecycle->recommendedState();
+  meta.lifecycleState = record->lifecycle->lifecycleState();
   meta.activationSerial = record->activationSerial;
 
   metadataMap_.insert(id, meta);
-  pageToIdMap_.insert(record->page.data(), id);
+  pageToIdMap_.insert(record->lifecycle.data(), id);
 
-  wirePageSignals(id, record->page.data());
+  wirePageSignals(id, record->lifecycle.data());
   recomputeProtectedReasons(metadataMap_[id], record);
 
   scheduleNextDeadlineCheck();
@@ -664,8 +877,11 @@ void TabPerformanceManager::onTabActivated(TabManager::TabId id) {
   const TabManager::TabRecord *targetRecord = tabManager_->record(id);
   if (!targetRecord) return;
 
-  // If the activated tab was Frozen or Discarded, resume it to Active BEFORE foreground usage begins
-  if (isTabFrozen(id) || isTabDiscarded(id)) {
+  // A sleeping tab wakes through the same path as the manual Wake action; a
+  // frozen one resumes. Both happen BEFORE foreground usage begins.
+  if (isTabDiscarded(id)) {
+    wakeTab(id);
+  } else if (isTabFrozen(id)) {
     resumeTab(id);
   }
 
@@ -685,6 +901,7 @@ void TabPerformanceManager::onTabActivated(TabManager::TabId id) {
   }
 
   // Update target tab
+  resetUnsavedInputCheck(id);
   auto it = metadataMap_.find(id);
   if (it != metadataMap_.end()) {
     it->visible = true;
@@ -742,6 +959,10 @@ void TabPerformanceManager::onTabRemoved(TabManager::TabId id) {
   explicitBrowserDownload_.remove(id);
   explicitPinned_.remove(id);
   explicitFormDirty_.remove(id);
+  explicitPermissionPrompt_.remove(id);
+  explicitPageDialog_.remove(id);
+  unsavedInputChecks_.remove(id);
+  unsavedInputRequestSerial_.remove(id);
 
   for (auto it = pageToIdMap_.begin(); it != pageToIdMap_.end();) {
     if (it.value() == id) {
@@ -758,6 +979,7 @@ void TabPerformanceManager::onTabUrlChanged(TabManager::TabId id, const QUrl &ur
   Q_UNUSED(url);
   auto it = metadataMap_.find(id);
   if (it == metadataMap_.end()) return;
+  resetUnsavedInputCheck(id);  // a new document: its input is checked afresh
 
   const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
   recomputeProtectedReasons(it.value(), record);
@@ -766,7 +988,7 @@ void TabPerformanceManager::onTabUrlChanged(TabManager::TabId id, const QUrl &ur
 
 void TabPerformanceManager::onPageUrlChanged(const QUrl &url) {
   Q_UNUSED(url);
-  auto *page = qobject_cast<QWebEnginePage *>(sender());
+  auto *page = qobject_cast<TabLifecycleAdapter *>(sender());
   if (!page) return;
 
   const TabManager::TabId id = pageToIdMap_.value(page);
@@ -780,26 +1002,28 @@ void TabPerformanceManager::onPageUrlChanged(const QUrl &url) {
   scheduleNextDeadlineCheck();
 }
 
-void TabPerformanceManager::wirePageSignals(TabManager::TabId id, QWebEnginePage *page) {
+void TabPerformanceManager::wirePageSignals(TabManager::TabId id, TabLifecycleAdapter *page) {
   Q_UNUSED(id);
   if (!page) return;
 
-  connect(page, &QWebEnginePage::recentlyAudibleChanged,
+  connect(page, &TabLifecycleAdapter::audibleChanged,
           this, &TabPerformanceManager::onPageRecentlyAudibleChanged, Qt::UniqueConnection);
-  connect(page, &QWebEnginePage::recommendedStateChanged,
+  connect(page, &TabLifecycleAdapter::recommendedStateChanged,
           this, &TabPerformanceManager::onPageRecommendedStateChanged, Qt::UniqueConnection);
-  connect(page, &QWebEnginePage::lifecycleStateChanged,
+  connect(page, &TabLifecycleAdapter::lifecycleStateChanged,
           this, &TabPerformanceManager::onPageLifecycleStateChanged, Qt::UniqueConnection);
-  connect(page, &QWebEnginePage::loadStarted,
+  connect(page, &TabLifecycleAdapter::dialogStateChanged,
+          this, &TabPerformanceManager::onPageDialogStateChanged, Qt::UniqueConnection);
+  connect(page, &TabLifecycleAdapter::loadStarted,
           this, &TabPerformanceManager::onPageLoadStarted, Qt::UniqueConnection);
-  connect(page, &QWebEnginePage::loadFinished,
+  connect(page, &TabLifecycleAdapter::loadFinished,
           this, &TabPerformanceManager::onPageLoadFinished, Qt::UniqueConnection);
-  connect(page, &QWebEnginePage::urlChanged,
+  connect(page, &TabLifecycleAdapter::urlChanged,
           this, &TabPerformanceManager::onPageUrlChanged, Qt::UniqueConnection);
 }
 
 void TabPerformanceManager::onPageRecentlyAudibleChanged(bool audible) {
-  auto *page = qobject_cast<QWebEnginePage *>(sender());
+  auto *page = qobject_cast<TabLifecycleAdapter *>(sender());
   if (!page) return;
 
   const TabManager::TabId id = pageToIdMap_.value(page);
@@ -821,8 +1045,8 @@ void TabPerformanceManager::onPageRecentlyAudibleChanged(bool audible) {
   scheduleNextDeadlineCheck();
 }
 
-void TabPerformanceManager::onPageRecommendedStateChanged(QWebEnginePage::LifecycleState state) {
-  auto *page = qobject_cast<QWebEnginePage *>(sender());
+void TabPerformanceManager::onPageRecommendedStateChanged(TabLifecycleState state) {
+  auto *page = qobject_cast<TabLifecycleAdapter *>(sender());
   if (!page) return;
 
   const TabManager::TabId id = pageToIdMap_.value(page);
@@ -836,15 +1060,15 @@ void TabPerformanceManager::onPageRecommendedStateChanged(QWebEnginePage::Lifecy
   recomputeProtectedReasons(it.value(), record);
   emit tabRecommendedStateChanged(id, state);
 
-  if (state == QWebEnginePage::LifecycleState::Active && (isTabFrozen(id) || isTabDiscarded(id))) {
+  if (state == TabLifecycleState::Active && (isTabFrozen(id) || isTabDiscarded(id))) {
     resumeTab(id);
   }
 
   scheduleNextDeadlineCheck();
 }
 
-void TabPerformanceManager::onPageLifecycleStateChanged(QWebEnginePage::LifecycleState state) {
-  auto *page = qobject_cast<QWebEnginePage *>(sender());
+void TabPerformanceManager::onPageLifecycleStateChanged(TabLifecycleState state) {
+  auto *page = qobject_cast<TabLifecycleAdapter *>(sender());
   if (!page) return;
 
   const TabManager::TabId id = pageToIdMap_.value(page);
@@ -854,10 +1078,10 @@ void TabPerformanceManager::onPageLifecycleStateChanged(QWebEnginePage::Lifecycl
   if (it == metadataMap_.end()) return;
 
   it->lifecycleState = state;
-  if (state != QWebEnginePage::LifecycleState::Frozen) {
+  if (state != TabLifecycleState::Frozen) {
     it->frozenByDaliNira = false;
   }
-  if (state != QWebEnginePage::LifecycleState::Discarded) {
+  if (state != TabLifecycleState::Discarded) {
     it->discardedByDaliNira = false;
   }
   const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
@@ -868,7 +1092,7 @@ void TabPerformanceManager::onPageLifecycleStateChanged(QWebEnginePage::Lifecycl
 }
 
 void TabPerformanceManager::onPageLoadStarted() {
-  auto *page = qobject_cast<QWebEnginePage *>(sender());
+  auto *page = qobject_cast<TabLifecycleAdapter *>(sender());
   if (!page) return;
 
   const TabManager::TabId id = pageToIdMap_.value(page);
@@ -898,7 +1122,7 @@ void TabPerformanceManager::recomputeProtectedReasons(
   if (meta.recentlyAudible) {
     reasons |= ProtectedReason::RecentlyAudible;
   }
-  if (meta.recommendedState == QWebEnginePage::LifecycleState::Active) {
+  if (meta.recommendedState == TabLifecycleState::Active) {
     reasons |= ProtectedReason::RecommendedActive;
   }
   if (explicitMediaPlayback_.value(meta.tabId, false)) {
@@ -912,6 +1136,10 @@ void TabPerformanceManager::recomputeProtectedReasons(
   }
   if (explicitFormDirty_.value(meta.tabId, false)) {
     reasons |= ProtectedReason::FormOrEditState;
+  }
+  if (explicitPermissionPrompt_.value(meta.tabId, false) || explicitPageDialog_.value(meta.tabId, false) ||
+      (record && record->lifecycle && record->lifecycle->hasOpenDialog())) {
+    reasons |= ProtectedReason::PageDialog;
   }
   if (record && record->url.isValid() && isUrlAllowlisted(record->url)) {
     reasons |= ProtectedReason::UserAllowlisted;
@@ -957,7 +1185,7 @@ bool TabPerformanceManager::isTabLifecycleEligible(TabManager::TabId id) const {
 }
 
 bool TabPerformanceManager::isLifecycleEligible(const TabManager::TabRecord *record) const {
-  if (!record || record->kind != TabManager::TabKind::Web || !record->page || !record->view) {
+  if (!record || record->kind != TabManager::TabKind::Web || !record->lifecycle) {
     return false;
   }
   return isSupportedWebScheme(record->url);
@@ -969,65 +1197,53 @@ int TabPerformanceManager::scheduledDeadlineDelayMs() const {
 
 void TabPerformanceManager::scheduleNextDeadlineCheck() {
   if (isTearingDown_ || !deadlineTimer_) return;
+  if (!automaticLifecycleEnabled()) {
+    deadlineTimer_->stop();
+    return;
+  }
+  const int64_t lightSleepDelayMs = backgroundFreezeDelayMs();
+  const int64_t fullDelayMs = fullSleepDelayMs();
+  const auto pressure = memoryMonitor_ ? memoryMonitor_->currentPressureLevel() : MemoryPressureLevel::Normal;
 
   const int64_t now = currentMonotonicMs();
   int64_t minRemainingMs = -1;
+  const auto consider = [&minRemainingMs](int64_t delayMs) {
+    if (delayMs > 0) minRemainingMs = minRemainingMs < 0 ? delayMs : std::min(minRemainingMs, delayMs);
+  };
 
   for (auto it = metadataMap_.cbegin(); it != metadataMap_.cend(); ++it) {
     const TabManager::TabId id = it.key();
     const TabPerformanceMetadata &meta = it.value();
+    if (meta.tabKind != TabManager::TabKind::Web || meta.visible) continue;
 
-    if (meta.tabKind != TabManager::TabKind::Web) continue;
-    if (meta.visible) continue;
-    if (isTabProtected(id)) continue;
-    if (meta.recentlyAudible) continue;
+    const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
+    const bool loading = record && record->lifecycle && record->lifecycle->isLoading();
+    const UnsavedInputCheck check = unsavedInputChecks_.value(id, UnsavedInputCheck::NotChecked);
+    const int64_t elapsed = meta.elapsedSinceLastUseMs(now);
+    // A due stage waits for a pending unsaved-input answer (which
+    // reschedules); a loading page is retried at a bounded interval instead
+    // of spinning the event loop; otherwise it is dispatched at once, to
+    // check the page or to act.
+    const auto stage = [&](int64_t remainingMs, bool ready) {
+      if (remainingMs > 0) consider(remainingMs);
+      else if (check == UnsavedInputCheck::Pending) return;
+      else if (loading) consider(kMinimumDeadlineRetryMs);
+      else if (check == UnsavedInputCheck::NotChecked || ready) consider(kReadyDeadlineDispatchMs);
+    };
 
-    const int64_t elapsed = meta.elapsedSinceLastVisibleMs(now);
-
-    // 1. Check Freeze eligibility deadline
-    if (meta.lifecycleState == QWebEnginePage::LifecycleState::Active &&
-        isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Frozen)) {
-      const int64_t remainingFreeze = backgroundFreezeDelayMs_ - elapsed;
-      if (remainingFreeze <= 0) {
-        // Keep scheduler and executor eligibility aligned. A loading page is
-        // temporarily ineligible; retry at a bounded interval instead of
-        // creating a zero-delay event-loop spin.
-        const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
-        const int retryMs = canFreeze(id)
-            ? kReadyDeadlineDispatchMs
-            : (record && record->page && record->page->isLoading()
-                   ? kMinimumDeadlineRetryMs : -1);
-        if (retryMs > 0)
-          minRemainingMs = minRemainingMs < 0 ? retryMs : std::min<int64_t>(minRemainingMs, retryMs);
-      } else {
-        if (minRemainingMs < 0 || remainingFreeze < minRemainingMs) {
-          minRemainingMs = remainingFreeze;
-        }
-      }
+    // 1. Light sleep (Frozen)
+    if (meta.lifecycleState == TabLifecycleState::Active && !meta.recentlyAudible &&
+        lightSleepBlockingReasons(id) == ProtectedReason::None &&
+        isAggressiveStatePermitted(id, TabLifecycleState::Frozen)) {
+      stage(lightSleepDelayMs - elapsed, canFreeze(id));
     }
 
-    // 2. Check Discard eligibility deadline
-    if (discardEnabled_ &&
-        meta.lifecycleState != QWebEnginePage::LifecycleState::Discarded &&
-        isAggressiveStatePermitted(id, QWebEnginePage::LifecycleState::Discarded)) {
-      const int64_t remainingDiscard = backgroundDiscardDelayMs_ - elapsed;
-      if (remainingDiscard <= 0) {
-        // If memory pressure condition is satisfied, immediate deadline
-        if (discardRequirement_ == DiscardPolicyRequirement::IdleOnly ||
-            (memoryMonitor_ && memoryMonitor_->currentPressureLevel() != MemoryPressureLevel::Normal)) {
-          const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
-          const int retryMs = canDiscard(id)
-              ? kReadyDeadlineDispatchMs
-              : (record && record->page && record->page->isLoading()
-                     ? kMinimumDeadlineRetryMs : -1);
-          if (retryMs > 0)
-            minRemainingMs = minRemainingMs < 0 ? retryMs : std::min<int64_t>(minRemainingMs, retryMs);
-        }
-      } else {
-        if (minRemainingMs < 0 || remainingDiscard < minRemainingMs) {
-          minRemainingMs = remainingDiscard;
-        }
-      }
+    // 2. Full sleep (Discarded)
+    if (discardEnabled_ && meta.lifecycleState != TabLifecycleState::Discarded &&
+        isAggressiveStatePermitted(id, TabLifecycleState::Discarded) &&
+        (discardRequirement_ != DiscardPolicyRequirement::IdleAndMemoryPressure ||
+         pressure != MemoryPressureLevel::Normal)) {
+      stage(fullDelayMs - elapsed, canDiscard(id));
     }
   }
 
@@ -1044,30 +1260,52 @@ void TabPerformanceManager::onDeadlineTimeout() {
   ++deadlineCheckCount_;
 
   const int64_t now = currentMonotonicMs();
+  const int64_t lightSleepDelayMs = backgroundFreezeDelayMs();
+  const int64_t fullDelayMs = fullSleepDelayMs();
   const QList<TabManager::TabId> ids = metadataMap_.keys();
 
-  // Phase 1: Freeze Pass for eligible background active tabs
+  // The automatic policy checks a tab for unsaved input before either stage
+  // (the answer arrives asynchronously and reschedules); canFreeze() and
+  // canDiscard() then see the result as FormOrEditState.
+  // Returns true while the tab must wait (check requested or pending).
+  const auto checkFirst = [this](TabManager::TabId id) {
+    switch (unsavedInputChecks_.value(id, UnsavedInputCheck::NotChecked)) {
+      case UnsavedInputCheck::Checked: return false;
+      case UnsavedInputCheck::Pending: return true;
+      case UnsavedInputCheck::NotChecked: break;
+    }
+    const TabManager::TabRecord *record = tabManager_ ? tabManager_->record(id) : nullptr;
+    if (record && record->lifecycle && record->lifecycle->isLoading()) return true;  // later
+    requestUnsavedInputCheck(id);
+    // A synchronous answer (an engine without script) lets the tab proceed now.
+    return unsavedInputChecks_.value(id) != UnsavedInputCheck::Checked;
+  };
+
+  // Phase 1: light sleep for background tabs past the timeout.
   for (const TabManager::TabId &id : ids) {
     auto it = metadataMap_.constFind(id);
     if (it == metadataMap_.cend()) continue;
-
-    if (it->tabKind == TabManager::TabKind::Web &&
-        !it->visible &&
-        it->lifecycleState == QWebEnginePage::LifecycleState::Active &&
-        it->elapsedSinceLastVisibleMs(now) >= backgroundFreezeDelayMs_) {
-      if (canFreeze(id)) {
-        freezeTab(id);
-      }
-    }
+    if (it->tabKind != TabManager::TabKind::Web || it->visible ||
+        it->lifecycleState != TabLifecycleState::Active ||
+        it->elapsedSinceLastUseMs(now) < lightSleepDelayMs || it->recentlyAudible ||
+        lightSleepBlockingReasons(id) != ProtectedReason::None ||
+        !isAggressiveStatePermitted(id, TabLifecycleState::Frozen))
+      continue;
+    if (checkFirst(id)) continue;
+    if (canFreeze(id)) freezeTab(id);
   }
 
-  // Phase 2: Discard Pass for eligible background tabs (Ordered & Rate Limited)
+  // Phase 2: full sleep (ordered & rate limited).
   if (discardEnabled_) {
     QList<TabManager::TabId> discardCandidates;
     for (const TabManager::TabId &id : ids) {
-      if (canDiscard(id)) {
-        discardCandidates.append(id);
-      }
+      auto it = metadataMap_.constFind(id);
+      if (it == metadataMap_.cend() || it->tabKind != TabManager::TabKind::Web || it->visible ||
+          it->lifecycleState == TabLifecycleState::Discarded || it->elapsedSinceLastUseMs(now) < fullDelayMs ||
+          !isAggressiveStatePermitted(id, TabLifecycleState::Discarded))
+        continue;
+      if (checkFirst(id)) continue;
+      if (canDiscard(id)) discardCandidates.append(id);
     }
 
     if (!discardCandidates.isEmpty()) {
@@ -1078,8 +1316,8 @@ void TabPerformanceManager::onDeadlineTimeout() {
                 [this](const TabManager::TabId &a, const TabManager::TabId &b) {
                   const auto metaA = metadataMap_.value(a);
                   const auto metaB = metadataMap_.value(b);
-                  const bool aFrozen = (metaA.lifecycleState == QWebEnginePage::LifecycleState::Frozen);
-                  const bool bFrozen = (metaB.lifecycleState == QWebEnginePage::LifecycleState::Frozen);
+                  const bool aFrozen = (metaA.lifecycleState == TabLifecycleState::Frozen);
+                  const bool bFrozen = (metaB.lifecycleState == TabLifecycleState::Frozen);
                   if (aFrozen != bFrozen) {
                     return aFrozen; // Frozen tabs have higher discard priority
                   }

@@ -7,6 +7,7 @@
 #include <QNetworkRequest>
 #include <QTimer>
 #include <QUrlQuery>
+#include "i18n/i18n.h"
 
 namespace {
 constexpr int kDefaultTimeoutMs = 12000;
@@ -28,14 +29,14 @@ void GoogleCloudProvider::translateBatch(
 ) {
   if (!isConfigured()) {
     if (callback) {
-      callback({false, {}, TranslationError::NotConfigured, QStringLiteral("Google Cloud API anahtarı girilmemiş.")});
+      callback({false, {}, TranslationError::NotConfigured, I18n::text(QStringLiteral("translate.gcp_key_missing"))});
     }
     return;
   }
 
   if (!nam_) {
     if (callback) {
-      callback({false, {}, TranslationError::ProviderUnavailable, QStringLiteral("Ağ yöneticisi kullanılamıyor.")});
+      callback({false, {}, TranslationError::ProviderUnavailable, I18n::text(QStringLiteral("translate.network_manager_unavailable"))});
     }
     return;
   }
@@ -104,13 +105,13 @@ void GoogleCloudProvider::translateBatch(
 
       if (reply->error() == QNetworkReply::OperationCanceledError || reply->error() == QNetworkReply::TimeoutError) {
         errType = TranslationError::Timeout;
-        errMsg = QStringLiteral("Google Cloud istek zaman aşımına uğradı.");
+        errMsg = I18n::text(QStringLiteral("translate.gcp_timeout"));
       } else if (httpCode == 400 || httpCode == 403) {
         errType = TranslationError::AuthenticationFailed;
-        errMsg = QStringLiteral("Google Cloud API anahtarı geçersiz veya Cloud Translation API etkinleştirilmemiş.");
+        errMsg = I18n::text(QStringLiteral("translate.gcp_key_invalid"));
       } else if (httpCode == 429) {
         errType = TranslationError::RateLimited;
-        errMsg = QStringLiteral("Google Cloud çeviri kotası aşıldı.");
+        errMsg = I18n::text(QStringLiteral("translate.gcp_quota"));
       }
 
       if (callback) {
@@ -125,7 +126,7 @@ void GoogleCloudProvider::translateBatch(
 
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
       if (callback) {
-        callback({false, {}, TranslationError::InvalidResponse, QStringLiteral("Google Cloud yanıtı geçerli JSON formatında değil.")});
+        callback({false, {}, TranslationError::InvalidResponse, I18n::text(QStringLiteral("translate.gcp_invalid_json"))});
       }
       return;
     }
@@ -145,7 +146,7 @@ void GoogleCloudProvider::translateBatch(
 
     if (translatedList.size() != expectedCount) {
       if (callback) {
-        callback({false, {}, TranslationError::InvalidResponse, QStringLiteral("Çeviri sonucu beklenen metin sayısıyla eşleşmedi.")});
+        callback({false, {}, TranslationError::InvalidResponse, I18n::text(QStringLiteral("translate.count_mismatch"))});
       }
       return;
     }

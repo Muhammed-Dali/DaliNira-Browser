@@ -17,6 +17,7 @@
 #include <QtConcurrent>
 
 #include <algorithm>
+#include "i18n/i18n.h"
 
 namespace {
 constexpr qint64 kWebContextTtlMs = 2 * 60 * 1000;     // 2 minutes
@@ -238,7 +239,7 @@ bool SongRecognitionService::startListening(const QString &requestedDeviceId) {
 
   if (!started) {
     if (deviceUiConsumerCount_ == 0) deviceManager_->stopMonitoring();
-    setState(State::Error, QStringLiteral("Ses yakalama başlatılamadı."));
+    setState(State::Error, I18n::text(QStringLiteral("pulse.capture_start_failed")));
     return false;
   }
 
@@ -250,7 +251,7 @@ bool SongRecognitionService::startListening(const QString &requestedDeviceId) {
   recognitionTimer_->setInterval(settings_->requestIntervalSecs() * 1000);
   recognitionTimer_->start();
 
-  setState(State::Listening, QStringLiteral("Dinliyorum"));
+  setState(State::Listening, I18n::text(QStringLiteral("pulse.listening_title")));
   if (qEnvironmentVariableIntValue("DALINIRA_FEATURE_DIAGNOSTICS") == 1) {
     qInfo().noquote() << "[PULSE] capture started";
   }
@@ -267,7 +268,7 @@ void SongRecognitionService::stopListening() {
   captureService_->stop();
   isProcessing_ = false;
   if (deviceUiConsumerCount_ == 0) deviceManager_->stopMonitoring();
-  setState(State::Ready, QStringLiteral("Dinlemeye hazır"));
+  setState(State::Ready, I18n::text(QStringLiteral("pulse.ready_to_listen")));
 }
 
 void SongRecognitionService::setState(State state, const QString &message) {
@@ -311,14 +312,14 @@ void SongRecognitionService::processBufferForRecognition() {
   if (!buffer.hasSignal(0.0015f)) {
     consecutiveNoSignal_++;
     if (consecutiveNoSignal_ >= 3) {
-      setState(State::Listening, QStringLiteral("Sinyal tespit edilemedi (sessiz)"));
+      setState(State::Listening, I18n::text(QStringLiteral("pulse.no_signal")));
     }
     return;
   }
   consecutiveNoSignal_ = 0;
 
   isProcessing_ = true;
-  setState(State::Recognizing, QStringLiteral("Şarkı aranıyor"));
+  setState(State::Recognizing, I18n::text(QStringLiteral("pulse.searching_song")));
 
   const uint64_t sessionId = currentSessionId_;
   // Take snapshot of up to 14 seconds of audio from the clean active buffer
@@ -336,7 +337,7 @@ void SongRecognitionService::processBufferForRecognition() {
 
       if (!fpResult.success) {
         isProcessing_ = false;
-        setState(State::Listening, QStringLiteral("Dinliyorum"));
+        setState(State::Listening, I18n::text(QStringLiteral("pulse.listening_title")));
         return;
       }
 
@@ -405,18 +406,18 @@ void SongRecognitionService::handleShazamResponse(const QByteArray &data, int st
 
   if (statusCode == 429) {
     backoffUntilMs_ = QDateTime::currentMSecsSinceEpoch() + 90000;  // 90s backoff
-    setState(State::Listening, QStringLiteral("İstek sınırı aşıldı, bekleniyor..."));
+    setState(State::Listening, I18n::text(QStringLiteral("pulse.rate_limited_waiting")));
     return;
   }
 
   if (statusCode < 200 || statusCode >= 300) {
-    setState(State::Listening, QStringLiteral("Dinliyorum"));
+    setState(State::Listening, I18n::text(QStringLiteral("pulse.listening_title")));
     return;
   }
 
   const QJsonDocument doc = QJsonDocument::fromJson(data);
   if (!doc.isObject()) {
-    setState(State::Listening, QStringLiteral("Dinliyorum"));
+    setState(State::Listening, I18n::text(QStringLiteral("pulse.listening_title")));
     return;
   }
 
@@ -484,7 +485,7 @@ void SongRecognitionService::handleShazamResponse(const QByteArray &data, int st
       }
       // FIRST emit songFound so UI has card in list before state becomes Found
       emit songFound(result);
-      setState(State::Found, QStringLiteral("Şarkı bulundu: %1 - %2").arg(result.artist, result.title));
+      setState(State::Found, I18n::text(QStringLiteral("pulse.song_found_named")).arg(result.artist, result.title));
 
       if (settings_->autoOpenOnResult()) {
         emit autoOpenRequested(result, settings_->openPlatform());
@@ -494,7 +495,7 @@ void SongRecognitionService::handleShazamResponse(const QByteArray &data, int st
         stopListening();
       }
     } else {
-      setState(State::Listening, QStringLiteral("Aynı şarkı tekrar bulundu (atlandı)"));
+      setState(State::Listening, I18n::text(QStringLiteral("pulse.duplicate_skipped")));
     }
   } else {
     consecutiveNoMatch_++;
@@ -509,7 +510,7 @@ void SongRecognitionService::handleShazamResponse(const QByteArray &data, int st
       SongResult fallbackResult;
       fallbackResult.title = webContextTitle_;
       fallbackResult.artist = webContextArtist_;
-      fallbackResult.genre = QStringLiteral("Web Medya");
+      fallbackResult.genre = I18n::text(QStringLiteral("pulse.source_web_media"));
       fallbackResult.source = SongResult::Source::WebMetadata;
 
       if (fallbackResult.isValid()) {
@@ -529,7 +530,7 @@ void SongRecognitionService::handleShazamResponse(const QByteArray &data, int st
           activeResult_ = fallbackResult;
           emit activeResultChanged(activeResult_, true);
           emit songFound(fallbackResult);
-          setState(State::Found, QStringLiteral("Web Medyadan bulundu: %1 - %2").arg(fallbackResult.artist, fallbackResult.title));
+          setState(State::Found, I18n::text(QStringLiteral("pulse.found_from_web")).arg(fallbackResult.artist, fallbackResult.title));
 
           if (settings_->autoOpenOnResult()) {
             emit autoOpenRequested(fallbackResult, settings_->openPlatform());
@@ -543,7 +544,7 @@ void SongRecognitionService::handleShazamResponse(const QByteArray &data, int st
     }
 
     // Still listening!
-    setState(State::Listening, QStringLiteral("Dinliyorum"));
+    setState(State::Listening, I18n::text(QStringLiteral("pulse.listening_title")));
   }
 }
 

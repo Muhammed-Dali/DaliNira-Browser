@@ -14,6 +14,7 @@
 #include "browser_icons.h"
 #include "browser_profile_service.h"
 #include "tab_window_registry.h"
+#include "i18n/i18n.h"
 
 namespace dalinira::desktop_tabs {
 
@@ -22,13 +23,13 @@ namespace {
 QString formatRelativeTime(const QDateTime &dt) {
   if (!dt.isValid()) return QString();
   const qint64 secs = dt.secsTo(QDateTime::currentDateTimeUtc());
-  if (secs < 60) return QStringLiteral("az önce");
+  if (secs < 60) return I18n::text(QStringLiteral("time.just_now"));
   const qint64 mins = secs / 60;
-  if (mins < 60) return QStringLiteral("%1 dk. önce").arg(mins);
+  if (mins < 60) return I18n::text(QStringLiteral("time.minutes_ago")).arg(mins);
   const qint64 hours = mins / 60;
-  if (hours < 24) return QStringLiteral("%1 sa. önce").arg(hours);
+  if (hours < 24) return I18n::text(QStringLiteral("time.hours_ago")).arg(hours);
   const qint64 days = hours / 24;
-  return QStringLiteral("%1 gün önce").arg(days);
+  return I18n::text(QStringLiteral("time.days_ago")).arg(days);
 }
 
 QString displaySubtitleForUrl(const QUrl &url, const QDateTime &time = {}) {
@@ -100,7 +101,7 @@ void TabSearchPopup::setupUi() {
 
   searchEdit_ = new QLineEdit(searchContainer);
   searchEdit_->setObjectName(QStringLiteral("tabSearchInput"));
-  searchEdit_->setPlaceholderText(QStringLiteral("Sekme Ara"));
+  searchEdit_->setPlaceholderText(I18n::text(QStringLiteral("tabsearch.placeholder")));
   searchEdit_->setStyleSheet(QStringLiteral(
       "#tabSearchInput {"
       "  background: transparent;"
@@ -203,7 +204,7 @@ void TabSearchPopup::populateData() {
       item.window = bw;
       item.tabIndex = i;
       item.tabId = info.id;
-      item.title = info.title.trimmed().isEmpty() ? QStringLiteral("Yeni Sekme") : info.title.trimmed();
+      item.title = info.title.trimmed().isEmpty() ? I18n::text(QStringLiteral("newtab.title")) : info.title.trimmed();
       item.url = info.url;
       item.icon = bw->tabIconForRecord(info);
       const auto optGroup = bw->groupForTab(info.id);
@@ -239,7 +240,7 @@ void TabSearchPopup::populateData() {
 
   // Build Section: Açık Sekmeler
   if (!openItems.empty()) {
-    openSectionHeader_ = new QLabel(QStringLiteral("Açık Sekmeler"), contentContainer_);
+    openSectionHeader_ = new QLabel(I18n::text(QStringLiteral("tabsearch.open_tabs")), contentContainer_);
     openSectionHeader_->setStyleSheet(QStringLiteral(
         "color: #9aa0a6; font-size: 11px; font-weight: 600; padding: 6px 10px 4px 10px; text-transform: uppercase;"
     ));
@@ -313,7 +314,7 @@ void TabSearchPopup::populateData() {
       // Close Button
       auto *closeBtn = new QToolButton(row);
       closeBtn->setText(QStringLiteral("✕"));
-      closeBtn->setToolTip(QStringLiteral("Sekmeyi kapat"));
+      closeBtn->setToolTip(I18n::text(QStringLiteral("tabsearch.close_tab")));
       closeBtn->setFixedSize(22, 22);
       closeBtn->setStyleSheet(QStringLiteral(
           "QToolButton {"
@@ -350,7 +351,7 @@ void TabSearchPopup::populateData() {
 
   // Build Section: Son Kapatılan
   if (!closedItems.empty()) {
-    closedSectionHeader_ = new QLabel(QStringLiteral("Son Kapatılan"), contentContainer_);
+    closedSectionHeader_ = new QLabel(I18n::text(QStringLiteral("tabsearch.recently_closed")), contentContainer_);
     closedSectionHeader_->setStyleSheet(QStringLiteral(
         "color: #9aa0a6; font-size: 11px; font-weight: 600; padding: 10px 10px 4px 10px; text-transform: uppercase;"
     ));

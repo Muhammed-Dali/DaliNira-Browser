@@ -352,7 +352,7 @@ void TabDragController::updateInStripDragAt(
   // Calculate insertion slot
   QVector<TabModelItem> items;
   for (int i = 0; i < strip->count(); ++i) {
-    items.append(TabModelItem{strip->tabId(i), strip->tabText(i), strip->tabIcon(i), strip->isTabPinned(i), strip->isTabAudible(i), strip->isTabLoading(i), strip->tabData(i)});
+    items.append(TabModelItem{strip->tabId(i), strip->tabText(i), strip->tabIcon(i), strip->isTabPinned(i), strip->isTabAudible(i), strip->isTabLoading(i), strip->isTabSleeping(i), strip->tabData(i)});
   }
 
   const int currentIndex = session_.currentTabIndex();
@@ -560,7 +560,7 @@ void TabDragController::attachToTargetAt(
   // Transfer tab content to target window
   QVector<TabModelItem> items;
   for (int i = 0; i < targetStrip->count(); ++i) {
-    items.append(TabModelItem{targetStrip->tabId(i), targetStrip->tabText(i), targetStrip->tabIcon(i), targetStrip->isTabPinned(i), targetStrip->isTabAudible(i), targetStrip->isTabLoading(i), targetStrip->tabData(i)});
+    items.append(TabModelItem{targetStrip->tabId(i), targetStrip->tabText(i), targetStrip->tabIcon(i), targetStrip->isTabPinned(i), targetStrip->isTabAudible(i), targetStrip->isTabLoading(i), targetStrip->isTabSleeping(i), targetStrip->tabData(i)});
   }
   const TabLayoutModel &targetLayoutModel = targetStrip->layoutModel();
   const int draggedWidth = session_.tabItem().isPinned

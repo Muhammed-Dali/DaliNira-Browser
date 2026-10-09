@@ -12,6 +12,11 @@
 #include "browser_window.h"
 #include "desktop_tabs/tab_strip_widget.h"
 #include "core/browser_profile_service.h"
+#include "blocker/dalinira_blocker_service.h"
+#include "blocker/dalinira_blocker_settings.h"
+#include "engine/engine_view.h"
+#include <QMenu>
+#include <QAction>
 
 int main(int argc, char **argv) {
   QApplication app(argc, argv);
@@ -92,6 +97,84 @@ int main(int argc, char **argv) {
     }
   });
   window.showBookmarkContextMenu(QUrl(), QString(), QPoint(100, 100));
+
+  // 8. User-initiated "Open link in new tab" with popup blocking ENABLED
+  assert(profile.blockerService() != nullptr);
+  profile.blockerService()->settings()->setProtectionEnabled(true);
+  profile.blockerService()->settings()->setPopupBlock(true);
+  assert(profile.blockerService()->settings()->popupBlock() == true);
+
+  const int beforeNewTabCount = window.tabCount();
+  const QUrl youtubeVideoUrl(QStringLiteral("https://www.youtube.com/watch?v=dQw4w9WgXcQ"));
+
+  // Trigger user-initiated "Open link in new tab" from context menu
+  QTimer::singleShot(10, [] {
+    if (auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget())) {
+      for (QAction *act : menu->actions()) {
+        if (act->text().contains(QStringLiteral("yeni sekmede"), Qt::CaseInsensitive) ||
+            act->text().contains(QStringLiteral("new tab"), Qt::CaseInsensitive) ||
+            act->text().contains(QStringLiteral("open_link_tab"), Qt::CaseInsensitive)) {
+          act->trigger();
+          break;
+        }
+      }
+      menu->close();
+    }
+  });
+  window.showLinkContextMenu(youtubeVideoUrl, QStringLiteral("Never Gonna Give You Up"), QPoint(200, 200));
+
+  // 1. Exactly one new tab must be created
+  assert(window.tabCount() == beforeNewTabCount + 1);
+  const auto &newTab = window.tabInfo(window.tabCount() - 1);
+  // 2. Correct destination loaded
+  assert(newTab.url == youtubeVideoUrl);
+  // 3. Browser alive, view and page non-null
+  assert(newTab.view != nullptr);
+  assert(newTab.view->page() != nullptr);
+  // 4. Blocker remains registered and active for child tab
+  assert(profile.blockerService()->activeTabId() == reinterpret_cast<quintptr>(newTab.view.data()));
+
+  // 9. Blocker popup decision checks
+  // Legitimate user / target=_blank navigation is allowed
+  assert(profile.blockerService()->decidePopup(youtubeVideoUrl, QUrl(QStringLiteral("https://www.youtube.com/")), 0x123).action == DaliNiraBlockerAction::Allow);
+
+  // 10. Ordinary browser new tab
+  const int beforeOrdinaryNewTab = window.tabCount();
+  window.addNewTab(QUrl(QStringLiteral("dalinira://newtab/")));
+  assert(window.tabCount() == beforeOrdinaryNewTab + 1);
+  assert(window.tabInfo(window.tabCount() - 1).url == QUrl(QStringLiteral("dalinira://newtab/")));
+
+  // 11. EngineView context menu signal dispatch (WebKit / Chromium abstraction)
+  {
+    bool linkSignalReceived = false;
+    bool selectionSignalReceived = false;
+    bool pageSignalReceived = false;
+    QUrl receivedUrl;
+
+    dalinira::engine::EngineView dummyEngineView;
+    QObject::connect(&dummyEngineView, &dalinira::engine::EngineView::linkContextMenuRequested,
+                     [&linkSignalReceived, &receivedUrl](const QUrl &url, const QString &, const QPoint &) {
+      linkSignalReceived = true;
+      receivedUrl = url;
+    });
+    QObject::connect(&dummyEngineView, &dalinira::engine::EngineView::selectionContextMenuRequested,
+                     [&selectionSignalReceived](const QString &, const QPoint &) {
+      selectionSignalReceived = true;
+    });
+    QObject::connect(&dummyEngineView, &dalinira::engine::EngineView::pageContextMenuRequested,
+                     [&pageSignalReceived](const QPoint &) {
+      pageSignalReceived = true;
+    });
+
+    emit dummyEngineView.linkContextMenuRequested(youtubeVideoUrl, QStringLiteral("Video"), QPoint(100, 100));
+    assert(linkSignalReceived && receivedUrl == youtubeVideoUrl);
+
+    emit dummyEngineView.selectionContextMenuRequested(QStringLiteral("text"), QPoint(100, 100));
+    assert(selectionSignalReceived);
+
+    emit dummyEngineView.pageContextMenuRequested(QPoint(100, 100));
+    assert(pageSignalReceived);
+  }
 
   std::cout << "All context menu and tab/bookmark management tests passed successfully!\n";
   return 0;

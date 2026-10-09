@@ -2,6 +2,8 @@
 #include "tab_animation_metrics.h"
 #include "tab_appearance.h"
 #include "tab_drag_controller.h"
+#include "window_drag_geometry.h"
+#include "core/engine_ui_profile.h"
 
 #include <QApplication>
 #include <QContextMenuEvent>
@@ -16,6 +18,7 @@
 #include <QRegion>
 #include <QResizeEvent>
 #include <QSettings>
+#include <QScreen>
 #include <QWindow>
 #include <QWheelEvent>
 #include <algorithm>
@@ -61,7 +64,7 @@ TabStripWidget::~TabStripWidget() {
 }
 
 void TabStripWidget::loadSettings() {
-  const QString styleValue = QSettings().value(
+  const QString styleValue = dalinira::ui_profile::getVisualValue(
       QStringLiteral("browser/tabStyle"),
       tabStylePreferenceValue(TabStyle::DaliNiraConnected)).toString();
   setTabStyle(tabStyleFromPreference(styleValue));
@@ -108,7 +111,12 @@ int TabStripWidget::addTab(const QIcon &icon, const QString &title) {
 
 void TabStripWidget::insertTab(int index, uint64_t tabId, const QString &title, const QIcon &icon, bool pinned) {
   const int safeIndex = std::clamp(index, 0, static_cast<int>(items_.size()));
-  items_.insert(safeIndex, TabModelItem{tabId, title, icon, pinned, false, false, {}});
+  TabModelItem item;
+  item.tabId = tabId;
+  item.title = title;
+  item.icon = icon;
+  item.isPinned = pinned;
+  items_.insert(safeIndex, item);
 
   if (hoveredIndex_ >= safeIndex) ++hoveredIndex_;
 
@@ -241,6 +249,17 @@ void TabStripWidget::setTabAudible(int index, bool audible) {
     items_[index].isAudible = audible;
     update();
   }
+}
+
+void TabStripWidget::setTabSleeping(int index, bool sleeping) {
+  if (index >= 0 && index < items_.size() && items_[index].isSleeping != sleeping) {
+    items_[index].isSleeping = sleeping;
+    update();
+  }
+}
+
+bool TabStripWidget::isTabSleeping(int index) const {
+  return index >= 0 && index < items_.size() && items_[index].isSleeping;
 }
 
 void TabStripWidget::setTabLoading(int index, bool loading) {
@@ -760,7 +779,24 @@ void TabStripWidget::paintEvent(QPaintEvent *) {
       const QPixmap favicon = g.icon.pixmap(
           favRect.size(), dpr, QIcon::Normal,
           g.isActive ? QIcon::On : QIcon::Off);
-      painter.drawPixmap(favRect, favicon);
+      if (g.isSleeping && !g.isActive) {
+        painter.save();
+        painter.setOpacity(0.45);
+        painter.drawPixmap(favRect, favicon);
+        painter.restore();
+        // Moon badge at the favicon's lower right corner.
+        const QRectF badge(favRect.right() - 6.5, favRect.bottom() - 6.5, 8.0, 8.0);
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        QPainterPath moon;
+        moon.addEllipse(badge);
+        QPainterPath bite;
+        bite.addEllipse(badge.translated(2.6, -1.6));
+        painter.fillPath(moon.subtracted(bite), QColor(0xc9, 0xd6, 0xe8));
+        painter.restore();
+      } else {
+        painter.drawPixmap(favRect, favicon);
+      }
     }
 
     // 4. Audio Indicator
@@ -775,6 +811,7 @@ void TabStripWidget::paintEvent(QPaintEvent *) {
     // 5. Title Text
     if (!txtRect.isEmpty() && !g.title.isEmpty() && txtRect.width() > 0) {
       QColor textColor = appearance.inactiveText;
+      if (g.isSleeping && !g.isActive) textColor.setAlphaF(textColor.alphaF() * 0.6);
       if (g.isActive) {
         textColor = appearance.activeText;
       } else if (g.hoverOpacity > 0.0) {
@@ -929,6 +966,8 @@ void TabStripWidget::enterEvent(QEnterEvent *event) {
 
 void TabStripWidget::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
+    pendingWindowMovePress_.reset();
+    manualWindowMoveOffset_.reset();
     cancelHover();
     const QPoint localPos = event->position().toPoint();
     pressGlobalPos_ = event->globalPosition().toPoint();
@@ -977,7 +1016,9 @@ void TabStripWidget::mousePressEvent(QMouseEvent *event) {
     // Empty strip clicked -> initiate window move (Chrome titlebar drag)
     pressedIndex_ = -1;
     if (window() && window()->windowHandle()) {
-      window()->windowHandle()->startSystemMove();
+      // A click is not a drag. Wait for real pointer movement before asking
+      // the window system to move this window, preserving clicks and double-clicks.
+      pendingWindowMovePress_ = pressGlobalPos_;
       event->accept();
       return;
     }
@@ -989,6 +1030,62 @@ void TabStripWidget::mousePressEvent(QMouseEvent *event) {
 void TabStripWidget::mouseMoveEvent(QMouseEvent *event) {
   const QPoint localPos = event->position().toPoint();
   const QPoint globalPos = event->globalPosition().toPoint();
+
+  if (manualWindowMoveOffset_) {
+    if (event->buttons() & Qt::LeftButton) {
+      window()->move(globalPos - *manualWindowMoveOffset_);
+      event->accept();
+      return;
+    }
+    manualWindowMoveOffset_.reset();
+    if (mouseGrabber() == this) releaseMouse();
+  }
+
+  if (pendingWindowMovePress_) {
+    if (!(event->buttons() & Qt::LeftButton)) {
+      pendingWindowMovePress_.reset();
+    } else if ((globalPos - *pendingWindowMovePress_).manhattanLength() >= QApplication::startDragDistance()) {
+      const QPoint pressed = *pendingWindowMovePress_;
+      pendingWindowMovePress_.reset();
+      QWidget *top = window();
+      if (QGuiApplication::platformName() == QLatin1String("xcb")) {
+        if (top->isMaximized()) {
+          // On X11, restore under the grabbed point first so the native move
+          // cannot snap a maximized window's cursor to its upper-left corner.
+          const QRect maximized = top->geometry();
+          const QRect normal = top->normalGeometry();
+          QSize restored = top->property("daliniraRestoredSize").toSize();
+          if (restored.width() < 600 || restored.height() < 400) restored = normal.size();
+          QScreen *screen = QGuiApplication::screenAt(globalPos);
+          if (!screen) screen = top->screen();
+          const QSize available = screen ? screen->availableGeometry().size() : QSize(1200, 800);
+          if (restored.width() < 600 || restored.height() < 400)
+            restored = QSize(qMin(1200, available.width()), qMin(800, available.height()));
+          restored = restored.boundedTo(available);
+          const QRect target = restoredWindowGeometryForDrag(maximized, restored, pressed, globalPos);
+          // Qt/X11's native move can reset the pointer to the restored window's
+          // origin. Keep the grabbed titlebar point under the pointer ourselves.
+          manualWindowMoveOffset_ = globalPos - target.topLeft();
+          top->showNormal();
+          top->setGeometry(target);
+          grabMouse();
+          event->accept();
+          return;
+        } else {
+          // In normal (restored) mode on X11, native startSystemMove() also snaps
+          // the pointer to the window origin (0, 0). Keep the grabbed titlebar point
+          // under the pointer ourselves without jumping.
+          manualWindowMoveOffset_ = globalPos - top->pos();
+          grabMouse();
+          event->accept();
+          return;
+        }
+      }
+      if (top->windowHandle()) top->windowHandle()->startSystemMove();
+      event->accept();
+      return;
+    }
+  }
 
   if (TabDragController::instance().isActive()) {
     TabDragController::instance().handleMouseMove(globalPos);
@@ -1083,6 +1180,13 @@ void TabStripWidget::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void TabStripWidget::mouseReleaseEvent(QMouseEvent *event) {
+  pendingWindowMovePress_.reset();
+  if (manualWindowMoveOffset_) {
+    manualWindowMoveOffset_.reset();
+    if (mouseGrabber() == this) releaseMouse();
+    event->accept();
+    return;
+  }
   unsetCursor();
   if (event->button() == Qt::LeftButton) {
     if (TabDragController::instance().isActive()) {

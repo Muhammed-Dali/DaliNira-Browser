@@ -7,6 +7,7 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QVBoxLayout>
+#include "i18n/i18n.h"
 
 namespace dalinira::desktop_tabs {
 
@@ -78,7 +79,7 @@ void TabGroupLauncherPopup::setupUi() {
   iconLabel->setFixedSize(18, 18);
   rowLayout->addWidget(iconLabel, 0, Qt::AlignVCenter);
 
-  auto *titleLabel = new QLabel(QStringLiteral("Yeni sekme grubu oluştur"), rowBtn);
+  auto *titleLabel = new QLabel(I18n::text(QStringLiteral("toolbar.new_tab_group")), rowBtn);
   titleLabel->setStyleSheet(QStringLiteral("color: #f1f3f4; font-size: 13px; font-weight: 500;"));
   rowLayout->addWidget(titleLabel, 1, Qt::AlignVCenter);
 

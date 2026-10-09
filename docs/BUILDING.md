@@ -54,6 +54,9 @@ sudo pacman -S --needed base-devel cmake ninja git nodejs pkgconf openssl libpsl
 # Qt 6 libraries
 sudo pacman -S --needed qt6-base qt6-webengine qt6-svg qt6-imageformats
 
+# WebKitGTK engine and its media runtime (see docs/webkit-media-runtime.md)
+sudo pacman -S --needed webkit2gtk-4.1 gst-plugins-base gst-plugins-good gst-plugins-bad gst-libav
+
 # Optional security and media packages
 sudo pacman -S --needed libsecret ffmpeg yt-dlp pipewire-pulse
 ```
@@ -67,6 +70,10 @@ sudo apt install -y build-essential cmake ninja-build git nodejs pkg-config libs
 # Qt 6 libraries
 sudo apt install -y qt6-base-dev qt6-webengine-dev libqt6svg6-dev libqt6webenginewidgets6
 
+# WebKitGTK engine and its media runtime (see docs/webkit-media-runtime.md)
+sudo apt install -y libwebkit2gtk-4.1-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
+
 # Optional security and media packages
 sudo apt install -y libsecret-1-dev ffmpeg yt-dlp pulseaudio
 ```
@@ -79,9 +86,16 @@ sudo dnf install -y gcc-c++ cmake ninja-build git nodejs pkgconf-pkg-config open
 # Qt 6 libraries
 sudo dnf install -y qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtsvg-devel
 
+# WebKitGTK engine and its media runtime (see docs/webkit-media-runtime.md)
+sudo dnf install -y webkit2gtk4.1-devel gstreamer1-devel gstreamer1-plugins-good gstreamer1-plugins-bad-free \
+  gstreamer1-plugin-libav
+
 # Optional security and media packages
 sudo dnf install -y libsecret-devel ffmpeg-free yt-dlp
 ```
+
+Without WebKitGTK the build continues with the Chromium engine only;
+`-DDALINIRA_ENABLE_WEBKIT=OFF` disables the WebKitGTK engine explicitly.
 
 ---
 

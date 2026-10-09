@@ -1,6 +1,7 @@
 #include "web_audio_effects_controller.h"
 
 #include "audio_platform_policy.h"
+#include "engine/engine_view.h"
 
 #include <QFile>
 #include <QDir>
@@ -11,21 +12,30 @@
 #include <QJsonObject>
 #include <QSettings>
 #include <QSharedPointer>
+#include <QStringDecoder>
 #include <QStringList>
 #include <QWebEnginePage>
 #include <QWebEngineScript>
 #include <QWebEngineScriptCollection>
+#include <QStandardPaths>
 #include <QWebEngineView>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include "i18n/i18n.h"
 
 namespace {
-bool isAudioEligibleView(const QWebEngineView *view, const QUrl &url) {
-  return dalinira::audio::isSupportedAudioPlatform(url)
-      || (view && view->property("dalinira-trusted-local-media").toBool()
-          && url.isLocalFile());
+// Any tab page (QWebEngineView or EngineView); the local player marks itself.
+bool isAudioEligibleView(const QObject *view, const QUrl &url) {
+  if (dalinira::audio::isSupportedAudioPlatform(url)) return true;
+  if (!url.isLocalFile()) return false;
+  if (view && view->property("dalinira-trusted-local-media").toBool()) return true;
+  const QString path = url.toLocalFile();
+  const QString playerDir = QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
+                                .filePath(QStringLiteral("media-player"));
+  if (!playerDir.isEmpty() && path.startsWith(playerDir)) return true;
+  return false;
 }
 
 constexpr double kMinPreampDb = -24.0;
@@ -252,6 +262,12 @@ QString resolveDaliModulePath(const QString &relativeSubPath) {
 WebAudioEffectsController::WebAudioEffectsController(QObject *parent, bool persistenceEnabled)
     : QObject(parent), persistenceEnabled_(persistenceEnabled) {
   qRegisterMetaType<WebAudioEffectsController::Status>();
+  modules_[OutputModule].relativePath = DALINIRA_WEB_OUTPUT_DALI_MODULE_RELATIVE_PATH;
+  modules_[EqModule].relativePath = DALINIRA_WEB_EQ32_DALI_MODULE_RELATIVE_PATH;
+  modules_[CompressorModule].relativePath = DALINIRA_WEB_COMPRESSOR_DALI_MODULE_RELATIVE_PATH;
+  modules_[LimiterModule].relativePath = DALINIRA_WEB_LIMITER_DALI_MODULE_RELATIVE_PATH;
+  modules_[BassEnhancerModule].relativePath = DALINIRA_WEB_BASS_ENHANCER_DALI_MODULE_RELATIVE_PATH;
+  modules_[AutoGainModule].relativePath = DALINIRA_WEB_AUTO_GAIN_DALI_MODULE_RELATIVE_PATH;
   persistTimer_.setSingleShot(true);
   persistTimer_.setInterval(180);
   connect(&persistTimer_, &QTimer::timeout, this, &WebAudioEffectsController::persist);
@@ -371,7 +387,8 @@ WebAudioEffectsController::WebAudioEffectsController(QObject *parent, bool persi
                                    QStringLiteral("balanced")).toString().trimmed().toLower();
   if (!autoGainPresetDefinition(autoGainPreset_)) autoGainPreset_ = QStringLiteral("balanced");
   status_.enabled = enabled_;
-  status_.detail = QStringLiteral("DALI Web Audio grafiği web sayfasında sesli medya bekliyor.");
+  status_.detail = I18n::text(QStringLiteral("audio.status_waiting_media"));
+  status_.detailKey = QStringLiteral("audio.status_waiting_media");
 }
 
 WebAudioEffectsController::~WebAudioEffectsController() {
@@ -452,44 +469,125 @@ void WebAudioEffectsController::setPanelVisible(bool visible, const QString &act
 
 void WebAudioEffectsController::registerWebView(QWebEngineView *view, const QUrl &initialUrl) {
   if (!view) return;
-  const auto known = std::find_if(views_.cbegin(), views_.cend(), [view](const QPointer<QWebEngineView> &item) { return item == view; });
-  if (known != views_.cend()) return;
-  views_.push_back(view);
-  if (qEnvironmentVariableIntValue("DALINIRA_FEATURE_DIAGNOSTICS") == 1) {
-    qInfo().noquote() << "[AUDIO] page registered:" << view;
-  }
-  updateAudioPolicyForView(view, initialUrl.isEmpty() ? view->url() : initialUrl);
-  connect(view, &QObject::destroyed, this, [this, view] {
-    bootstrapViews_.remove(view);
-    views_.erase(std::remove_if(views_.begin(), views_.end(), [](const QPointer<QWebEngineView> &item) { return item.isNull(); }), views_.end());
-  });
-  connect(view, &QWebEngineView::loadFinished, this, [this, view](bool ok) {
-    if (!ok || !enabled_) return;
-    // The document-ready bootstrap should already have attached media; this only refreshes live state.
-    applyToView(view);
-  });
-  connect(view, &QWebEngineView::urlChanged, this,
-          [this, view](const QUrl &url) { updateAudioPolicyForView(view, url); });
+  Page page;
+  page.object = view;
+  page.web = view;
+  registerPage(page, initialUrl);
 }
 
-void WebAudioEffectsController::unregisterWebView(QWebEngineView *view) {
+void WebAudioEffectsController::registerEngineView(dalinira::engine::EngineView *view, const QUrl &initialUrl) {
   if (!view) return;
-  disconnect(view, nullptr, this, nullptr);
-  bootstrapViews_.remove(view);
-  views_.erase(std::remove_if(views_.begin(), views_.end(), [view](const QPointer<QWebEngineView> &item) {
-    return item.isNull() || item == view;
-  }), views_.end());
+  Page page;
+  page.object = view;
+  page.engine = view;
+  registerPage(page, initialUrl);
+}
+
+void WebAudioEffectsController::registerPage(const Page &page, const QUrl &initialUrl) {
+  QObject *object = page.object;
+  if (!object || findPage(object)) return;
+  pages_.push_back(page);
+  if (qEnvironmentVariableIntValue("DALINIRA_FEATURE_DIAGNOSTICS") == 1) {
+    qInfo().noquote() << "[AUDIO] page registered:" << object << (page.web ? "chromium" : "engine-view");
+  }
+  updateAudioPolicyForPage(page, initialUrl.isEmpty() ? pageUrl(page) : initialUrl);
+  connect(object, &QObject::destroyed, this, [this, object] {
+    bootstrapPages_.remove(object);
+    prunePages();
+  });
+  const auto onLoadFinished = [this, object](bool ok) {
+    if (!ok || !enabled_) return;
+    // The document bootstrap should already have attached media; this only refreshes live state.
+    if (const Page *known = findPage(object)) applyToPage(*known);
+  };
+  const auto onUrlChanged = [this, object](const QUrl &url) {
+    if (const Page *known = findPage(object)) updateAudioPolicyForPage(*known, url);
+  };
+  // A page that starts producing sound gets its parameters again from the
+  // browser: that script may start the page's AudioContext (WebKit starts a
+  // context only on resume(), and only within a user gesture or a script of
+  // the embedder), so media that is already audible can run through the
+  // effects. No polling: the engines report audibility themselves.
+  const auto onAudibleChanged = [this, object](bool audible) {
+    if (qEnvironmentVariableIsSet("DALINIRA_AUDIO_EFFECTS_TRACE")) {
+      qInfo().noquote() << "[DaliNira DSP] page audible:" << audible << object;
+    }
+    if (!audible || !enabled_) return;
+    if (const Page *known = findPage(object)) applyToPage(*known);
+  };
+  if (page.web) {
+    connect(page.web, &QWebEngineView::loadFinished, this, onLoadFinished);
+    connect(page.web, &QWebEngineView::urlChanged, this, onUrlChanged);
+    if (page.web->page()) connect(page.web->page(), &QWebEnginePage::recentlyAudibleChanged, this, onAudibleChanged);
+  } else if (page.engine) {
+    connect(page.engine, &dalinira::engine::EngineView::loadFinished, this, onLoadFinished);
+    connect(page.engine, &dalinira::engine::EngineView::urlChanged, this, onUrlChanged);
+    connect(page.engine, &dalinira::engine::EngineView::audibleChanged, this, onAudibleChanged);
+  }
+}
+
+void WebAudioEffectsController::unregisterWebView(QWebEngineView *view) { unregisterPage(view); }
+
+void WebAudioEffectsController::unregisterEngineView(dalinira::engine::EngineView *view) { unregisterPage(view); }
+
+void WebAudioEffectsController::unregisterPage(const QObject *object) {
+  if (!object) return;
+  disconnect(object, nullptr, this, nullptr);
+  if (const Page *page = findPage(object); page && page->web && page->web->page())
+    disconnect(page->web->page(), nullptr, this, nullptr);
+  bootstrapPages_.remove(object);
+  pages_.erase(std::remove_if(pages_.begin(), pages_.end(), [object](const Page &page) {
+    return page.object.isNull() || page.object == object;
+  }), pages_.end());
+}
+
+const WebAudioEffectsController::Page *WebAudioEffectsController::findPage(const QObject *object) const {
+  for (const Page &page : pages_)
+    if (page.object && page.object == object) return &page;
+  return nullptr;
+}
+
+void WebAudioEffectsController::prunePages() {
+  pages_.erase(std::remove_if(pages_.begin(), pages_.end(), [](const Page &page) { return page.object.isNull(); }),
+               pages_.end());
+}
+
+QUrl WebAudioEffectsController::pageUrl(const Page &page) {
+  if (page.web) return page.web->url();
+  if (page.engine) return page.engine->url();
+  return {};
+}
+
+bool WebAudioEffectsController::pageAlive(const Page &page) {
+  return (page.web && page.web->page()) || page.engine;
+}
+
+void WebAudioEffectsController::runInPage(const Page &page, const QString &script,
+                                          std::function<void(const QVariant &)> callback) {
+  if (!pageAlive(page) || script.isEmpty()) return;
+  ++diagnostics_.scriptsSent;
+  diagnostics_.scriptBytesSent += quint64(script.size());
+  if (page.web) {
+    if (callback) page.web->page()->runJavaScript(script, QWebEngineScript::MainWorld, std::move(callback));
+    else page.web->page()->runJavaScript(script, QWebEngineScript::MainWorld);
+  } else {
+    page.engine->runJavaScript(script, std::move(callback));
+  }
+}
+
+int WebAudioEffectsController::registeredPageCount() const {
+  return static_cast<int>(std::count_if(pages_.cbegin(), pages_.cend(), [](const Page &page) { return !page.object.isNull(); }));
 }
 
 int WebAudioEffectsController::audioEnabledWebViewCount() const {
-  return static_cast<int>(std::count_if(views_.cbegin(), views_.cend(), [](const QPointer<QWebEngineView> &view) {
-    return view && isAudioEligibleView(view, view->url());
+  return static_cast<int>(std::count_if(pages_.cbegin(), pages_.cend(), [](const Page &page) {
+    return page.object && isAudioEligibleView(page.object, pageUrl(page));
   }));
 }
 
 int WebAudioEffectsController::activeGraphViewCount() const {
-  return static_cast<int>(std::count_if(views_.cbegin(), views_.cend(), [](const QPointer<QWebEngineView> &view) {
-    return view && view->property("dalinira-audio-graph-active").toBool();
+  return static_cast<int>(std::count_if(pages_.cbegin(), pages_.cend(), [](const Page &page) {
+    return page.object && page.object->property("dalinira-audio-graph-active").toBool();
   }));
 }
 
@@ -498,30 +596,29 @@ void WebAudioEffectsController::setEnabled(bool enabled) {
   enabled_ = enabled;
   const quint64 generation = ++masterEnableGeneration_;
   persist();
+  // Pages only carry the runtime while effects are on: install (or remove) the
+  // document bootstrap for their future documents.
+  prunePages();
+  for (const Page &page : std::as_const(pages_)) {
+    updateAudioPolicyForPage(page, pageUrl(page));
+    if (page.engine) page.engine->refreshDocumentScripts();
+  }
   if (enabled_) {
-    // Do not rely on one JavaScript turn for a busy streaming page.  YouTube
-    // and similar players may replace their media element while the switch is
-    // being clicked.  Each pass keeps the existing MediaElementSource alive,
-    // finds a replacement if there is one, and reapplies the retained state.
-    const auto reapplyActiveGraphs = [this, generation] {
-      if (!enabled_ || generation != masterEnableGeneration_) return;
-      forceFullReapply_ = true;
-      pendingEqualizerBands_.clear();
-      for (const QPointer<QWebEngineView> &view : views_) {
-        if (!view || !view->page()) continue;
-        // This is safe for an already connected graph: the injected code
-        // only rescans and updates AudioParams; it does not disconnect audio.
-        bootstrapView(view);
-      }
-      applyToAllWebViews();
-    };
+    // Deliver the runtime to the open documents once. YouTube and similar
+    // players may replace their media element while the switch is being
+    // clicked, so a short recovery window rescans (a small parameter script
+    // that only re-delivers the runtime to a page that lost it).
     forceFullReapply_ = true;
     pendingEqualizerBands_.clear();
-    reapplyActiveGraphs();
-    // A short recovery window covers the player hand-off without polling
-    // during ordinary equalizer changes or disturbing audio playback.
+    for (const Page &page : std::as_const(pages_)) bootstrapPage(page);
+    applyToAllWebViews();
     for (const int delayMs : {90, 300, 850}) {
-      QTimer::singleShot(delayMs, this, reapplyActiveGraphs);
+      QTimer::singleShot(delayMs, this, [this, generation] {
+        if (!enabled_ || generation != masterEnableGeneration_) return;
+        forceFullReapply_ = true;
+        pendingEqualizerBands_.clear();
+        applyToAllWebViews();
+      });
     }
   }
   else {
@@ -531,7 +628,7 @@ void WebAudioEffectsController::setEnabled(bool enabled) {
   }
   if (qEnvironmentVariableIsSet("DALINIRA_AUDIO_EFFECTS_TRACE")) {
     qInfo().noquote() << "[DaliNira DSP] master requested:" << (enabled_ ? "enabled" : "disabled")
-                      << "views=" << views_.size() << "bass=" << bassDb_ << "mid=" << midDb_;
+                      << "pages=" << pages_.size() << "bass=" << bassDb_ << "mid=" << midDb_;
   }
   emit stateChanged();
 }
@@ -1122,15 +1219,15 @@ void WebAudioEffectsController::resetAutoGain() {
 }
 
 void WebAudioEffectsController::applyToAllWebViews() {
-  views_.erase(std::remove_if(views_.begin(), views_.end(), [](const QPointer<QWebEngineView> &item) { return item.isNull(); }), views_.end());
+  prunePages();
   if (enabled_ && pendingEqualizerBands_.size() == 1) {
     const int index = *pendingEqualizerBands_.cbegin();
     pendingEqualizerBands_.clear();
-    for (const QPointer<QWebEngineView> &view : views_) applyEqualizerBandToView(view, index);
+    for (const Page &page : std::as_const(pages_)) applyEqualizerBandToPage(page, index);
     return;
   }
   pendingEqualizerBands_.clear();
-  for (const QPointer<QWebEngineView> &view : views_) applyToView(view);
+  for (const Page &page : std::as_const(pages_)) applyToPage(page);
   forceFullReapply_ = false;
 }
 
@@ -1191,58 +1288,59 @@ void WebAudioEffectsController::scheduleApply() {
   applyTimer_.start();
 }
 
-QString WebAudioEffectsController::daliModuleSource() const {
-  if (!daliModuleSource_.isEmpty()) return daliModuleSource_;
-  const QString path = resolveDaliModulePath(QStringLiteral(DALINIRA_WEB_OUTPUT_DALI_MODULE_RELATIVE_PATH));
-  QFile file(path);
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-  daliModuleSource_ = QString::fromUtf8(file.readAll());
-  return daliModuleSource_;
+bool WebAudioEffectsController::validateDaliModule(const QByteArray &bytes, QString *error) {
+  const auto fail = [error](const char *reason) {
+    if (error) *error = QString::fromLatin1(reason);
+    return false;
+  };
+  if (bytes.isEmpty()) return fail("empty module");
+  if (bytes.size() > kMaxDaliModuleBytes) return fail("module is unreasonably large");
+  if (bytes.contains('\0')) return fail("binary data in module");
+  QStringDecoder decoder(QStringDecoder::Utf8, QStringDecoder::Flag::Stateless);
+  const QString text = decoder.decode(bytes);
+  if (decoder.hasError()) return fail("module is not valid UTF-8");
+  // The compiler's signature and version: the runtime parses what this
+  // compiler version emits (see browser/scripts/compile-dali-preset.js).
+  const QString head = text.left(512);
+  if (!head.contains(QStringLiteral("// Generated by dali-lang compiler"))) return fail("not a DALI compiled module");
+  if (!head.contains(QStringLiteral("// Generated by dali-lang compiler (v0)"))) return fail("unsupported DALI compiler version");
+  // A module ends with its export table; a cut file would break the whole
+  // runtime script it is embedded in.
+  const QString trimmed = text.trimmed();
+  if (!trimmed.contains(QStringLiteral("module.exports = {")) || !trimmed.contains(QStringLiteral("buildGraph:"))
+      || !trimmed.endsWith(QStringLiteral("};"))) {
+    return fail("truncated or malformed module (no export table)");
+  }
+  if (error) error->clear();
+  return true;
 }
 
-QString WebAudioEffectsController::daliEqModuleSource() const {
-  if (!daliEqModuleSource_.isEmpty()) return daliEqModuleSource_;
-  const QString path = resolveDaliModulePath(QStringLiteral(DALINIRA_WEB_EQ32_DALI_MODULE_RELATIVE_PATH));
+QString WebAudioEffectsController::moduleSource(ModuleIndex index) const {
+  DaliModule &module = modules_[index];
+  if (module.loaded) return module.source;
+  // Read once per process: a missing or invalid module is not retried at
+  // every page event, and never reaches a page.
+  module.loaded = true;
+  ++diagnostics_.moduleLoads;
+  const QString path = resolveDaliModulePath(QString::fromLatin1(module.relativePath));
   QFile file(path);
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-  daliEqModuleSource_ = QString::fromUtf8(file.readAll());
-  return daliEqModuleSource_;
-}
-
-QString WebAudioEffectsController::daliCompressorModuleSource() const {
-  if (!daliCompressorModuleSource_.isEmpty()) return daliCompressorModuleSource_;
-  const QString path = resolveDaliModulePath(QStringLiteral(DALINIRA_WEB_COMPRESSOR_DALI_MODULE_RELATIVE_PATH));
-  QFile file(path);
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-  daliCompressorModuleSource_ = QString::fromUtf8(file.readAll());
-  return daliCompressorModuleSource_;
-}
-
-QString WebAudioEffectsController::daliLimiterModuleSource() const {
-  if (!daliLimiterModuleSource_.isEmpty()) return daliLimiterModuleSource_;
-  const QString path = resolveDaliModulePath(QStringLiteral(DALINIRA_WEB_LIMITER_DALI_MODULE_RELATIVE_PATH));
-  QFile file(path);
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-  daliLimiterModuleSource_ = QString::fromUtf8(file.readAll());
-  return daliLimiterModuleSource_;
-}
-
-QString WebAudioEffectsController::daliBassEnhancerModuleSource() const {
-  if (!daliBassEnhancerModuleSource_.isEmpty()) return daliBassEnhancerModuleSource_;
-  const QString path = resolveDaliModulePath(QStringLiteral(DALINIRA_WEB_BASS_ENHANCER_DALI_MODULE_RELATIVE_PATH));
-  QFile file(path);
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-  daliBassEnhancerModuleSource_ = QString::fromUtf8(file.readAll());
-  return daliBassEnhancerModuleSource_;
-}
-
-QString WebAudioEffectsController::daliAutoGainModuleSource() const {
-  if (!daliAutoGainModuleSource_.isEmpty()) return daliAutoGainModuleSource_;
-  const QString path = resolveDaliModulePath(QStringLiteral(DALINIRA_WEB_AUTO_GAIN_DALI_MODULE_RELATIVE_PATH));
-  QFile file(path);
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-  daliAutoGainModuleSource_ = QString::fromUtf8(file.readAll());
-  return daliAutoGainModuleSource_;
+  if (!file.open(QIODevice::ReadOnly) || file.size() > kMaxDaliModuleBytes) {
+    ++diagnostics_.moduleRejects;
+    qWarning().noquote() << "[DaliNira DSP] DALI module unavailable:" << path;
+    return {};
+  }
+  const QByteArray bytes = file.read(kMaxDaliModuleBytes + 1);
+  QString reason;
+  if (!validateDaliModule(bytes, &reason)) {
+    ++diagnostics_.moduleRejects;
+    qWarning().noquote() << "[DaliNira DSP] DALI module rejected:" << path << "-" << reason;
+    return {};
+  }
+  module.source = QString::fromUtf8(bytes);
+  if (qEnvironmentVariableIntValue("DALINIRA_FEATURE_DIAGNOSTICS") == 1) {
+    qInfo().noquote() << "[AUDIO] DALI module loaded:" << module.relativePath << module.source.size() << "chars";
+  }
+  return module.source;
 }
 
 QString WebAudioEffectsController::parameterUpdateScript() const {
@@ -1398,6 +1496,16 @@ QString WebAudioEffectsController::equalizerBandUpdateScript(int index) const {
 }
 
 QString WebAudioEffectsController::injectionScript() const {
+  const QString key = parameterUpdateScript();
+  if (injectionScriptCache_.isEmpty() || key != injectionScriptKey_) {
+    injectionScriptCache_ = buildInjectionScript();
+    injectionScriptKey_ = key;
+  }
+  return injectionScriptCache_;
+}
+
+QString WebAudioEffectsController::buildInjectionScript() const {
+  ++diagnostics_.injectionBuilds;
   const QString outputModuleSource = daliModuleSource();
   const QString eqModuleSource = daliEqModuleSource();
   const QString compressorModuleSource = daliCompressorModuleSource();
@@ -1466,8 +1574,15 @@ QString WebAudioEffectsController::injectionScript() const {
              : QStringLiteral("balanced"));
 
   return QStringLiteral(R"JS(
-(async function() {
+(async function daliniraDaliBootstrap() {
   try {
+    // Injected at document start (WebKit) the document has no elements yet:
+    // run once the DOM exists.
+    if (document.readyState === 'loading' || !document.documentElement) {
+      document.addEventListener('DOMContentLoaded', function() { daliniraDaliBootstrap(); }, { once: true });
+      return { ok: true, deferred: true, moduleLoaded: false, enabled: %3,
+               mediaCount: 0, sampleRates: [], contextStates: [] };
+    }
     const supportedDomains = %27;
     const protocol = String(location.protocol || '').toLowerCase();
     const hostname = String(location.hostname || '').toLowerCase();
@@ -2381,6 +2496,12 @@ QString WebAudioEffectsController::injectionScript() const {
     };
 
     root.applyActiveParams = root.applyActiveParams || function(cfg) {
+      const result = root.applyGraphParams(cfg);
+      root.updateActivity();
+      return result;
+    };
+
+    root.applyGraphParams = root.applyGraphParams || function(cfg) {
       root.pruneStaleGraphs();
       root.currentConfig = cfg;
       let attached = 0;
@@ -2420,10 +2541,109 @@ QString WebAudioEffectsController::injectionScript() const {
       } catch (_) { try { param.value = target; } catch (_) {} }
     };
 
+    // Audible media: playing, not muted, not silent. Only such an element
+    // gets a DSP graph, and only while one plays does the document's
+    // AudioContext need to run.
+    root.isAudibleMedia = root.isAudibleMedia || function(element) {
+      return !!element && !element.paused && !element.ended && !element.muted && Number(element.volume) > 0;
+    };
+    // Playing, whatever its volume: its context must keep running. A muted or
+    // silent element is still playing and may be turned up at any moment
+    // (without a user gesture, which WebKit needs to restart a context).
+    root.isPlayingMedia = root.isPlayingMedia || function(element) {
+      return !!element && !element.paused && !element.ended;
+    };
+    root.hasAudibleGraph = root.hasAudibleGraph || function() {
+      for (const graph of root.graphList) {
+        if (graph && root.isPlayingMedia(graph.element)) return true;
+      }
+      return false;
+    };
+    root.elementGain = root.elementGain || function(element) {
+      if (!element || element.muted) return 0;
+      const volume = Number(element.volume);
+      return Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 1;
+    };
+    root.applyElementVolume = root.applyElementVolume || function(graph) {
+      if (!graph || !graph.mirrorsVolume || !graph.source || !graph.ctx) return;
+      try {
+        const param = graph.source.gain;
+        const now = Number(graph.ctx.currentTime) || 0;
+        param.cancelScheduledValues(now);
+        param.setTargetAtTime(root.elementGain(graph.element), now, 0.012);
+      } catch (_) {}
+    };
+    root.setAutoGainTimers = root.setAutoGainTimers || function(active) {
+      for (const graph of root.graphList) {
+        if (!graph || !graph.autoGainEnabled || !graph.autoGainState) continue;
+        if (active && !graph.autoGainTimer) {
+          graph.autoGainTimer = setInterval(function() { root.runAutoGainStep(graph); },
+                                            Number(graph.autoGainState.controlIntervalMs) || 60);
+        } else if (!active && graph.autoGainTimer) {
+          try { clearInterval(graph.autoGainTimer); } catch (_) {}
+          graph.autoGainTimer = null;
+        }
+      }
+    };
+    // A running AudioContext renders continuously whatever its media does.
+    // With several media tabs that idle load competes with the audible tab's
+    // audio thread, so a document whose attached media has been inaudible for
+    // a while suspends its context (and auto gain) until media plays again.
+    root.idleSuspendMs = root.idleSuspendMs || 4000;
+    root.wakeAudio = root.wakeAudio || function() {
+      if (root.idleTimer) { clearTimeout(root.idleTimer); root.idleTimer = null; }
+      const ctx = root.audioContext;
+      // Also after a suspend the runtime did not cause: playing media routed
+      // into a stopped context is silent.
+      if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') root.requestContextStart(ctx);
+      root.idleSuspended = false;
+      root.setAutoGainTimers(true);
+    };
+    root.scheduleIdleCheck = root.scheduleIdleCheck || function() {
+      if (root.idleTimer) clearTimeout(root.idleTimer);
+      root.idleTimer = setTimeout(function() {
+        root.idleTimer = null;
+        root.pruneStaleGraphs();
+        if (root.hasAudibleGraph() || root.contextStartTimer) return;
+        root.setAutoGainTimers(false);
+        const ctx = root.audioContext;
+        if (ctx && ctx.state === 'running' && typeof ctx.suspend === 'function') {
+          root.idleSuspended = true;
+          root.idleSuspendCount = (Number(root.idleSuspendCount) || 0) + 1;
+          try { Promise.resolve(ctx.suspend()).catch(function () {}); } catch (_) {}
+        }
+      }, root.idleSuspendMs);
+    };
+    // WebKit starts a new context only on resume() (Chromium on creation),
+    // and a resume() issued while a new page cannot start media yet may never
+    // settle. Retry at 2 Hz for up to 10 s; play/volume events retry again.
+    root.requestContextStart = root.requestContextStart || function(ctx) {
+      const tryResume = function() {
+        try { Promise.resolve(ctx.resume()).catch(function () {}); } catch (_) {}
+      };
+      tryResume();
+      if (root.contextStartTimer) return;
+      let attempts = 0;
+      root.contextStartTimer = setInterval(function() {
+        attempts += 1;
+        if (ctx.state === 'running' || ctx.state === 'closed' || attempts > 20) {
+          clearInterval(root.contextStartTimer);
+          root.contextStartTimer = null;
+          if (ctx.state === 'running' && root.queueMediaScan) root.queueMediaScan();
+          return;
+        }
+        tryResume();
+      }, 500);
+    };
+    root.updateActivity = root.updateActivity || function() {
+      if (root.hasAudibleGraph()) root.wakeAudio();
+      else root.scheduleIdleCheck();
+    };
+
     root.resumeGraph = root.resumeGraph || function(graph) {
       if (!graph || !graph.ctx || graph.ctx.state === 'closed') return false;
       if (graph.ctx.state === 'suspended' && typeof graph.ctx.resume === 'function') {
-        if (graph.element && graph.element.paused) {
+        if (graph.element && !root.isPlayingMedia(graph.element)) {
           if (!graph.playListenerAttached) {
             graph.playListenerAttached = true;
             const onPlay = function() {
@@ -2472,6 +2692,12 @@ QString WebAudioEffectsController::injectionScript() const {
     };
 
     root.processMedia = root.processMedia || function(cfg) {
+      const result = root.scanMedia(cfg);
+      root.updateActivity();
+      return result;
+    };
+
+    root.scanMedia = root.scanMedia || function(cfg) {
       root.pruneStaleGraphs();
       root.currentConfig = cfg;
       const media = Array.from(document.querySelectorAll('audio, video'));
@@ -2479,28 +2705,51 @@ QString WebAudioEffectsController::injectionScript() const {
       const rates = [];
       const contextStates = [];
       for (const element of media) {
-        // Do not take ownership of YouTube's media element while its MSE
-        // pipeline is still being prepared.  Attaching at HAVE_CURRENT_DATA
-        // (or once playback has started) avoids an intermittent endless
-        // spinner; canplay/playing listeners below trigger a fresh scan.
-        if (element.readyState < 2 && element.paused) continue;
         let graph = root.graphs.get(element);
         if (!graph) {
-          if (!cfg.enabled) continue;
+          // One DSP graph per element that is actually heard, attached once it
+          // plays: preloaded, paused or muted media (feed previews, muted
+          // autoplay) never gets one; the play/volumechange listeners below
+          // rescan when that changes. Waiting for playback also keeps
+          // YouTube's MSE pipeline setup untouched (no endless spinner).
+          if (!cfg.enabled || !root.isAudibleMedia(element)) continue;
           const Ctx = window.AudioContext || window.webkitAudioContext;
           if (!Ctx) continue;
           try {
-            // Use one playback-tuned context per document.  The default
-            // interactive latency uses a much smaller output buffer and can
-            // produce periodic clicks under a busy video page.
+            // Share one context per document. Keep Chromium's playback
+            // buffer; WebKit needs an interactive buffer for video A/V sync.
             let ctx = root.audioContext;
             if (!ctx || ctx.state === 'closed') {
-              try { ctx = new Ctx({ latencyHint: 'playback' }); }
+              const options = window.__DALINIRA_DALI_ENGINE__;
+              try { ctx = new Ctx({ latencyHint: options && options.mediaLatencyHint || 'playback' }); }
               catch (_) { ctx = new Ctx(); }
               root.audioContext = ctx;
+              ctx.addEventListener('statechange', function() {
+                if (ctx.state === 'running' && root.queueMediaScan) root.queueMediaScan();
+              });
             }
-            const source = ctx.createMediaElementSource(element);
-            graph = { ctx: ctx, source: source, graph: null, bypass: false, element: element };
+            // An element routed into the graph is heard only through the
+            // context, and the routing cannot be undone. Never route media
+            // into a context that is not running (still starting, or held by
+            // an autoplay / page-visibility policy): the element keeps playing
+            // directly and is attached once the context runs (statechange).
+            if (ctx.state !== 'running') {
+              root.requestContextStart(ctx);
+              continue;
+            }
+            const mediaSource = ctx.createMediaElementSource(element);
+            let source = mediaSource;
+            // WebKit's MediaElementAudioSourceNode ignores the element's volume
+            // and muted state (Chromium applies them): the page's own volume
+            // and mute controls would stop working. Apply them here, first in
+            // the chain, so every path (effects or bypass) follows them.
+            const engine = window.__DALINIRA_DALI_ENGINE__;
+            if (engine && engine.mirrorElementVolume) {
+              source = new GainNode(ctx, { gain: root.elementGain(element) });
+              mediaSource.connect(source);
+            }
+            graph = { ctx: ctx, source: source, mediaSource: mediaSource, graph: null, bypass: false, element: element,
+                      mirrorsVolume: source !== mediaSource };
             root.graphs.set(element, graph);
             root.graphList.add(graph);
           } catch (error) {
@@ -2593,8 +2842,21 @@ QString WebAudioEffectsController::injectionScript() const {
         if (event.target && event.target.matches && event.target.matches('audio,video')) root.queueMediaScan();
       }, true);
       document.addEventListener('play', function(event) {
-        if (event.target && event.target.matches && event.target.matches('audio,video')) root.queueMediaScan();
+        if (!event.target || !event.target.matches || !event.target.matches('audio,video')) return;
+        // Resume before the element's audio reaches the graph.
+        if (root.graphs.has(event.target)) root.wakeAudio();
+        root.queueMediaScan();
       }, true);
+      document.addEventListener('volumechange', function(event) {
+        if (!event.target || !event.target.matches || !event.target.matches('audio,video')) return;
+        root.applyElementVolume(root.graphs.get(event.target));
+        root.queueMediaScan();  // an element unmuted now may need a graph
+      }, true);
+      for (const type of ['pause', 'ended', 'emptied']) {
+        document.addEventListener(type, function(event) {
+          if (event.target && event.target.matches && event.target.matches('audio,video')) root.updateActivity();
+        }, true);
+      }
     }
     return root.processMedia({
       enabled: enabled, outputPreampDb: outputPreampDb, bands: bands, eqActive: eqActive,
@@ -2639,10 +2901,10 @@ QString WebAudioEffectsController::injectionScript() const {
 
 void WebAudioEffectsController::requestCompressorGainReduction() {
   if (compressorMeterRequestPending_ || !panelVisible_ || !compressorEnabled()) return;
-  views_.erase(std::remove_if(views_.begin(), views_.end(), [](const QPointer<QWebEngineView> &item) { return item.isNull(); }), views_.end());
-  QVector<QPointer<QWebEngineView>> liveViews;
-  for (const QPointer<QWebEngineView> &view : views_) {
-    if (view && view->page()) liveViews.push_back(view);
+  prunePages();
+  QVector<Page> liveViews;
+  for (const Page &page : std::as_const(pages_)) {
+    if (pageAlive(page) && page.object->property("dalinira-audio-graph-active").toBool()) liveViews.push_back(page);
   }
   if (liveViews.isEmpty()) {
     emit compressorGainReductionChanged(0.0, false);
@@ -2676,13 +2938,8 @@ void WebAudioEffectsController::requestCompressorGainReduction() {
   QTimer::singleShot(600, this, [this, generation] {
     if (generation == compressorMeterRequestGeneration_) compressorMeterRequestPending_ = false;
   });
-  for (const QPointer<QWebEngineView> &view : liveViews) {
-    if (!view || !view->page()) {
-      --aggregate->remaining;
-      continue;
-    }
-    view->page()->runJavaScript(script, QWebEngineScript::MainWorld,
-                                [this, generation, aggregate](const QVariant &value) {
+  for (const Page &page : liveViews) {
+    runInPage(page, script, [this, generation, aggregate](const QVariant &value) {
       if (generation != compressorMeterRequestGeneration_) return;
       const QVariantMap result = value.toMap();
       if (result.value(QStringLiteral("available")).toBool()) {
@@ -2705,9 +2962,11 @@ void WebAudioEffectsController::requestCompressorGainReduction() {
 
 void WebAudioEffectsController::requestLimiterReduction() {
   if (limiterMeterRequestPending_ || !panelVisible_ || !limiterEnabled()) return;
-  views_.erase(std::remove_if(views_.begin(), views_.end(), [](const QPointer<QWebEngineView> &item) { return item.isNull(); }), views_.end());
-  QVector<QPointer<QWebEngineView>> liveViews;
-  for (const QPointer<QWebEngineView> &view : views_) if (view && view->page()) liveViews.push_back(view);
+  prunePages();
+  QVector<Page> liveViews;
+  for (const Page &page : std::as_const(pages_)) {
+    if (pageAlive(page) && page.object->property("dalinira-audio-graph-active").toBool()) liveViews.push_back(page);
+  }
   if (liveViews.isEmpty()) {
     emit limiterReductionChanged(0.0, false);
     return;
@@ -2740,13 +2999,8 @@ void WebAudioEffectsController::requestLimiterReduction() {
   QTimer::singleShot(600, this, [this, generation] {
     if (generation == limiterMeterRequestGeneration_) limiterMeterRequestPending_ = false;
   });
-  for (const QPointer<QWebEngineView> &view : liveViews) {
-    if (!view || !view->page()) {
-      --aggregate->remaining;
-      continue;
-    }
-    view->page()->runJavaScript(script, QWebEngineScript::MainWorld,
-                                [this, generation, aggregate](const QVariant &value) {
+  for (const Page &page : liveViews) {
+    runInPage(page, script, [this, generation, aggregate](const QVariant &value) {
       if (generation != limiterMeterRequestGeneration_) return;
       const QVariantMap result = value.toMap();
       if (result.value(QStringLiteral("available")).toBool()) {
@@ -2768,26 +3022,88 @@ void WebAudioEffectsController::requestLimiterReduction() {
 }
 
 void WebAudioEffectsController::applyToView(QWebEngineView *view) {
-  if (!view || !view->page()) return;
-  if (!isAudioEligibleView(view, view->url())) {
-    view->setProperty("dalinira-audio-graph-active", false);
+  if (const Page *page = findPage(view)) applyToPage(*page);
+}
+
+void WebAudioEffectsController::applyToEngineView(dalinira::engine::EngineView *view) {
+  if (const Page *page = findPage(view)) applyToPage(*page);
+}
+
+// Per-engine facts the shared page runtime needs, run before it (at document
+// start on WebKit).
+//
+// WebKit (2.52) with media routed into Web Audio neither applies the element's
+// volume and muted state to that audio nor reports the volume back (the getter
+// keeps returning 1 and no volumechange follows; muted is reported). The page's
+// own writes are the only reliable value: the setters record it (the getter
+// then returns what the page set, as the spec requires) and the runtime applies
+// it, and muted, in the element's volume stage (see elementGain).
+static QString engineOptionsScript(const QObject *view) {
+  const auto *engineView = qobject_cast<const dalinira::engine::EngineView *>(view);
+  if (!engineView || engineView->engineType() != dalinira::engine::EngineType::WebKit) return {};
+  return QStringLiteral(R"JS(
+if (!window.__DALINIRA_DALI_ENGINE__) {
+  window.__DALINIRA_DALI_ENGINE__ = Object.freeze({ mirrorElementVolume: true, mediaLatencyHint: 'interactive' });
+  (function() {
+    if (!window.HTMLMediaElement) return;
+    const proto = HTMLMediaElement.prototype;
+    for (const name of ['volume', 'muted']) {
+      const native = Object.getOwnPropertyDescriptor(proto, name);
+      if (!native || typeof native.set !== 'function' || typeof native.get !== 'function') continue;
+      Object.defineProperty(proto, name, {
+        configurable: native.configurable,
+        enumerable: native.enumerable,
+        get: name === 'volume'
+          ? function() { return this.__daliniraVolume !== undefined ? this.__daliniraVolume : native.get.call(this); }
+          : native.get,
+        set: function(value) {
+          native.set.call(this, value);  // throws for an invalid volume, as before
+          if (name === 'volume') this.__daliniraVolume = Number(value);
+          const root = window.__DALINIRA_WEB_DALI_OUTPUT__;
+          if (root && root.applyElementVolume && root.graphs) root.applyElementVolume(root.graphs.get(this));
+        }
+      });
+    }
+  })();
+}
+)JS");
+}
+
+// Records whether a page reports a live DALI graph, from a script result.
+static void markGraphState(const QPointer<QObject> &object, const QVariant &result) {
+  if (!object) return;
+  if (isAudioEligibleView(object, object->property("dalinira-audio-page-url").toUrl())) {
+    const QVariantMap map = result.toMap();
+    object->setProperty("dalinira-audio-graph-active",
+                        map.value(QStringLiteral("ok")).toBool() && map.value(QStringLiteral("moduleLoaded")).toBool());
+  } else {
+    object->setProperty("dalinira-audio-graph-active", false);
+  }
+}
+
+void WebAudioEffectsController::applyToPage(const Page &page) {
+  if (!pageAlive(page)) return;
+  QObject *object = page.object;
+  const QUrl url = pageUrl(page);
+  object->setProperty("dalinira-audio-page-url", url);
+  if (!isAudioEligibleView(object, url)) {
+    object->setProperty("dalinira-audio-graph-active", false);
     return;
   }
+  // Effects off and never delivered to this document: nothing to bypass.
+  if (!enabled_ && !object->property("dalinira-audio-graph-active").toBool()) return;
   if (qEnvironmentVariableIntValue("DALINIRA_FEATURE_DIAGNOSTICS") == 1) {
     qInfo().noquote() << "[AUDIO] effect parameter updated";
   }
   const QPointer<WebAudioEffectsController> guardedController(this);
-  const QPointer<QWebEngineView> guardedView(view);
-  view->page()->runJavaScript(parameterUpdateScript(), QWebEngineScript::MainWorld, [guardedController, guardedView](const QVariant &result) {
+  const QPointer<QObject> guardedView(object);
+  runInPage(page, parameterUpdateScript(), [guardedController, guardedView](const QVariant &result) {
     if (!guardedController) return;
-    if (guardedView && isAudioEligibleView(guardedView, guardedView->url())) {
-      const QVariantMap map = result.toMap();
-      guardedView->setProperty("dalinira-audio-graph-active",
-                               map.value(QStringLiteral("ok")).toBool()
-                                   && map.value(QStringLiteral("moduleLoaded")).toBool());
-    } else if (guardedView) {
-      guardedView->setProperty("dalinira-audio-graph-active", false);
-    }
+    // Engines answer pending scripts with an invalid result when their page
+    // is destroyed (e.g. closing a discarded tab), possibly from inside the
+    // view's destructor, so the view must not be touched then.
+    if (!result.isValid()) return;
+    markGraphState(guardedView, result);
     guardedController->updateStatusFromResult(result);
     if (qEnvironmentVariableIsSet("DALINIRA_AUDIO_EFFECTS_TRACE")) {
       const QVariantMap map = result.toMap();
@@ -2800,70 +3116,88 @@ void WebAudioEffectsController::applyToView(QWebEngineView *view) {
                         << "error=" << map.value(QStringLiteral("error")).toString();
     }
     if (guardedView && result.toMap().value(QStringLiteral("needsBootstrap")).toBool()) {
-      guardedController->bootstrapView(guardedView);
+      if (const Page *known = guardedController->findPage(guardedView)) guardedController->bootstrapPage(*known);
     }
   });
 }
 
-void WebAudioEffectsController::applyEqualizerBandToView(QWebEngineView *view, int index) {
-  if (!view || !view->page()) return;
-  if (!isAudioEligibleView(view, view->url())) return;
-  const QString script = equalizerBandUpdateScript(index);
-  if (!script.isEmpty()) view->page()->runJavaScript(script, QWebEngineScript::MainWorld);
+void WebAudioEffectsController::applyEqualizerBandToPage(const Page &page, int index) {
+  if (!pageAlive(page) || !isAudioEligibleView(page.object, pageUrl(page))) return;
+  if (!page.object->property("dalinira-audio-graph-active").toBool()) return;
+  runInPage(page, equalizerBandUpdateScript(index));
 }
 
-void WebAudioEffectsController::installDocumentBootstrap(QWebEngineView *view, const QUrl &url) {
-  if (!view || !view->page()) return;
+void WebAudioEffectsController::installDocumentBootstrap(const Page &page, const QUrl &url) {
+  // Engines without a per-page script collection (WebKit) ask
+  // documentScriptsFor() at each navigation instead.
+  if (!page.web || !page.web->page()) return;
   constexpr auto kScriptName = "dalinira-web-audio-document-bootstrap";
-  QWebEngineScriptCollection &scripts = view->page()->scripts();
+  QWebEngineScriptCollection &scripts = page.web->page()->scripts();
   for (const QWebEngineScript &existing : scripts.find(QString::fromLatin1(kScriptName))) scripts.remove(existing);
-  if (!isAudioEligibleView(view, url)) return;
+  if (!enabled_ || !isAudioEligibleView(page.web, url)) return;
   QWebEngineScript script;
   script.setName(QString::fromLatin1(kScriptName));
   script.setSourceCode(injectionScript());
+  ++diagnostics_.scriptsSent;
+  diagnostics_.scriptBytesSent += quint64(script.sourceCode().size());
   script.setInjectionPoint(QWebEngineScript::DocumentReady);
   script.setWorldId(QWebEngineScript::MainWorld);
   script.setRunsOnSubFrames(false);
   scripts.insert(script);
 }
 
-void WebAudioEffectsController::updateAudioPolicyForView(QWebEngineView *view, const QUrl &url) {
-  if (!view || !view->page()) return;
-  const bool supported = isAudioEligibleView(view, url);
-  if (!supported) {
-    bootstrapViews_.remove(view);
-    view->setProperty("dalinira-audio-graph-active", false);
-  }
-  installDocumentBootstrap(view, url);
+QList<dalinira::engine::DocumentScript> WebAudioEffectsController::documentScriptsFor(const QObject *view,
+                                                                                       const QUrl &url) const {
+  if (!enabled_ || !isAudioEligibleView(view, url)) return {};
+  if (moduleSource(OutputModule).isEmpty() || moduleSource(EqModule).isEmpty()) return {};
+  dalinira::engine::DocumentScript script;
+  script.source = engineOptionsScript(view) + injectionScript();
+  script.mainWorld = true;  // the page's own media elements and AudioContext
+  script.allFrames = false;
+  ++diagnostics_.scriptsSent;
+  diagnostics_.scriptBytesSent += quint64(script.source.size());
+  return {script};
 }
 
-void WebAudioEffectsController::bootstrapView(QWebEngineView *view) {
-  if (!view || !view->page() || bootstrapViews_.contains(view)) return;
-  if (!isAudioEligibleView(view, view->url())) return;
-  if (daliModuleSource().isEmpty() || daliEqModuleSource().isEmpty() || daliCompressorModuleSource().isEmpty()
-      || daliLimiterModuleSource().isEmpty() || daliBassEnhancerModuleSource().isEmpty()
-      || daliAutoGainModuleSource().isEmpty()) {
+void WebAudioEffectsController::updateAudioPolicyForPage(const Page &page, const QUrl &url) {
+  if (!pageAlive(page)) return;
+  page.object->setProperty("dalinira-audio-page-url", url);
+  if (!isAudioEligibleView(page.object, url)) {
+    bootstrapPages_.remove(page.object);
+    page.object->setProperty("dalinira-audio-graph-active", false);
+  }
+  installDocumentBootstrap(page, url);
+}
+
+void WebAudioEffectsController::bootstrapPage(const Page &page) {
+  if (!pageAlive(page) || bootstrapPages_.contains(page.object)) return;
+  if (!isAudioEligibleView(page.object, pageUrl(page))) return;
+  // Output and EQ make the graph; the other modules are optional and a page
+  // simply lacks the one that is unavailable.
+  if (moduleSource(OutputModule).isEmpty() || moduleSource(EqModule).isEmpty()) {
     status_.engineAvailable = false;
     status_.enabled = enabled_;
-    status_.detail = QStringLiteral("DALI Web Audio modülü çalışma anında bulunamadı.");
+    status_.detail = I18n::text(QStringLiteral("audio.status_module_missing"));
+    status_.detailKey = QStringLiteral("audio.status_module_missing");
+    status_.hardFailure = true;
     qWarning().noquote() << "[DaliNira DSP]" << status_.detail;
     emit statusChanged(status_);
     return;
   }
-  bootstrapViews_.insert(view);
+  const QObject *key = page.object;
+  page.object->setProperty("dalinira-audio-page-url", pageUrl(page));
+  bootstrapPages_.insert(key);
+  ++diagnostics_.bootstrapsSent;
   const QPointer<WebAudioEffectsController> guardedController(this);
-  const QPointer<QWebEngineView> guardedView(view);
-  view->page()->runJavaScript(injectionScript(), QWebEngineScript::MainWorld, [guardedController, guardedView](const QVariant &result) {
+  const QPointer<QObject> guardedView(page.object);
+  // The runtime is an async function (a Promise, which WebKit cannot return
+  // to the browser); its state is reported by the next parameter update.
+  const QString bootstrap = engineOptionsScript(page.object) + injectionScript() + QStringLiteral(";\nundefined;");
+  runInPage(page, bootstrap, [guardedController, guardedView, key](const QVariant &result) {
     if (!guardedController) return;
-    if (guardedView) guardedController->bootstrapViews_.remove(guardedView);
-    if (guardedView && isAudioEligibleView(guardedView, guardedView->url())) {
-      const QVariantMap map = result.toMap();
-      guardedView->setProperty("dalinira-audio-graph-active",
-                               map.value(QStringLiteral("ok")).toBool()
-                                   && map.value(QStringLiteral("moduleLoaded")).toBool());
-    } else if (guardedView) {
-      guardedView->setProperty("dalinira-audio-graph-active", false);
-    }
+    guardedController->bootstrapPages_.remove(key);
+    if (!result.isValid() || result.toMap().isEmpty()) return;  // destroyed page, or no report
+    markGraphState(guardedView, result);
     guardedController->updateStatusFromResult(result);
   });
 }
@@ -2880,13 +3214,29 @@ void WebAudioEffectsController::updateStatusFromResult(const QVariant &result) {
   }
   const QString error = map.value(QStringLiteral("error")).toString();
   if (!error.isEmpty()) {
-    next.detail = QStringLiteral("DALI Web Audio hatası: %1").arg(error);
+    next.detail = I18n::text(QStringLiteral("audio.status_error")).arg(error);
+    next.detailKey = QStringLiteral("audio.status_error");
+    next.detailArgs = {error};
+    next.hardFailure = true;
     qWarning().noquote() << "[DaliNira DSP]" << next.detail;
   }
-  else if (!enabled_) next.detail = QStringLiteral("DALI Web Audio zinciri bypass edildi; ayarlar korunuyor.");
-  else if (!next.engineAvailable) next.detail = QStringLiteral("DALI Web Audio grafiği hazırlanamadı.");
-  else if (next.attachedMediaCount == 0) next.detail = QStringLiteral("DALI Web Audio hazır; bu sayfada işlenecek audio/video elementi bulunamadı.");
-  else next.detail = QStringLiteral("DALI Web Audio grafiği %1 medya elemanına bağlı.").arg(next.attachedMediaCount);
+  else if (!enabled_) {
+    next.detail = I18n::text(QStringLiteral("audio.status_bypassed"));
+    next.detailKey = QStringLiteral("audio.status_bypassed");
+  }
+  else if (!next.engineAvailable) {
+    next.detail = I18n::text(QStringLiteral("audio.status_graph_failed"));
+    next.detailKey = QStringLiteral("audio.status_graph_failed");
+    next.hardFailure = true;
+  }
+  else if (next.attachedMediaCount == 0) {
+    next.detail = I18n::text(QStringLiteral("audio.status_no_media"));
+    next.detailKey = QStringLiteral("audio.status_no_media");
+  } else {
+    next.detail = I18n::text(QStringLiteral("audio.status_attached")).arg(next.attachedMediaCount);
+    next.detailKey = QStringLiteral("audio.status_attached");
+    next.detailArgs = {QString::number(next.attachedMediaCount)};
+  }
   const bool changed = status_.enabled != next.enabled || status_.engineAvailable != next.engineAvailable
       || status_.attachedMediaCount != next.attachedMediaCount || status_.sampleRates != next.sampleRates
       || status_.detail != next.detail;

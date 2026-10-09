@@ -1,0 +1,57 @@
+[
+  {
+    "file": "browser/native/translate/language_detector.cpp",
+    "pattern": ".*",
+    "reason": "Page-language detection data: Turkish/German stop words and Turkish-letter regexes classify web page text; they are never shown in the UI."
+  },
+  {
+    "file": "browser/native/i18n/language_manager.cpp",
+    "pattern": "^(Türkçe|Français|English|العربية)$",
+    "reason": "Built-in fallback native language names (endonyms) are intentionally not translated."
+  },
+  {
+    "file": "browser/native/blocker/dalinira_blocker_engine.cpp",
+    "pattern": "^script$",
+    "reason": "Adblock filter option / request resource-type identifier."
+  },
+  {
+    "file": "browser/native/blocker/dalinira_blocker_types.h",
+    "pattern": "^script$",
+    "reason": "Request resource-type identifier used in rules and logs."
+  },
+  {
+    "file": "browser/native/desktop_tabs/tab_appearance.cpp",
+    "pattern": "^standart$",
+    "reason": "Legacy persisted tab-style preference value accepted for migration."
+  },
+  {
+    "file": "browser/native/desktop_tabs/tab_manager.cpp",
+    "pattern": "^one live content widget belongs to more than one tab record$",
+    "reason": "Internal invariant-violation reason for diagnostics/tests, never displayed."
+  },
+  {
+    "file": "browser/native/eq/eq_preset_repository.cpp",
+    "pattern": "^caz$",
+    "reason": "Keyword matched against third-party preset names to infer the jazz group."
+  },
+  {
+    "file": "browser/native/settings/settings_languages_section.cpp",
+    "pattern": "^Google Cloud Translation$",
+    "reason": "Product name of the translation provider."
+  },
+  {
+    "file": "browser/native/translate/translate_bubble_popup.cpp",
+    "pattern": "^Google Translate$",
+    "reason": "Product name shown as the active provider brand."
+  },
+  {
+    "file": "browser/native/settings/settings_page.cpp",
+    "pattern": "^(Chromium \\(Blink\\)|WebKit \\(WebCore\\))$",
+    "reason": "Official engine brand names shown in system settings combobox."
+  },
+  {
+    "file": "browser/native/onboarding/layout_step.cpp",
+    "pattern": "^DaliNira Browser$",
+    "reason": "Product name shown in the layout preview's mock title bar; brand names are not translated."
+  }
+]

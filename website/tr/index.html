@@ -3,79 +3,73 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
-  <!-- Security-First Content Security Policy -->
+
+  <!-- Security-first Content Security Policy (GitHub Pages ignores _headers) -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; worker-src 'none'; manifest-src 'self';">
   <meta name="referrer" content="no-referrer">
-  
-  <title>DaliNira Browser — Gizlilik. Hız. Kontrol. | Yerel Qt 6 Masaüstü Web Tarayıcısı</title>
-  <meta name="description" content="DaliNira Browser; Qt 6 ve C++20 ile geliştirilmiş, dahili paralel indirme motoruna ve stüdyo kalitesinde DSP ses sistemine sahip, gizlilik odaklı, yüksek performanslı yerel masaüstü web tarayıcısıdır.">
-  
-  <!-- Canonical & Multilingual Alternates -->
+
+  <title>DaliNira Browser 8.0 — İki motor. Tek, gizlilik odaklı tarayıcı.</title>
+  <meta name="description" content="DaliNira Browser; Chromium ve WebKitGTK motorlarına, dahili reklam ve takipçi engelleyiciye, sayfa çevirisine ve sekme uyutmaya sahip yerel bir Linux masaüstü tarayıcısıdır.">
+
   <link rel="canonical" href="https://muhammed-dali.github.io/DaliNira-Browser/tr/">
   <link rel="alternate" hreflang="en" href="https://muhammed-dali.github.io/DaliNira-Browser/">
   <link rel="alternate" hreflang="tr" href="https://muhammed-dali.github.io/DaliNira-Browser/tr/">
   <link rel="alternate" hreflang="ar" href="https://muhammed-dali.github.io/DaliNira-Browser/ar/">
   <link rel="alternate" hreflang="x-default" href="https://muhammed-dali.github.io/DaliNira-Browser/">
-  
-  <!-- Open Graph / Facebook -->
+
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://muhammed-dali.github.io/DaliNira-Browser/tr/">
-  <meta property="og:title" content="DaliNira Browser — Gizlilik. Hız. Kontrol.">
-  <meta property="og:description" content="Dahili reklam ve takipçi engelleyici, adaptif paralel indirme yöneticisi ve entegre odyofil ekolayzer içeren yerel Qt 6 & C++20 masaüstü web tarayıcısı.">
+  <meta property="og:title" content="DaliNira Browser 8.0 — İki motor. Tek, gizlilik odaklı tarayıcı.">
+  <meta property="og:description" content="Chromium ve WebKitGTK motorlarına ve dahili reklam ve takipçi engelleyiciye sahip, Qt 6 ile yazılmış yerel Linux tarayıcısı.">
   <meta property="og:image" content="https://muhammed-dali.github.io/DaliNira-Browser/assets/images/hero-browser.png">
   <meta property="og:site_name" content="DaliNira Browser">
-  
-  <!-- Twitter Cards -->
+
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:url" content="https://muhammed-dali.github.io/DaliNira-Browser/tr/">
-  <meta name="twitter:title" content="DaliNira Browser — Gizlilik. Hız. Kontrol.">
-  <meta name="twitter:description" content="Dahili reklam engelleyici, adaptif paralel indirme ve sıfır bulut takibi ile yerel Qt 6 & C++20 masaüstü tarayıcısı.">
+  <meta name="twitter:title" content="DaliNira Browser 8.0 — İki motor. Tek, gizlilik odaklı tarayıcı.">
+  <meta name="twitter:description" content="Chromium ve WebKitGTK motorlarına ve dahili reklam ve takipçi engelleyiciye sahip, Qt 6 ile yazılmış yerel Linux tarayıcısı.">
   <meta name="twitter:image" content="https://muhammed-dali.github.io/DaliNira-Browser/assets/images/hero-browser.png">
 
-  <!-- Icons -->
   <link rel="icon" type="image/png" sizes="128x128" href="../assets/images/dalinira-logo-128.png">
   <link rel="apple-touch-icon" href="../assets/images/dalinira-logo-128.png">
 
-  <!-- Local Stylesheet (Zero external CDNs or Google Fonts) -->
+  <!-- Local stylesheet only: no external CDNs or web fonts -->
   <link rel="stylesheet" href="../assets/css/main.css">
 </head>
 <body>
-  <!-- Accessibility Skip Link -->
-  <a href="#main-content" class="skip-link">İçeriğe Atla</a>
+  <a href="#main-content" class="skip-link">Ana içeriğe geç</a>
 
-  <!-- Header & Navigation -->
   <header class="site-header">
     <div class="container nav-wrapper">
-      <a href="./" class="brand-link" aria-label="DaliNira Browser Ana Sayfa">
-        <img src="../assets/images/dalinira-logo-128.png" alt="DaliNira Browser Logo" class="brand-logo" width="38" height="38">
+      <a href="./" class="brand-link" aria-label="DaliNira Browser ana sayfası">
+        <img src="../assets/images/dalinira-logo-128.png" alt="DaliNira Browser logosu" class="brand-logo" width="38" height="38">
         <span>DaliNira</span>
-        <span class="brand-badge">v7.2.1</span>
+        <span class="brand-badge">v8.0.0</span>
       </a>
 
-      <nav class="site-nav" aria-label="Ana Menü">
+      <nav class="site-nav" aria-label="Ana menü">
         <ul class="nav-links">
           <li><a href="#features">Özellikler</a></li>
-          <li><a href="#showcase">Arayüz</a></li>
+          <li><a href="#engines">Motorlar</a></li>
+          <li><a href="#screenshots">Ekran görüntüleri</a></li>
           <li><a href="#privacy">Gizlilik</a></li>
-          <li><a href="#open-source">Açık Kaynak</a></li>
           <li><a href="#download">İndir</a></li>
         </ul>
 
         <div class="nav-actions">
-          <div class="lang-selector" role="navigation" aria-label="Dil Seçimi">
-            <a href="../" class="lang-btn" title="English">EN</a>
-            <a href="./" class="lang-btn active" aria-current="page" title="Türkçe">TR</a>
-            <a href="../ar/" class="lang-btn" title="العربية">AR</a>
+          <div class="lang-selector" role="navigation" aria-label="Dil">
+            <a href="../" class="lang-btn" lang="en" title="English">EN</a>
+            <a href="./" class="lang-btn active" aria-current="page" lang="tr" title="Türkçe">TR</a>
+            <a href="../ar/" class="lang-btn" lang="ar" title="العربية">AR</a>
           </div>
 
-          <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-secondary" target="_blank" rel="noopener noreferrer" aria-label="GitHub'da Kaynak Kodu Görüntüle">
+          <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-secondary" target="_blank" rel="noopener noreferrer" aria-label="Kaynak kodu GitHub&#x27;da görüntüle">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
             <span>GitHub</span>
           </a>
 
           <a href="#download" class="btn btn-primary">
-            <span>DaliNira İndir</span>
+            <span>İndir</span>
           </a>
         </div>
       </nav>
@@ -86,517 +80,449 @@
     </div>
   </header>
 
-  <!-- Main Content Container -->
   <main id="main-content">
-    
-    <!-- Hero Section -->
+
     <section class="hero">
       <div class="container">
         <div class="hero-pill">
           <span class="hero-pill-dot"></span>
-          <span>Qt 6 & C++20 • Tasarımdan Gelen Gizlilik • GPL-3.0 Lisansı</span>
+          <span>Sürüm 8.0.0 · Chromium + WebKitGTK · GPL-3.0</span>
         </div>
 
         <h1 class="hero-title">
-          Gizlilik. Hız. Kontrol.<br>
-          <span class="gradient-text">Yerel Masaüstü Web Tarayıcısı</span>
+          İki motor.<br>
+          <span class="gradient-text">Tek, gizlilik odaklı tarayıcı.</span>
         </h1>
 
-        <p class="hero-tagline">
-          DaliNira Browser; modern web standartlarını, tavizsiz kişisel gizliliği, yüksek verimli paralel indirme motorunu ve entegre stüdyo ses sistemini tek bir yerde buluşturur. Electron hantallığı ve bulut takibi olmadan, saf yerel C++ ile geliştirilmiştir.
-        </p>
+        <p class="hero-tagline">DaliNira, C++20 ve Qt 6 ile yazılmış yerel bir Linux masaüstü tarayıcısıdır. Chromium ya da WebKitGTK ile çalıştırın; arayüz, reklam ve takipçi engelleme, çeviri ve sekme uyutma ikisinde de aynı şekilde çalışır.</p>
 
         <div class="hero-cta">
           <a href="#download" class="btn btn-primary btn-lg">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
-            <span>DaliNira'yi İndir</span>
+            <span>DaliNira&#x27;yı indir</span>
           </a>
           <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-secondary btn-lg" target="_blank" rel="noopener noreferrer">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-            <span>GitHub'da İncele</span>
+            <span>GitHub&#x27;da görüntüle</span>
           </a>
         </div>
 
         <div class="hero-platforms">
           <span class="platform-item">
             <img src="../assets/icons/linux.svg" alt="" aria-hidden="true" width="16" height="16">
-            Linux (Arch AUR, Pacman, Bağımsız Paket)
-          </span>
-          <span class="platform-item">
-            <img src="../assets/icons/windows.svg" alt="" aria-hidden="true" width="16" height="16">
-            Windows
+            Linux x86_64 · .deb · .rpm · Arch · taşınabilir arşiv
           </span>
         </div>
 
-        <!-- Browser Mockup -->
         <div class="browser-mockup">
-          <div class="mockup-toolbar">
-            <div class="mockup-controls">
-              <span class="mockup-dot close"></span>
-              <span class="mockup-dot minimize"></span>
-              <span class="mockup-dot maximize"></span>
-            </div>
-            <div class="mockup-address-bar">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-              <span>dalinira://newtab</span>
-            </div>
-          </div>
-          <img src="../assets/images/hero-browser.png" alt="DaliNira Browser Yerel Arayüzü" class="mockup-image" width="1342" height="821" fetchpriority="high">
+          <img src="../assets/images/hero-browser.png" alt="Yeni Sekme sayfası, yer imleri çubuğu, Hızlı Erişim kısayolları ve saatle DaliNira ana penceresi" class="mockup-image" width="1209" height="865" fetchpriority="high">
         </div>
       </div>
     </section>
 
-    <!-- Core Features Section -->
     <section id="features" class="section">
       <div class="container">
         <div class="section-header">
-          <span class="section-subtitle">Yüksek Kontrol ve Güç</span>
-          <h2 class="section-title">Dahili Yetenekler, Sıfır Eklenti Yükü</h2>
-          <p class="section-desc">
-            DaliNira Browser'daki her özellik doğrudan yerel C++ çekirdeğinde çalışır. Düzinelerce harici tarayıcı eklentisine ihtiyaç duymadan benzersiz akıcılık ve tepki hızı sunar.
-          </p>
+          <span class="section-subtitle">Eklenti değil, yerleşik</span>
+          <h2 class="section-title">İhtiyacınız olan her şey tek tarayıcıda</h2>
+          <p class="section-desc">DaliNira, çoğu kişinin ayrı eklentilerle kurduğu araçları yerel bir masaüstü uygulamasına entegre eder.</p>
         </div>
 
         <div class="features-grid">
-          <!-- Feature 1: Ad & Tracker Blocker -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3 8-8 10-5-2-8-5-8-10V6Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
             </div>
-            <h3 class="feature-title">DaliNira Engelleyici & Gizlilik Kalkanı</h3>
-            <p class="feature-text">
-              Üç kademeli koruma modu (Hafif %35, Dengeli %65, Kapsamlı %95) ile yerel filtre listeleri, kozmetik reklam gizleme, scriptlet enjeksiyonu ve takip parametresi temizleme.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">Ağ Seviyesinde Filtre</span>
-              <span class="feature-tag">URL Takip Temizleyici</span>
-            </div>
+            <h3 class="feature-title">Chromium ve WebKitGTK</h3>
+            <p class="feature-text">Motoru kurulum sırasında ya da daha sonra Ayarlar&#x27;dan seçin. Her motorun kendi sekmeleri ve oturumu vardır; yer imleri ve ayarlar ortaktır.</p>
+            <div class="feature-tags"><span class="feature-tag">Çift motor</span><span class="feature-tag">Eşlik testli</span></div>
           </article>
-
-          <!-- Feature 2: Parallel Download Engine -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3 8-8 10-5-2-8-5-8-10V6Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
             </div>
-            <h3 class="feature-title">Adaptif Paralel İndirme Motoru</h3>
-            <p class="feature-text">
-              GeneralDownloadManager motoru, bağlantı parçalarını 1 → 2 → 4 → 8 paralel akışa ölçeklendirir; dinamik iş paylaşımı, parça denemeleri ve anlık kaldığı yerden devam etme sağlar.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">Çoklu Akış (Multi-Stream)</span>
-              <span class="feature-tag">Kaldığı Yerden Devam</span>
-            </div>
+            <h3 class="feature-title">Reklam ve takipçi engelleme</h3>
+            <p class="feature-text">EasyList, EasyPrivacy ve bölgesel listelerle çalışan yerel filtre motoru; kozmetik filtreleme, izleme parametresi temizleme ve bağlantı yönlendirmesi atlama.</p>
+            <div class="feature-tags"><span class="feature-tag">İki motorda</span><span class="feature-tag">Yerel filtreleme</span></div>
           </article>
-
-          <!-- Feature 3: Encrypted Password Vault -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             </div>
-            <h3 class="feature-title">Bulutsuz Şifrelenmiş Kasa</h3>
-            <p class="feature-text">
-              Giriş bilgilerinizi AES-256-GCM şifreleme ve PBKDF2-HMAC-SHA256 anahtar türetimiyle yerel diskinizde saklayın. Sıfır bulut aktarımı, sıfır telemetri ve güvenli form doldurma.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">AES-256-GCM</span>
-              <span class="feature-tag">%100 Çevrimdışı Depolama</span>
-            </div>
+            <h3 class="feature-title">Gizlilik varsayılanları</h3>
+            <p class="feature-text">Varsayılan olarak HTTPS, Global Privacy Control, parmak izi gürültüsü ve üçüncü taraf çerez engelleme.</p>
+            <div class="feature-tags"><span class="feature-tag">GPC</span><span class="feature-tag">Önce HTTPS</span></div>
           </article>
-
-          <!-- Feature 4: Granular Site Permissions -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 6 6m-7 0 6-6 2-3M2 5h12M7 2h1m14 20-5-10-5 10m2-4h6"/></svg>
             </div>
-            <h3 class="feature-title">Hassas Site İzin Kontrolleri</h3>
-            <p class="feature-text">
-              Site başına donanım erişimlerini adres çubuğundan anında kontrol edin: Kamera, Mikrofon, Konum, Bildirimler, Açılır Pencereler ve JavaScript optimizasyonu.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">Anlık Araç Çubuğu Kontrolü</span>
-              <span class="feature-tag">Otomatik İzin Temizliği</span>
-            </div>
+            <h3 class="feature-title">Sayfa çevirisi</h3>
+            <p class="feature-text">Sayfaları Google, Google Cloud, DeepL veya LibreTranslate ile yerinde çevirin. Açılır pencere sayfayı hiçbir zaman engellemez.</p>
+            <div class="feature-tags"><span class="feature-tag">4 sağlayıcı</span><span class="feature-tag">Sayfa içi</span></div>
           </article>
-
-          <!-- Feature 5: Smart Omnibox & Tab Strip -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
             </div>
-            <h3 class="feature-title">Akıllı Omnibox & Sekme Şeridi</h3>
-            <p class="feature-text">
-              Geçmiş, yer imleri ve arama önerilerini birleştiren akıllı sıralama motoru. GPU hızlandırmalı sekme animasyonları, bellek kullanım kartları ve oturum kurtarma.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">Hızlı Arama Önerileri</span>
-              <span class="feature-tag">Oturum Kurtarma</span>
-            </div>
+            <h3 class="feature-title">Sekme uyutma</h3>
+            <p class="feature-text">Etkin olmayan sekmeler belleği boşaltmak için iki aşamada uyutulur. Kaydedilmemiş form verisi olan sekmeler otomatik olarak boşaltılmaz.</p>
+            <div class="feature-tags"><span class="feature-tag">İki aşama</span><span class="feature-tag">İstendiğinde uyandır</span></div>
           </article>
-
-          <!-- Feature 6: Centralized i18n & Translation -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 8 6 6m-7 0 6-6 2-3M2 5h12M7 2h1m14 20-5-10-5 10m2-4h6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M9 9h12"/></svg>
             </div>
-            <h3 class="feature-title">Çok Dilli Altyapı & Çeviri</h3>
-            <p class="feature-text">
-              Ayarlar üzerinden tarayıcıyı yeniden başlatmaya gerek kalmadan anında dil değiştirin. Sayfa içi hızlı çeviri desteğiyle yabancı web sayfalarını tek tıkla dilinize çevirin.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">13+ Arayüz Dili</span>
-              <span class="feature-tag">Sayfa İçi Çeviri</span>
-            </div>
+            <h3 class="feature-title">Diller ve yerleşimler</h3>
+            <p class="feature-text">Yeniden başlatmadan İngilizce, Türkçe, Arapça ve Fransızca. Klasik sekmeler, dikey sekmeler veya yüzen kenar çubuğu.</p>
+            <div class="feature-tags"><span class="feature-tag">4 dil</span><span class="feature-tag">4 yerleşim</span></div>
           </article>
-
-          <!-- Feature 7: 32-Band Studio Equalizer -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v20M17 5v14M7 9v6M22 8v8M2 11v2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
             </div>
-            <h3 class="feature-title">32 Bant Stüdyo DSP & AutoEQ</h3>
-            <p class="feature-text">
-              Entegre odyofil ses mimarisi: 32 bant parametrik ekolayzer, BASS FX Reverb, Dinamik Kompresör, Brickwall Limiter ve 1.757 kulaklık için kalibre edilmiş frekans eğrileri.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">1.757 AutoEQ Profili</span>
-              <span class="feature-tag">DSP Efekt Paketi</span>
-            </div>
+            <h3 class="feature-title">İndirmeler ve parolalar</h3>
+            <p class="feature-text">Devam ettirilebilen parçalı paralel indirmeler ve AES-256-GCM ile yerel olarak şifrelenen parola kasası.</p>
+            <div class="feature-tags"><span class="feature-tag">Devam ettirme</span><span class="feature-tag">Yerel kasa</span></div>
           </article>
-
-          <!-- Feature 8: DaliNira Pulse -->
           <article class="feature-card">
             <div class="feature-icon-wrapper">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M17 5v14M7 9v6M22 8v8M2 11v2"/></svg>
             </div>
-            <h3 class="feature-title">DaliNira Pulse (Müzik Tanıma)</h3>
-            <p class="feature-text">
-              Herhangi bir sekmede veya sistem uygulamasında çalan müziği, harici takip servislerine veri göndermeden doğrudan sistem ses boru hattından analiz edip tanımlar.
-            </p>
-            <div class="feature-tags">
-              <span class="feature-tag">Sistem Ses Yakalama</span>
-              <span class="feature-tag">Yerel Tanıma Geçmişi</span>
-            </div>
+            <h3 class="feature-title">Ses efektleri ve Pulse</h3>
+            <p class="feature-text">Web medyası için 1.757 AutoEQ kulaklık ön ayarına sahip 32 bantlı ekolayzer ve Pulse şarkı tanıma.</p>
+            <div class="feature-tags"><span class="feature-tag">32 bant</span><span class="feature-tag">AutoEQ</span></div>
           </article>
         </div>
       </div>
     </section>
 
-    <!-- Visual Showcase / Screenshots Section -->
-    <section id="showcase" class="section">
+    <section id="engines" class="section">
       <div class="container">
         <div class="section-header">
-          <span class="section-subtitle">Görsel Tur</span>
-          <h2 class="section-title">Masaüstü İş Akışları İçin Tasarlandı</h2>
-          <p class="section-desc">
-            Linux ve Windows üzerinde çalışan DaliNira Browser'ın gerçek arayüzlerini ve gelişmiş araçlarını inceleyin.
-          </p>
+          <span class="section-subtitle">Çift motor</span>
+          <h2 class="section-title">Motorunuzu seçin. Tarayıcınız aynı kalsın.</h2>
+          <p class="section-desc">DaliNira 8.0, Qt WebEngine üzerinden Chromium ile ya da WebKitGTK ile çalışır. İkisi de aynı DaliNira arayüzünü kullanır.</p>
         </div>
 
         <div class="spotlight-wrapper">
-          <!-- Spotlight 1: Blocker -->
           <div class="spotlight-row">
             <div class="spotlight-content">
-              <span class="spotlight-pill">Reklam ve Takip Kalkanı</span>
-              <h3 class="spotlight-title">İstenmeyen Müdahalelerden Arınmış Web</h3>
-              <p class="spotlight-desc">
-                DaliNira Engelleyici; EasyList, EasyPrivacy ve Peter Lowe gibi güvenilir filtre listelerini yerel olarak değerlendirir. Boş reklam kutularını gizler ve rahatsız edici açılır pencereleri durdurur.
-              </p>
+              <span class="spotlight-pill">Ayarlar → Sistem</span>
+              <h3 class="spotlight-title">Motoru Ayarlar&#x27;dan değiştirin</h3>
+              <p class="spotlight-desc">Motor değiştirildiğinde DaliNira yeniden başlar ve o motorun kendi sekmelerini açar. Otomatik eşlik testleri aynı senaryoları iki motorda da çalıştırıp sonuçları karşılaştırır.</p>
               <ul class="spotlight-bullets">
                 <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Üç hassas koruma seviyesi: Hafif, Dengeli ve Kapsamlı.</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Ortak arayüz: araç çubuğu, menüler, bul çubuğu, çeviri, engelleyici, izinler ve indirmeler.</span>
                 </li>
                 <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>İstekler bilgisayarınızdan çıkmadan önce takip parametrelerini (fbclid, gclid, utm_*) temizler.</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Ayrı çalışma alanları: sekmeler, oturum ve Hızlı Erişim her motor için ayrı tutulur.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Chromium Wayland üzerinde yerel olarak, WebKitGTK ise XWayland üzerinden çalışır.</span>
                 </li>
               </ul>
             </div>
             <div class="spotlight-preview">
-              <img src="../assets/images/dalinira-blocker.png" alt="DaliNira Engelleyici Arayüzü" width="1425" height="941" loading="lazy">
-            </div>
-          </div>
-
-          <!-- Spotlight 2: Parallel Download Engine -->
-          <div class="spotlight-row reverse">
-            <div class="spotlight-content">
-              <span class="spotlight-pill">GeneralDownloadManager</span>
-              <h3 class="spotlight-title">Çok Akışlı Adaptif Hızlandırma</h3>
-              <p class="spotlight-desc">
-                Bir daha asla indirme ilerlemenizi kaybetmeyin. DaliNira'nin adaptif indirme motoru, dosyaları eşzamanlı parçalara bölerek sunucu bant genişliğinden en yüksek verimi alır.
-              </p>
-              <ul class="spotlight-bullets">
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>1'den 8'e kadar otomatik artan dinamik eşzamanlı bağlantı akışı.</span>
-                </li>
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Otomatik HTTP 429 sunucu sınırlama yönetimi ve bozuk parça tekrar deneme mantığı.</span>
-                </li>
-              </ul>
-            </div>
-            <div class="spotlight-preview">
-              <img src="../assets/images/downloads.png" alt="DaliNira İndirme Merkezi" width="1425" height="940" loading="lazy">
-            </div>
-          </div>
-
-          <!-- Spotlight 3: Password Vault -->
-          <div class="spotlight-row">
-            <div class="spotlight-content">
-              <span class="spotlight-pill">Yerel Güvenlik</span>
-              <h3 class="spotlight-title">AES-256-GCM Şifrelenmiş Kasa</h3>
-              <p class="spotlight-desc">
-                Kimlik bilgileriniz asla fiziksel diskinizin dışına çıkmaz. DaliNira, şifrelerinizi PBKDF2 anahtar türetimi ve AES-256-GCM kriptografisiyle korur.
-              </p>
-              <ul class="spotlight-bullets">
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Sıfır bulut eşitlemesi: Verileriniz yalnızca kendi cihazınızda barınır.</span>
-                </li>
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Ana parola korumalı erişim ve güvenli tek tıkla form doldurma.</span>
-                </li>
-              </ul>
-            </div>
-            <div class="spotlight-preview">
-              <img src="../assets/images/password-manager.png" alt="DaliNira Parola Yöneticisi" width="1600" height="900" loading="lazy">
-            </div>
-          </div>
-
-          <!-- Spotlight 4: Equalizer & Sound Studio -->
-          <div class="spotlight-row reverse">
-            <div class="spotlight-content">
-              <span class="spotlight-pill">Odyofil Web Sesi</span>
-              <h3 class="spotlight-title">32 Bant Stüdyo Ekolayzeri & DSP</h3>
-              <p class="spotlight-desc">
-                Web ortamındaki sesleri stüdyo hassasiyetinde dinleyin. DaliNira, ses akışını 32 filtre üzerinden geçirir ve 1.750'den fazla kulaklık modeli için AutoEQ düzeltme eğrileri sunar.
-              </p>
-              <ul class="spotlight-bullets">
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Sony, Sennheiser, Beyerdynamic, AKG ve Apple modelleri için hazır AutoEQ eğrileri.</span>
-                </li>
-                <li class="spotlight-bullet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span>Gerçek zamanlı BASS FX yankı (reverb), limiter ve stereo genişletici.</span>
-                </li>
-              </ul>
-            </div>
-            <div class="spotlight-preview">
-              <img src="../assets/images/audio-effects.png" alt="DaliNira Ses Stüdyosu" width="1425" height="944" loading="lazy">
+              <img src="../assets/images/settings.png" alt="Kategori kenar çubuğuyla DaliNira Ayarlar sayfası; tarayıcı motoru Sistem bölümünden seçilir" width="1212" height="916" loading="lazy">
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Privacy by Design Section -->
+    <section id="screenshots" class="section">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-subtitle">Ekran görüntüleri</span>
+          <h2 class="section-title">Gerçek DaliNira arayüzü</h2>
+          <p class="section-desc">Tüm ekran görüntüleri Linux üzerinde çalışan DaliNira 8.0.0&#x27;dan alınmıştır.</p>
+        </div>
+
+        <div class="spotlight-wrapper">
+          <div class="spotlight-row">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Reklam ve takipçi kalkanı</span>
+              <h3 class="spotlight-title">Eklentisiz, daha temiz sayfalar</h3>
+              <p class="spotlight-desc">DaliNira engelleyicisi filtre listelerini yerel olarak uygular, boş reklam alanlarını gizler ve utm_*, fbclid, gclid gibi izleme parametrelerini temizler.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Koruma düzeyleri, liste seçimi ve siteye özel istisnalar.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Chromium ve WebKitGTK için aynı filtreleme motoru.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/dalinira-blocker.png" alt="Temel, Optimal ve Tam filtreleme modlarıyla DaliNira Engelleyici sayfası" width="1208" height="862" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row reverse">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">İndirmeler</span>
+              <h3 class="spotlight-title">Tüm indirmeler tek yerde</h3>
+              <p class="spotlight-desc">Sürdürme ve yeniden deneme destekli parçalı paralel indirmeler ve desteklenen sitelerde medya analizi.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Bir bağlantı yapıştırıp analiz edin ya da açık sayfadaki medyayı indirin.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Etkin indirmeler ve geçmiş dalinira://downloads sayfasında.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/downloads.png" alt="Bağlantı alanı, etkin indirmeler ve indirme geçmişiyle İndirmeler sayfası" width="1207" height="839" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Parola kasası</span>
+              <h3 class="spotlight-title">Parolalar bu cihazda kalır</h3>
+              <p class="spotlight-desc">İsteğe bağlı, deneysel kasa onayladığınız girişleri AES-256-GCM ve PBKDF2-HMAC-SHA256 anahtarıyla şifreler.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Hiçbir sunucuyla eşitlenmez; geliştirici arka kapısı yoktur.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Yalnızca bildirimi okuyup onayladıktan sonra açılır.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/password-manager.png" alt="Yerel kasa bildirimiyle Parola Yöneticisi etkinleştirme ekranı" width="1208" height="859" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row reverse">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Ses</span>
+              <h3 class="spotlight-title">Web medyası için stüdyo araçları</h3>
+              <p class="spotlight-desc">Web sesini 32 bantlı ekolayzer, kompresör, limiter ve stereo genişletici üzerinden geçirin; 1.757 AutoEQ kulaklık ön ayarı dahildir.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Sony, Sennheiser, Beyerdynamic, AKG, Apple ve daha fazlası için ön ayarlar.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Tek bir anahtar, web medyası için ses efektlerini açar veya kapatır.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/audio-effects.png" alt="32 bantlı ekolayzerle Ses Efektleri sayfası" width="1207" height="869" loading="lazy">
+            </div>
+          </div>
+
+          <div class="spotlight-row">
+            <div class="spotlight-content">
+              <span class="spotlight-pill">Pulse</span>
+              <h3 class="spotlight-title">Çalan şarkının adını bulun</h3>
+              <p class="spotlight-desc">Pulse, bilgisayarınızda çalan şarkıyı tanır. Ses parmak izini yerel olarak oluşturur ve Shazam&#x27;ın tanıma hizmetine yalnızca bu parmak izini gönderir.</p>
+              <ul class="spotlight-bullets">
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Kaynak olarak sistem sesi, mikrofon veya ikisi birden.</span>
+                </li>
+                <li class="spotlight-bullet">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span>Pulse&#x27;un bulduğu şarkıların listesi.</span>
+                </li>
+              </ul>
+            </div>
+            <div class="spotlight-preview">
+              <img src="../assets/images/dalinira-pulse.png" alt="Ses kaynağı seçicisiyle dinlemeye hazır DaliNira Pulse" width="1210" height="863" loading="lazy">
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="privacy" class="section privacy-section">
       <div class="container">
         <div class="privacy-card">
           <div class="section-header">
-            <span class="section-subtitle">Mimari Güvence</span>
-            <h2 class="section-title">Sonradan Eklenen Değil, Tasarımdan Gelen Gizlilik</h2>
-            <p class="section-desc">
-              Yazılımımızı mümkün olan en küçük saldırı yüzeyiyle tasarlıyoruz. Kanıtlanamayan reklam sloganları yerine kodla doğrulanabilir teknik taahhütler sunuyoruz.
-            </p>
+            <span class="section-subtitle">Gizlilik ilkeleri</span>
+            <h2 class="section-title">Verileriniz bilgisayarınızda kalır</h2>
+            <p class="section-desc">Pazarlama vaatleri yerine somut tasarım kararları.</p>
           </div>
 
           <div class="privacy-grid">
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Sıfır Web Sitesi Telemetrisi</h3>
-                <p>Bu tanıtım sitesinde Google Analytics, üçüncü taraf takipçiler, çerezler veya tarayıcı parmak izi alma kodları yer almaz.</p>
+                <h3>Önce yerel</h3>
+                <p>Geçmiş, yer imleri, parolalar, ayarlar ve ön ayarlar bilgisayarınızdaki kullanıcı profilinizde saklanır.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Harici CDN Yoktur</h3>
-                <p>Tüm stil sayfaları, komut dosyaları, simgeler ve görseller doğrudan bu statik alandan sunulur. Harici yazı tipi veya kütüphane çağrısı yapılmaz.</p>
+                <h3>Hesap yok, telemetri yok</h3>
+                <p>DaliNira oturum açmayı gerektirmez ve yerleşik kullanım telemetrisi içermez.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Hesap Açma Zorunluluğu Yoktur</h3>
-                <p>DaliNira'yi kullanmak, yer imlerini kaydetmek veya indirme yöneticisini çalıştırmak için oturum açmanız gerekmez.</p>
+                <h3>Ağ yalnızca gerektiğinde</h3>
+                <p>Arama önerileri, çeviri, Pulse tanıma ve filtre listesi güncellemeleri yalnızca o özelliğin ihtiyaç duyduğu hizmete bağlanır.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Öncelikli Yerel Mimari</h3>
-                <p>Parolalarınız, geçmişiniz, izinleriniz ve ses profilleriniz standart XDG dizinleri ve güvenli işletim sistemi API'leri ile yerel makinenizde saklanır.</p>
+                <h3>Şifreli parola kasası</h3>
+                <p>Kimlik bilgileri AES-256-GCM ve PBKDF2-HMAC-SHA256 anahtarı ile yerel olarak şifrelenir ve hiçbir zaman eşitlenmez.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Sıkı İçerik Güvenlik Politikası (CSP)</h3>
-                <p>Gelişmiş HTTP başlıkları, Permissions-Policy kısıtlamaları ve no-referrer ilkeleri ile korunmaktadır.</p>
+                <h3>İzleyicisiz bir web sitesi</h3>
+                <p>Bu site analiz aracı, çerez, harici yazı tipi veya betik yüklemez ve katı bir İçerik Güvenliği Politikası kullanır.</p>
               </div>
             </div>
 
             <div class="privacy-item">
-              <div class="privacy-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
+              <div class="privacy-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
               <div class="privacy-item-content">
-                <h3>Denetlenebilir Açık Kaynak</h3>
-                <p>DaliNira Browser kaynak kodunun her satırı GNU Genel Kamu Lisansı v3.0 kapsamında şeffaf ve denetlenebilirdir.</p>
+                <h3>Açık kaynak</h3>
+                <p>Kaynak kodun tamamı GNU Genel Kamu Lisansı v3.0 altında herkese açıktır.</p>
               </div>
             </div>
           </div>
 
           <div class="privacy-badge-note">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            <span>Önemli Bilgi: "Asla hacklenemez" veya "%100 güvenli" gibi aldatıcı ifadeler kullanmıyoruz. Gerçek güvenlik; minimum saldırı yüzeyi, şeffaf açık kaynak kod incelemesi ve yerel veri işleme ile sağlanır.</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span>Pulse, Shazam&#x27;ın tanıma hizmetine kayıt değil, yerel olarak hesaplanan bir ses parmak izi gönderir.</span>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Open Source Section -->
     <section id="open-source" class="section">
       <div class="container">
         <div class="open-source-card">
           <div class="open-source-content">
             <span class="license-pill">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
               <span>GNU Genel Kamu Lisansı v3.0</span>
             </span>
-            <h2>Özgür ve Açık Kaynak Kodlu</h2>
-            <p>
-              DaliNira Browser, GitHub üzerinde tamamen şeffaf şekilde geliştirilmektedir. Mimariyi inceleyebilir, kendi tercih ettiğiniz derleyici bayraklarıyla yerel olarak derleyebilir ve topluluğa katkı sağlayabilirsiniz.
-            </p>
+            <h2>Özgür ve açık kaynak</h2>
+            <p>DaliNira Browser GitHub&#x27;da açık olarak geliştirilir. Kodu inceleyin, kendiniz derleyin, hata bildirin veya katkıda bulunun.</p>
             <a href="https://github.com/Muhammed-Dali/DaliNira-Browser" class="btn btn-primary btn-lg" target="_blank" rel="noopener noreferrer">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-              <span>GitHub'da Kaynak Kodu Gör</span>
+              <span>Kaynak kodu GitHub&#x27;da görüntüle</span>
             </a>
           </div>
 
           <div class="open-source-stats">
             <div class="stat-row">
-              <span class="stat-label">Temel Dil</span>
-              <span class="stat-value">C++20</span>
+              <span class="stat-label">Motorlar</span>
+              <span class="stat-value" dir="ltr">Chromium · WebKitGTK</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label">Arayüz Çatısı</span>
-              <span class="stat-value">Qt 6.4+ (Yerel)</span>
+              <span class="stat-label">Arayüz</span>
+              <span class="stat-value" dir="ltr">Qt 6</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label">Motor Altyapısı</span>
-              <span class="stat-value">Chromium / QtWebEngine</span>
+              <span class="stat-label">Programlama dili</span>
+              <span class="stat-value" dir="ltr">C++20</span>
             </div>
             <div class="stat-row">
-              <span class="stat-label">Ses Alt Sistemi</span>
-              <span class="stat-value">DALI Web Audio + BASS</span>
+              <span class="stat-label">Arayüz dilleri</span>
+              <span class="stat-value" dir="ltr">EN · TR · AR · FR</span>
             </div>
             <div class="stat-row">
               <span class="stat-label">Lisans</span>
-              <span class="stat-value">GPL-3.0-only</span>
+              <span class="stat-value" dir="ltr">GPL-3.0-only</span>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Download Section -->
     <section id="download" class="section">
       <div class="container">
         <div class="section-header">
-          <span class="section-subtitle">Hemen Başlayın</span>
-          <h2 class="section-title">DaliNira Browser'ı İndirin</h2>
-          <p class="section-desc">
-            Kullandığınız işletim sistemini seçin. Hızlı paket yöneticisi entegrasyonu ve GitHub üzerinde bağımsız sürüm paketleri sunulmaktadır.
-          </p>
+          <span class="section-subtitle">Başlayın</span>
+          <h2 class="section-title">DaliNira 8.0.0&#x27;ı kurun</h2>
+          <p class="section-desc">DaliNira, Linux x86_64&#x27;ü destekler. Her sürümde Debian, Ubuntu ve Fedora paketleri ile taşınabilir bir arşiv bulunur.</p>
         </div>
 
         <div class="download-grid">
-          <!-- Linux Card -->
           <div class="download-card">
             <div class="download-card-header">
               <div class="platform-icon">
-                <img src="../assets/icons/linux.svg" alt="Linux" width="24" height="24">
+                <img src="../assets/icons/linux.svg" alt="" aria-hidden="true" width="24" height="24">
               </div>
               <div>
-                <h3 class="download-card-title">Linux</h3>
-                <span class="download-card-subtitle">Arch Linux, Manjaro, Debian ve Bağımsız Paketler</span>
+                <h3 class="download-card-title">Debian, Ubuntu, Fedora</h3>
+                <span class="download-card-subtitle">GitHub Releases&#x27;tan paketler</span>
+              </div>
+            </div>
+
+            <ul class="spotlight-bullets download-list">
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Debian 12 — .deb</span></li>
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Ubuntu 24.04 — .deb</span></li>
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Fedora — .rpm</span></li>
+                <li class="spotlight-bullet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Tüm dağıtımlar — taşınabilir .tar.zst</span></li>
+            </ul>
+
+            <div class="download-card-cta">
+              <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases/latest" class="btn btn-primary btn-block" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
+                <span>GitHub Releases&#x27;tan indir</span>
+              </a>
+              <p class="download-note">WebKitGTK ile medya oynatmak için GStreamer eklentileri gerekir; paketler bunları bağımlılık olarak kurar.</p>
+            </div>
+          </div>
+
+          <div class="download-card">
+            <div class="download-card-header">
+              <div class="platform-icon">
+                <img src="../assets/icons/linux.svg" alt="" aria-hidden="true" width="24" height="24">
+              </div>
+              <div>
+                <h3 class="download-card-title">Arch Linux</h3>
+                <span class="download-card-subtitle">AUR veya imzalı DaliNira deposu</span>
               </div>
             </div>
 
             <div class="install-methods">
               <div class="install-method">
-                <span class="install-method-label">Resmî Pacman Deposu (Önerilen)</span>
-                <div class="code-box">
-                  <code id="cmd-pacman">curl -fsSL https://muhammed-dali.github.io/DaliNira-Browser/dalinira.repo | sudo tee -a /etc/pacman.conf &gt;/dev/null &amp;&amp; sudo pacman -Syu dalinira</code>
-                  <button type="button" class="copy-btn" data-target="cmd-pacman" data-copied="Kopyalandı!">Kopyala</button>
-                </div>
-              </div>
-
-              <div class="install-method">
-                <span class="install-method-label">AUR Paketi</span>
-                <div class="code-box">
+                <span class="install-method-label">AUR paketi</span>
+                <div class="code-box" dir="ltr">
                   <code id="cmd-aur">yay -S dalinira-bin</code>
                   <button type="button" class="copy-btn" data-target="cmd-aur" data-copied="Kopyalandı!">Kopyala</button>
                 </div>
               </div>
-            </div>
 
-            <div class="download-card-cta">
-              <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" class="btn btn-primary" style="width: 100%;" target="_blank" rel="noopener noreferrer">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
-                <span>Bağımsız Paketi İndir (.tar.zst)</span>
-              </a>
-              <p class="download-note">Sürümler doğrudan GitHub Releases üzerinde barındırılır</p>
-            </div>
-          </div>
-
-          <!-- Windows Card -->
-          <div class="download-card">
-            <div class="download-card-header">
-              <div class="platform-icon">
-                <img src="../assets/icons/windows.svg" alt="Windows" width="24" height="24">
-              </div>
-              <div>
-                <h3 class="download-card-title">Windows</h3>
-                <span class="download-card-subtitle">Windows 10 / 11 (64-bit)</span>
-              </div>
-            </div>
-
-            <div class="install-methods">
               <div class="install-method">
-                <span class="install-method-label">Bağımsız Kurulum Paketi</span>
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                  Windows paketi henüz v7.2.1 sürümüne dahil değildir. Gelecek Windows yapıları için GitHub Releases sayfasını takip edin.
-                </p>
+                <span class="install-method-label">İmzalı pacman deposu</span>
+                <div class="code-box" dir="ltr">
+                  <code id="cmd-pacman">curl -sL https://github.com/Muhammed-Dali/DaliNira-Browser/releases/download/pacman-repo/dalinira.gpg | sudo pacman-key --add - &amp;&amp; sudo pacman-key --lsign-key BC741FD0AC804351B0DDBB86FDFEC60C11202588 &amp;&amp; curl -fsSL https://muhammed-dali.github.io/DaliNira-Browser/dalinira.repo | sudo tee -a /etc/pacman.conf &gt;/dev/null &amp;&amp; sudo pacman -Syu dalinira</code>
+                  <button type="button" class="copy-btn" data-target="cmd-pacman" data-copied="Kopyalandı!">Kopyala</button>
+                </div>
               </div>
-            </div>
-
-            <div class="download-card-cta">
-              <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" class="btn btn-primary" style="width: 100%;" target="_blank" rel="noopener noreferrer">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
-                <span>GitHub Releases'ta Görüntüle</span>
-              </a>
-              <p class="download-note">Sürümler doğrudan GitHub Releases üzerinde barındırılır</p>
             </div>
           </div>
         </div>
@@ -605,65 +531,62 @@
 
   </main>
 
-  <!-- Site Footer -->
   <footer class="site-footer">
     <div class="container">
       <div class="footer-top">
         <div class="footer-brand">
           <a href="./" class="brand-link">
-            <img src="../assets/images/dalinira-logo-128.png" alt="DaliNira Logo" width="30" height="30">
+            <img src="../assets/images/dalinira-logo-128.png" alt="" width="30" height="30">
             <span>DaliNira Browser</span>
           </a>
-          <p class="footer-desc">
-            Qt 6 ve C++20 ile hız, özgürlük ve akustik hassasiyet için geliştirilmiş bağımsız, gizlilik odaklı masaüstü web tarayıcısı.
-          </p>
+          <p class="footer-desc">Chromium ve WebKitGTK motorlarına sahip, Linux için bağımsız bir masaüstü tarayıcısı.</p>
         </div>
 
         <div class="footer-column">
           <h4>Gezinme</h4>
           <ul>
             <li><a href="#features">Özellikler</a></li>
-            <li><a href="#showcase">Arayüz</a></li>
+            <li><a href="#engines">Motorlar</a></li>
+            <li><a href="#screenshots">Ekran görüntüleri</a></li>
             <li><a href="#privacy">Gizlilik</a></li>
             <li><a href="#download">İndir</a></li>
           </ul>
         </div>
 
         <div class="footer-column">
-          <h4>Açık Kaynak</h4>
+          <h4>Açık kaynak</h4>
           <ul>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser" target="_blank" rel="noopener noreferrer">GitHub Deposu</a></li>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" target="_blank" rel="noopener noreferrer">Sürümler & Değişiklik Günlüğü</a></li>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">GPL-3.0 Lisansı</a></li>
-            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/issues" target="_blank" rel="noopener noreferrer">Hata Bildirimi (Issues)</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser" target="_blank" rel="noopener noreferrer">GitHub deposu</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases" target="_blank" rel="noopener noreferrer">Sürümler</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">Değişiklik günlüğü</a></li>
+            <li><a href="https://github.com/Muhammed-Dali/DaliNira-Browser/issues/new/choose" target="_blank" rel="noopener noreferrer">Hata bildir</a></li>
           </ul>
         </div>
 
         <div class="footer-column">
           <h4>Diller</h4>
           <ul>
-            <li><a href="../">English</a></li>
-            <li><a href="./">Türkçe (Varsayılan)</a></li>
-            <li><a href="../ar/">العربية (RTL)</a></li>
+            <li><a href="../" lang="en">English</a></li>
+            <li><a href="./" lang="tr">Türkçe</a></li>
+            <li><a href="../ar/" lang="ar">العربية</a></li>
           </ul>
         </div>
       </div>
 
       <div class="footer-bottom">
         <div>
-          <span>© 2026 DaliNira Browser Projesi. GNU Genel Kamu Lisansı v3.0 ile yayınlanmaktadır.</span>
+          <span>© 2026 DaliNira Browser Projesi. GNU Genel Kamu Lisansı v3.0 altında yayımlanmıştır.</span>
         </div>
         <div>
-          <button type="button" class="back-to-top" aria-label="Yukarı Kaydır">
-            <span>Yukarı Çık</span>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+          <button type="button" class="back-to-top">
+            <span>Başa dön</span>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
           </button>
         </div>
       </div>
     </div>
   </footer>
 
-  <!-- Minimal Vanilla JavaScript -->
   <script src="../assets/js/main.js"></script>
 </body>
 </html>

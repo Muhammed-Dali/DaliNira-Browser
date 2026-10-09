@@ -46,6 +46,10 @@ class TabStripWidget : public QWidget {
   void setTabIcon(int index, const QIcon &icon);
   void setTabPinned(int index, bool pinned);
   void setTabAudible(int index, bool audible);
+  // A sleeping tab (memory saver) is drawn with a faded favicon, a moon badge
+  // and a muted title; activating it wakes the page.
+  void setTabSleeping(int index, bool sleeping);
+  bool isTabSleeping(int index) const;
   void setTabLoading(int index, bool loading);
   void setTabData(int index, const QVariant &data);
 
@@ -131,6 +135,8 @@ class TabStripWidget : public QWidget {
   int suppressedVisualTab_ = -1;
   QPoint pressGlobalPos_;
   QPoint pressLocalPos_;
+  std::optional<QPoint> pendingWindowMovePress_;
+  std::optional<QPoint> manualWindowMoveOffset_;
   QPoint dragOffsetInTab_;
   std::optional<QPoint> draggedTopLeft_;
 

@@ -22,21 +22,364 @@
 #include <QToolBar>
 #include <QTreeWidget>
 #include <QWebEnginePage>
+#include <QAbstractItemView>
+#include <QBuffer>
+#include <QImage>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QStandardItemModel>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QToolButton>
+#include <QWebEngineView>
+#include <functional>
+#include <memory>
 
 #include "browser_window.h"
+#include "desktop_tabs/tab_performance_manager.h"
+#include "desktop_tabs/tab_manager.h"
 #include "core/browser_profile_service.h"
+#include "blocker/dalinira_blocker_service.h"
 #include "desktop_tabs/find_bar_widget.h"
 #include "desktop_tabs/tab_strip_widget.h"
 #include "passwords/credential_autofill_controller.h"
 #include "passwords/credential_save_bubble.h"
 #include "passwords/credential_vault_manager.h"
 #include "settings/settings_page.h"
+#include "core/browser_icons.h"
+#include "core/search_suggestion_service.h"
+#include "engine/engine_backend.h"
+#include "engine/engine_storage_manager.h"
+#if defined(DALINIRA_BUILD_WEBKIT)
+#include "engine/webkit/webkit_backend.h"
+#endif
+
+namespace {
+
+bool waitUntil(const std::function<bool()> &condition, int timeoutMs) {
+  QElapsedTimer timer;
+  timer.start();
+  while (!condition()) {
+    if (timer.elapsed() > timeoutMs) return false;
+    QApplication::processEvents(QEventLoop::AllEvents, 20);
+  }
+  return true;
+}
+
+QImage iconImage(const QIcon &icon) {
+  return icon.pixmap(16, 16).toImage().convertToFormat(QImage::Format_ARGB32);
+}
+bool isAppIcon(const QIcon &icon) { return !icon.isNull() && iconImage(icon) == iconImage(BrowserIcons::appIcon()); }
+bool isRedFavicon(const QIcon &icon) {
+  if (icon.isNull()) return false;
+  const QColor c = iconImage(icon).pixelColor(8, 8);
+  return c.red() > 200 && c.green() < 60 && c.blue() < 60;
+}
+
+// Runs JavaScript in a tab regardless of engine; state outlives a timed-out wait.
+QVariant runInTab(BrowserWindow &window, int index, const QString &script) {
+  auto state = std::make_shared<std::pair<bool, QVariant>>(false, QVariant());
+  const BrowserTabInfo &tab = window.tabInfo(index);
+  const auto done = [state](const QVariant &value) { state->first = true; state->second = value; };
+  if (tab.engineView) tab.engineView->runJavaScript(script, done);
+  else if (tab.view) tab.view->page()->runJavaScript(script, done);
+  waitUntil([state] { return state->first; }, 5000);
+  return state->second;
+}
+
+// Local pages: one with a red favicon, one without any favicon.
+class LocalSite final : public QTcpServer {
+ public:
+  LocalSite() {
+    QImage red(16, 16, QImage::Format_ARGB32);
+    red.fill(QColor(255, 0, 0));
+    QBuffer buffer(&favicon_);
+    buffer.open(QIODevice::WriteOnly);
+    red.save(&buffer, "PNG");
+    connect(this, &QTcpServer::newConnection, this, [this] {
+      while (QTcpSocket *socket = nextPendingConnection()) {
+        connect(socket, &QTcpSocket::readyRead, socket, [this, socket] {
+          const QByteArray request = socket->readAll();
+          const QByteArray path = request.split(' ').value(1).split('?').value(0);
+          QByteArray type = "text/html; charset=utf-8", body, status = "200 OK";
+          if (path == "/") body = "<html><head><title>Home page</title></head><body>home</body></html>";
+          else if (path == "/icon.html") body = "<html><head><title>Icon page</title><link rel=icon href=/fav.png></head><body>icon</body></html>";
+          else if (path == "/plain.html") body = "<html><head><title>Plain page</title></head><body>plain</body></html>";
+          else if (path == "/tile.html") body = "<html><head><title>Tile page</title></head><body>tile</body></html>";
+          else if (path == "/form.html") body = "<html><head><title>Form page</title><link rel=icon href=/fav.png></head><body>"
+                                                "<form><input id=field name=field></form><div style='height:6000px'>long</div></body></html>";
+          else if (path == "/blocking.html")
+            body = "<html><head><title>Blocking page</title><script src=/ads/banner.js></script><script src=/ok.js></script>"
+                   "</head><body><div class=dalinira-test-ad>ad</div><p id=content>content</p></body></html>";
+          else if (path == "/ads/banner.js") { type = "text/javascript"; body = "window.bannerLoaded=1;"; ++bannerServed; }
+          else if (path == "/ok.js") { type = "text/javascript"; body = "window.okLoaded=1;"; }
+          else if (path == "/fav.png") { type = "image/png"; body = favicon_; }
+          else status = "404 Not Found";
+          socket->write("HTTP/1.1 " + status + "\r\nContent-Type: " + type + "\r\nConnection: close\r\nContent-Length: " +
+                        QByteArray::number(body.size()) + "\r\n\r\n" + body);
+          socket->disconnectFromHost();
+        });
+        connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+      }
+    });
+    listen(QHostAddress::LocalHost);
+  }
+  QUrl url(const QString &path) const { return QUrl(QStringLiteral("http://127.0.0.1:%1%2").arg(serverPort()).arg(path)); }
+  int bannerServed = 0;
+
+ private:
+  QByteArray favicon_;
+};
+
+bool pageReady(BrowserWindow &window, int index, const QString &title) {
+  return waitUntil([&] { return runInTab(window, index, QStringLiteral("document.readyState==='complete'?document.title:''")).toString() == title; }, 15000);
+}
+
+// Issues 2-4: favicons, quick access and suggestion activation must behave the
+// same on both engines, through the shared BrowserWindow policies.
+void crossEngineNavigationUx(const char *engineName, BrowserProfileService &profile, BrowserServices services, LocalSite &site) {
+  std::cout << "  -> [" << engineName << "] favicons, quick access and suggestion activation...\n";
+  const QUrl newTab(QStringLiteral("dalinira://newtab/"));
+  BrowserWindow window(services, true);
+  window.resize(1100, 760);
+  window.show();
+  window.addNewTab(newTab);
+  assert(window.tabCount() == 1);
+  assert(waitUntil([&] { return runInTab(window, 0, QStringLiteral("!!document.querySelector('#query')")).toBool(); }, 15000));
+
+  // Favicons: DaliNira icon on the new tab, the page favicon on a site, a
+  // per-site fallback (never DaliNira, never the previous site) without one.
+  assert(waitUntil([&] { return isAppIcon(window.tabInfo(0).icon) && isAppIcon(window.tabStrip()->tabIcon(0)); }, 5000));
+  window.navigateCurrentTab(site.url(QStringLiteral("/icon.html")));
+  assert(waitUntil([&] { return isRedFavicon(window.tabInfo(0).icon) && isRedFavicon(window.tabStrip()->tabIcon(0)); }, 15000)
+         && "a site's favicon must replace the DaliNira icon");
+  window.navigateCurrentTab(site.url(QStringLiteral("/plain.html")));
+  assert(pageReady(window, 0, QStringLiteral("Plain page")));
+  assert(waitUntil([&] { const QIcon icon = window.tabStrip()->tabIcon(0);
+                         return !icon.isNull() && !isAppIcon(icon) && !isRedFavicon(icon); }, 5000)
+         && "a page without favicon gets a site fallback, not DaliNira or the previous favicon");
+  window.navigateCurrentTab(newTab);
+  assert(waitUntil([&] { return isAppIcon(window.tabInfo(0).icon) && isAppIcon(window.tabStrip()->tabIcon(0)); }, 15000)
+         && "returning to the new tab restores the DaliNira icon");
+  assert(window.tabCount() == 1);
+
+  // Bookmark bar: plain click navigates the current tab; middle-click and the
+  // explicit action open new tabs.
+  QToolButton *bookmark = nullptr;
+  for (auto *button : window.findChildren<QToolButton *>())
+    if (button->property("dalinira-bookmark-url").toUrl() == site.url(QStringLiteral("/plain.html"))) bookmark = button;
+  assert(bookmark);
+  bookmark->click();
+  assert(window.tabCount() == 1 && "a bookmark click from the new tab reuses the current tab");
+  assert(waitUntil([&] { return window.tabInfo(0).url == site.url(QStringLiteral("/plain.html")); }, 5000));
+  assert(pageReady(window, 0, QStringLiteral("Plain page")));
+  QMouseEvent middleRelease(QEvent::MouseButtonRelease, QPointF(4, 4), bookmark->mapToGlobal(QPointF(4, 4)),
+                            Qt::MiddleButton, Qt::NoButton, Qt::NoModifier);
+  QApplication::sendEvent(bookmark, &middleRelease);
+  assert(window.tabCount() == 2 && "middle-click opens the bookmark in a new tab");
+  window.openBookmarkUrl(site.url(QStringLiteral("/plain.html")), true);
+  assert(window.tabCount() == 3 && "explicit open-in-new-tab still creates a tab");
+  window.closeTab(2);
+  window.closeTab(1);
+  window.switchTab(0);
+  assert(window.tabCount() == 1);
+
+  // Quick-access tile on the new tab navigates the same tab. Frequent sites are
+  // grouped per origin, so the tile links to the site root.
+  window.navigateCurrentTab(newTab);
+  const QString tileHref = site.url(QStringLiteral("/")).toString();
+  assert(waitUntil([&] { return runInTab(window, 0, QStringLiteral("!!document.querySelector('#shortcut-list a.shortcut[href=\"%1\"]')").arg(tileHref)).toBool(); }, 15000)
+         && "quick-access tiles are real links to the site");
+  runInTab(window, 0, QStringLiteral("document.querySelector('#shortcut-list a.shortcut[href=\"%1\"]').click();true").arg(tileHref));
+  assert(pageReady(window, 0, QStringLiteral("Home page")) && window.tabCount() == 1 && "a tile reuses the current new tab");
+
+  // Suggestions: a search suggestion navigates straight to the engine's search
+  // URL for that exact query (never re-resolved: "github" must not open github.com),
+  // in the current tab, identically for click and Enter, omnibox and New Tab.
+  const QUrl expected = profile.searchUrlForEngine(window.currentSearchEngine(), QStringLiteral("github"));
+  assert(expected.isValid() && expected.host() != QLatin1String("github.com"));
+  auto *omnibox = window.findChild<QLineEdit *>(QStringLiteral("omnibox"));
+  auto *completer = omnibox->completer();
+  auto *model = qobject_cast<QStandardItemModel *>(completer->model());
+  assert(model);
+  const auto showRows = [&] {
+    window.navigateCurrentTab(site.url(QStringLiteral("/plain.html")));
+    pageReady(window, 0, QStringLiteral("Plain page"));
+    model->clear();
+    auto *remote = new QStandardItem(QStringLiteral("github"));
+    remote->setData(expected, Qt::UserRole + 1);
+    remote->setData(QStringLiteral("remote"), Qt::UserRole + 2);
+    auto *history = new QStandardItem(QStringLiteral("Tile page"));
+    history->setData(site.url(QStringLiteral("/tile.html")), Qt::UserRole + 1);
+    history->setData(QStringLiteral("history"), Qt::UserRole + 2);
+    model->appendRow(remote);
+    model->appendRow(history);
+    omnibox->setText(QStringLiteral("git"));
+    completer->complete();
+  };
+  showRows();
+  Q_EMIT completer->activated(completer->completionModel()->index(0, 0));  // mouse click
+  assert(window.tabCount() == 1 && window.tabInfo(0).url == expected && "click searches the suggestion once");
+  QApplication::processEvents();
+  showRows();
+  completer->popup()->setCurrentIndex(completer->completionModel()->index(0, 0));
+  Q_EMIT omnibox->returnPressed();                                           // keyboard Enter
+  assert(window.tabCount() == 1 && window.tabInfo(0).url == expected && "Enter behaves exactly like click");
+  QApplication::processEvents();
+  showRows();
+  Q_EMIT completer->activated(completer->completionModel()->index(1, 0));
+  assert(window.tabCount() == 1 && window.tabInfo(0).url == site.url(QStringLiteral("/tile.html")) && "URL rows navigate directly");
+  completer->popup()->hide();
+
+  // New Tab search field: the page's activate command uses the same path.
+  window.navigateCurrentTab(newTab);
+  assert(waitUntil([&] { return runInTab(window, 0, QStringLiteral("typeof selectSuggestion==='function'&&suggestionCapability.length>0")).toBool(); }, 15000));
+  runInTab(window, 0, QStringLiteral("suggestionRows=[{type:'remote',text:'github',url:%1}];selectSuggestion(0);true")
+                          .arg(QString::fromUtf8(QJsonDocument(QJsonArray{expected.toString()}).toJson(QJsonDocument::Compact)).mid(1).chopped(1)));
+  assert(waitUntil([&] { return window.tabInfo(0).url == expected; }, 5000) && window.tabCount() == 1
+         && "a New Tab suggestion click searches immediately in the current tab");
+  window.navigateCurrentTab(site.url(QStringLiteral("/plain.html")));  // leave the real search engine
+  std::cout << "     PASS: [" << engineName << "] favicons, quick access and suggestion activation match Brave behavior.\n";
+}
+
+struct SleepOutcome {
+  bool scrollRestored = false;
+  bool formRestored = false;
+};
+
+// Tab sleeping through the real BrowserWindow: the same actions, indicator,
+// kept state and waking on both engines.
+SleepOutcome crossEngineTabSleeping(const char *engineName, BrowserServices services, LocalSite &site) {
+  std::cout << "  -> [" << engineName << "] tab sleeping: sleep, indicator, kept state, wake, close...\n";
+  TabManager tabManager;
+  services.tabManager = &tabManager;
+  auto *perf = tabManager.performanceManager();
+  perf->setPolicyMode(dalinira::PerformancePolicyMode::Off);  // only explicit actions in this scenario
+  BrowserWindow window(services, true);
+  window.resize(1000, 700);
+  window.show();
+  window.addNewTab(site.url(QStringLiteral("/form.html")));
+  assert(pageReady(window, 0, QStringLiteral("Form page")));
+  assert(waitUntil([&] { return isRedFavicon(window.tabStrip()->tabIcon(0)); }, 15000));
+  runInTab(window, 0, QStringLiteral("document.getElementById('field').value='kept text';window.scrollTo(0,1500);true"));
+  window.addNewTab(site.url(QStringLiteral("/plain.html")));
+  assert(pageReady(window, 1, QStringLiteral("Plain page")));
+  window.addNewTab(site.url(QStringLiteral("/tile.html")));
+  assert(pageReady(window, 2, QStringLiteral("Tile page")));
+  window.switchTab(1);
+  QApplication::processEvents();
+
+  // The active tab is never put to sleep; an inactive one is.
+  assert(!window.sleepTabAt(1) && "the active tab cannot be slept");
+  const QUrl urlBefore = window.tabInfo(0).url;
+  assert(window.sleepTabAt(0));
+  assert(waitUntil([&] { return window.isTabSleeping(0) && window.tabStrip()->isTabSleeping(0); }, 5000));
+  assert(window.tabInfo(0).url == urlBefore && window.tabInfo(0).title == QStringLiteral("Form page"));
+  assert(isRedFavicon(window.tabStrip()->tabIcon(0)) && "a sleeping tab keeps its favicon");
+
+  // Sleep all other tabs keeps the current one awake.
+  assert(window.sleepOtherTabs(1) == 1);  // tab 2; tab 0 already sleeps
+  assert(window.isTabSleeping(2) && !window.isTabSleeping(1));
+
+  // Waking on activation restores the page (history, and scroll/form where the engine does).
+  window.switchTab(0);
+  assert(waitUntil([&] { return !window.isTabSleeping(0) && !window.tabStrip()->isTabSleeping(0); }, 5000));
+  assert(pageReady(window, 0, QStringLiteral("Form page")));
+  SleepOutcome outcome;
+  waitUntil([&] { return runInTab(window, 0, QStringLiteral("window.scrollY")).toDouble() > 1000; }, 3000);
+  outcome.scrollRestored = runInTab(window, 0, QStringLiteral("window.scrollY")).toDouble() > 1000;
+  outcome.formRestored = runInTab(window, 0, QStringLiteral("document.getElementById('field').value")).toString() ==
+                         QStringLiteral("kept text");
+  assert(window.tabInfo(0).url == urlBefore);
+
+  // Closing sleeping tabs is safe (Chromium used to crash closing a discarded tab).
+  window.switchTab(1);
+  assert(window.sleepTabAt(0));
+  window.closeTab(0);
+  QApplication::processEvents();
+  window.closeTab(1);  // tab 2 (now index 1) is asleep too
+  waitUntil([] { return false; }, 500);
+  assert(window.tabCount() == 1);
+  std::cout << "     PASS: [" << engineName << "] sleep/wake; scroll restored=" << outcome.scrollRestored
+            << " form restored=" << outcome.formRestored << ".\n";
+  return outcome;
+}
+
+struct BlockingOutcome {
+  quint64 blockedRequests = 0;
+  quint64 blockedCosmetics = 0;
+};
+
+// Content blocking through the real BrowserWindow: the same network rule and
+// cosmetic rule, the same site switch and the same per-tab counters (what the
+// toolbar shield shows) on both engines.
+BlockingOutcome crossEngineContentBlocking(const char *engineName, BrowserProfileService &profile,
+                                           BrowserServices services, LocalSite &site) {
+  std::cout << "  -> [" << engineName << "] network + cosmetic blocking, counters and site switch...\n";
+  DaliNiraBlockerService *blocker = profile.adBlockService();
+  blocker->settings()->setProtectionEnabled(true);
+  blocker->settings()->setCustomFilters({QStringLiteral("||127.0.0.1^*/ads/banner.js$script"),
+                                         QStringLiteral("127.0.0.1##.dalinira-test-ad")});
+  blocker->reloadRules();
+  BrowserWindow window(services, true);
+  window.resize(1000, 700);
+  window.show();
+  window.addNewTab(site.url(QStringLiteral("/blocking.html")));
+  assert(pageReady(window, 0, QStringLiteral("Blocking page")));
+  const auto blockerTabId = [&] {
+    const BrowserTabInfo &tab = window.tabInfo(0);
+    return tab.engineView ? static_cast<quint64>(reinterpret_cast<quintptr>(tab.engineView.data()))
+                          : static_cast<quint64>(reinterpret_cast<quintptr>(tab.view.data()));
+  };
+  assert(runInTab(window, 0, QStringLiteral("window.okLoaded===1&&window.bannerLoaded===undefined")).toBool()
+         && "the matching script is blocked, the page's own script runs");
+  assert(site.bannerServed == 0 && "a blocked request never leaves the browser");
+  assert(waitUntil([&] { return runInTab(window, 0, QStringLiteral(
+             "getComputedStyle(document.querySelector('.dalinira-test-ad')).display==='none'")).toBool(); }, 5000));
+  assert(waitUntil([&] { const auto stats = blocker->statsForTab(blockerTabId());
+                         return stats.blockedRequests >= 1 && stats.blockedCosmetics >= 1; }, 5000)
+         && "real network and cosmetic blocks are counted for the tab");
+  BlockingOutcome outcome;
+  outcome.blockedRequests = blocker->statsForTab(blockerTabId()).blockedRequests;
+  outcome.blockedCosmetics = blocker->statsForTab(blockerTabId()).blockedCosmetics;
+
+  // Allowlisting the site turns both layers off after a reload; nothing more is counted.
+  SitePolicy allowlisted;
+  allowlisted.whitelisted = true;
+  blocker->settings()->setSitePolicy(QStringLiteral("127.0.0.1"), allowlisted);
+  const auto loadedWithQuery = [&](const QString &query) {
+    return waitUntil([&] { return runInTab(window, 0, QStringLiteral(
+        "document.readyState==='complete'&&location.search==='%1'").arg(query)).toBool(); }, 15000);
+  };
+  window.navigateCurrentTab(site.url(QStringLiteral("/blocking.html?allowed")));
+  assert(loadedWithQuery(QStringLiteral("?allowed")));
+  assert(runInTab(window, 0, QStringLiteral("window.bannerLoaded===1")).toBool() && site.bannerServed == 1);
+  assert(runInTab(window, 0, QStringLiteral(
+             "getComputedStyle(document.querySelector('.dalinira-test-ad')).display!=='none'")).toBool());
+  // Per-tab stats reset on a host change only, so same-site loads keep them.
+  assert(blocker->statsForTab(blockerTabId()).blockedRequests == outcome.blockedRequests &&
+         "an allowlisted site counts nothing");
+  blocker->settings()->setSitePolicy(QStringLiteral("127.0.0.1"), SitePolicy{});
+  window.navigateCurrentTab(site.url(QStringLiteral("/blocking.html?again")));
+  assert(loadedWithQuery(QStringLiteral("?again")));
+  assert(runInTab(window, 0, QStringLiteral("window.bannerLoaded===undefined")).toBool() && site.bannerServed == 1);
+  site.bannerServed = 0;
+  blocker->settings()->setCustomFilters({});
+  blocker->reloadRules();
+  std::cout << "     PASS: [" << engineName << "] blocked=" << outcome.blockedRequests
+            << " cosmetic=" << outcome.blockedCosmetics << ", allowlist honoured.\n";
+  return outcome;
+}
+
+}  // namespace
 
 int main(int argc, char **argv) {
   setvbuf(stdout, nullptr, _IONBF, 0);
   setvbuf(stderr, nullptr, _IONBF, 0);
   QApplication app(argc, argv);
   app.setApplicationName(QStringLiteral("DaliNiraStep5Test"));
+  const bool secureDnsOnly =
+      argc == 2 && QString::fromLocal8Bit(argv[1]) == QLatin1String("--secure-dns-only");
 
   QTemporaryDir tempDir;
   assert(tempDir.isValid());
@@ -49,6 +392,7 @@ int main(int argc, char **argv) {
   services.profileService = &profileService;
 
   std::cout << "[Step 5 Test] Starting essential features verification...\n";
+  if (secureDnsOnly) goto secure_dns_test;
 
   // =========================================================================
   // Test 1: Deferred Defect Fix — Ctrl+W Closes Exactly One Tab
@@ -288,6 +632,7 @@ int main(int argc, char **argv) {
   // =========================================================================
   // Test 5: Secure DNS (DNS-over-HTTPS) Configuration
   // =========================================================================
+secure_dns_test:
   {
     std::cout << "  -> Testing Secure DNS configuration and Qt WebEngine integration...\n";
     assert(profileService.secureDnsMode() == QStringLiteral("system"));
@@ -308,6 +653,7 @@ int main(int argc, char **argv) {
 
     std::cout << "     PASS: Secure DNS mode and provider templates applied cleanly.\n";
   }
+  if (secureDnsOnly) return 0;
 
   // =========================================================================
   // Test 6: Find in Page Bar Lifecycle
@@ -717,9 +1063,9 @@ int main(int argc, char **argv) {
     ownerView->setUrl(QUrl(QStringLiteral("https://login.example.com/form")));
     assert(ownerView->url() == QUrl(QStringLiteral("https://login.example.com/form")));
 
-    window.autofillController()->handleConsoleMessage(
+    window.autofillController()->handleBridgeMessage(
         ownerView->page(),
-        QStringLiteral("DALINIRA_CREDENTIAL_CANDIDATE:{\"origin\":\"https://login.example.com\",\"username\":\"step11-user\",\"password\":\"SyntheticSecret#2026\",\"submitted\":true,\"nonce\":\"step11-flow\"}"));
+        QStringLiteral("candidate:{\"origin\":\"https://login.example.com\",\"username\":\"step11-user\",\"password\":\"SyntheticSecret#2026\",\"submitted\":true,\"nonce\":\"step11-flow\"}"));
     const QString candidateKey = window.autofillController()->candidateKey(
         ownerView, QStringLiteral("https://login.example.com"), QStringLiteral("step11-user"));
     assert(window.autofillController()->pendingCandidateCount() == 1);
@@ -851,6 +1197,61 @@ int main(int argc, char **argv) {
     settings.sync();
 
     std::cout << "     PASS: Bookmark bar visibility strictly enforced for New Tab only.\n";
+  }
+
+  // =========================================================================
+  // Cross-engine navigation UX (favicons, quick access, suggestion activation)
+  // =========================================================================
+  {
+    LocalSite site;
+    assert(site.isListening());
+    BlockingOutcome chromiumBlocking;
+    const auto prepare = [&](const QString &dir, const QString &engine) {
+      auto profile = std::make_unique<BrowserProfileService>(tempDir.path() + dir, nullptr, nullptr, false, nullptr);
+      profile->addBookmark(site.url(QStringLiteral("/plain.html")), QStringLiteral("Plain"));
+      // The shortcut row shows the engine's own Quick Access (per-engine
+      // workspaces); only Chromium inherits root-level library bookmarks.
+      profile->addQuickAccess(site.url(QStringLiteral("/plain.html")), QStringLiteral("Plain"), engine);
+      for (int i = 0; i < 4; ++i) profile->recordHistory(site.url(QStringLiteral("/tile.html")), QStringLiteral("Tile page"));
+      return profile;
+    };
+    {
+      dalinira::engine::EngineBackend::setSelectedEngineType(dalinira::engine::EngineType::Chromium);
+      auto chromiumProfile = prepare(QStringLiteral("/ux-chromium"), QStringLiteral("chromium"));
+      BrowserServices chromiumServices;
+      chromiumServices.profile = chromiumProfile->profile();
+      chromiumServices.profileService = chromiumProfile.get();
+      crossEngineNavigationUx("Chromium", *chromiumProfile, chromiumServices, site);
+      chromiumBlocking = crossEngineContentBlocking("Chromium", *chromiumProfile, chromiumServices, site);
+      crossEngineTabSleeping("Chromium", chromiumServices, site);
+    }
+#if defined(DALINIRA_BUILD_WEBKIT)
+    {
+      qputenv("GDK_BACKEND", "x11");
+      dalinira::engine::EngineStorageManager storage(tempDir.path() + QStringLiteral("/engines"));
+      auto webkit = std::make_unique<dalinira::engine::WebKitBackend>();
+      assert(webkit->initialize(storage));
+      assert(webkit->enableNetworkFiltering());
+      dalinira::engine::EngineBackend::registerBackend(dalinira::engine::EngineType::WebKit, std::move(webkit));
+      dalinira::engine::EngineBackend::setSelectedEngineType(dalinira::engine::EngineType::WebKit);
+      {
+        auto webkitProfile = prepare(QStringLiteral("/ux-webkit"), QStringLiteral("webkit"));
+        assert(webkitProfile->profile() == nullptr);
+        BrowserServices webkitServices;
+        webkitServices.profileService = webkitProfile.get();
+        crossEngineNavigationUx("WebKit", *webkitProfile, webkitServices, site);
+        const BlockingOutcome webkitBlocking = crossEngineContentBlocking("WebKit", *webkitProfile, webkitServices, site);
+        const SleepOutcome webkitSleep = crossEngineTabSleeping("WebKit", webkitServices, site);
+        assert(webkitSleep.scrollRestored && webkitSleep.formRestored);
+        assert(webkitBlocking.blockedRequests == chromiumBlocking.blockedRequests &&
+               webkitBlocking.blockedCosmetics == chromiumBlocking.blockedCosmetics &&
+               "both engines count the same blocks for the same page");
+      }
+      QApplication::processEvents();
+      dalinira::engine::EngineBackend::setSelectedEngineType(dalinira::engine::EngineType::Chromium);
+      dalinira::engine::EngineBackend::shutdown();
+    }
+#endif
   }
 
   std::cout << "\n>>> STEP 5 REGRESSIONS AND STEP 6 UX TESTS PASSED SUCCESSFULLY! <<<\n";

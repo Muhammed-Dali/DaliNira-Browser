@@ -3,6 +3,13 @@ description: Report a reproducible problem in DaliNira Browser
 title: "[Bug]: "
 labels: ["bug", "needs-triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve DaliNira Browser.
+
+        **Privacy warning:** Do not submit passwords, cookies, tokens, private URLs, or personal data. Review and redact logs and screenshots before attaching them.
+
   - type: checkboxes
     id: checks
     attributes:
@@ -10,32 +17,21 @@ body:
       options:
         - label: I searched existing issues and did not find a duplicate.
           required: true
+        - label: I removed passwords, cookies, tokens, private URLs, and personal data.
+          required: true
         - label: This is not a security vulnerability.
           required: true
-  - type: input
-    id: version
-    attributes:
-      label: DaliNira Browser version
-      placeholder: "7.2.1"
-    validations:
-      required: true
-  - type: input
-    id: environment
-    attributes:
-      label: Environment
-      description: Distribution/version, architecture, desktop environment, and X11 or Wayland.
-      placeholder: "Arch Linux, x86_64, KDE Plasma 6, Wayland"
-    validations:
-      required: true
+
   - type: textarea
     id: description
     attributes:
-      label: Problem description
-      description: What happened, and what did you expect instead?
+      label: Bug description
+      description: Clearly describe the problem.
     validations:
       required: true
+
   - type: textarea
-    id: reproduce
+    id: reproduction
     attributes:
       label: Steps to reproduce
       placeholder: |
@@ -44,9 +40,77 @@ body:
         3. Observe ...
     validations:
       required: true
+
   - type: textarea
-    id: logs
+    id: expected
     attributes:
-      label: Logs and additional context
-      description: Remove tokens, cookies, personal paths, and other sensitive information.
-      render: shell
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: DaliNira version
+      placeholder: "8.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Browser engine
+      options:
+        - Chromium
+        - WebKitGTK
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Arch Linux, Ubuntu 26.04, Windows 11, ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: display_server
+    attributes:
+      label: Display server
+      options:
+        - X11
+        - Wayland
+        - XWayland
+        - Not applicable / unknown
+    validations:
+      required: true
+
+  - type: input
+    id: architecture
+    attributes:
+      label: Architecture
+      placeholder: "x86_64, aarch64, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs_screenshots
+    attributes:
+      label: Logs or screenshots (optional)
+      description: Attach only redacted material. Do not include passwords, cookies, tokens, private URLs, or personal data.
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: Add any other relevant, non-sensitive details.

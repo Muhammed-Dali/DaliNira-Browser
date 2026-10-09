@@ -6,6 +6,8 @@
 #include <QTimer>
 #include <QUrl>
 #include <QWebEngineView>
+#include <functional>
+#include "engine/engine_view.h"
 
 class TranslateService;
 
@@ -23,6 +25,8 @@ class PageTranslator : public QObject {
   Q_ENUM(State)
 
   PageTranslator(QWebEngineView *view, TranslateService *service, QObject *parent = nullptr);
+  PageTranslator(dalinira::engine::EngineView *view, TranslateService *service,
+                 QObject *parent = nullptr);
   ~PageTranslator() override;
 
   State state() const;
@@ -31,6 +35,7 @@ class PageTranslator : public QObject {
   QString lastError() const;
   uint64_t currentGeneration() const;
   QWebEngineView *view() const { return view_.data(); }
+  dalinira::engine::EngineView *engineView() const { return engineView_.data(); }
   TranslateService *service() const { return service_; }
 
   void detectLanguage();
@@ -58,8 +63,13 @@ class PageTranslator : public QObject {
   };
 
   void dispatchTranslationBatches(const QList<BatchItem> &items, uint64_t generation, bool isDynamic);
+  bool hasPage() const;
+  QUrl pageUrl() const;
+  void runJavaScript(const QString &script,
+                     std::function<void(const QVariant &)> callback = {});
 
   QPointer<QWebEngineView> view_;
+  QPointer<dalinira::engine::EngineView> engineView_;
   TranslateService *service_ = nullptr;
   State state_ = State::Idle;
   QString sourceLanguage_;
@@ -69,4 +79,5 @@ class PageTranslator : public QObject {
   uint64_t currentGeneration_ = 1;
   QTimer *mutationPollTimer_ = nullptr;
   bool isDynamicTranslating_ = false;
+  QString pendingManualTarget_;
 };

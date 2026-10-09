@@ -1,4 +1,5 @@
 #include "general_download_manager.h"
+#include "i18n/language_manager.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -11,10 +12,12 @@
 #include <QNetworkReply>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QUuid>
 
 #include <cassert>
 #include <csignal>
@@ -1358,6 +1361,40 @@ int main(int argc, char **argv) {
     // Toplam connection change sayısı sınırlı olmalı (thrashing değil)
     assert(totalScaleChanges <= 12); // Thrashing varsa 30+ olur
     QObject::disconnect(msTracker);
+  }
+
+  // History written while the UI was Turkish is shown in the current UI
+  // language, on load and after a live switch (never "Tamamlandı" in English).
+  {
+    QTemporaryDir settingsRoot;
+    assert(settingsRoot.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+    auto &languages = dalinira::i18n::LanguageManager::instance();
+    languages.setLanguagePreference(QStringLiteral("en"));
+    const QString historyPath = QDir(temporary.path()).filePath(QStringLiteral("turkish-history.json"));
+    QFile history(historyPath);
+    assert(history.open(QIODevice::WriteOnly));
+    history.write(QJsonDocument(QJsonArray{QJsonObject{
+        {QStringLiteral("id"), QUuid::createUuid().toString()},
+        {QStringLiteral("url"), QStringLiteral("https://example.com/file.bin")},
+        {QStringLiteral("fileName"), QStringLiteral("file.bin")},
+        {QStringLiteral("targetPath"), QDir(temporary.path()).filePath(QStringLiteral("file.bin"))},
+        {QStringLiteral("state"), static_cast<int>(GeneralDownloadState::Completed)},
+        {QStringLiteral("status"), languages.translateIn(QStringLiteral("tr"), QStringLiteral("downloads.state_completed"))},
+    }}).toJson());
+    history.close();
+    GeneralDownloadManager restored(historyPath);
+    const auto completedText = [&restored] {
+      for (const GeneralDownloadJob &job : restored.jobs())
+        if (job.state == GeneralDownloadState::Completed) return job.statusText;
+      return QString();
+    };
+    assert(completedText() == languages.translateIn(QStringLiteral("en"), QStringLiteral("downloads.state_completed")));
+    for (const QString &code : {QStringLiteral("ar"), QStringLiteral("fr"), QStringLiteral("tr")}) {
+      languages.setLanguagePreference(code);
+      assert(completedText() == languages.translateIn(code, QStringLiteral("downloads.state_completed")));
+    }
   }
 
   std::cout << "general download range, fallback, headers, pause/resume/cancel/retry, history, direct-offset preallocation, part-level retry, error classification, premature EOF protection, global concurrency budget, fairness, slot lifecycle, adaptive scale-up (1->2->4->8), bandwidth cap, 429 throttling scale-down, adaptive pause/resume, adaptive segment retry, global 12 limit multi-download, Stage 5 dynamic work stealing / remaining-range splitting, Stage 6 real-world adaptive ramp + pause responsiveness (Scenarios A-K), and Stage 10 oscillation/thrashing prevention (Scenarios A-G): ok\n";

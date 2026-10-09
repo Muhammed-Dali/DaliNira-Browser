@@ -24,11 +24,13 @@
 #include <QPushButton>
 #include <QSaveFile>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <QtMath>
 
 #include "dalinira_blocker_service.h"
+#include "i18n/i18n.h"
 
 namespace {
 QFrame *createRankedMetricRow(int rank, const QString &name, quint64 count,
@@ -228,14 +230,14 @@ DaliNiraBlockerPage::DaliNiraBlockerPage(DaliNiraBlockerService *service, QWidge
     tabIndices_[tab] = sidebar_->count() - 1;
   };
 
-  addTabItem(Tab::Settings, QStringLiteral("Ayarlar"));
-  addTabItem(Tab::Rulesets, QStringLiteral("Filtre listeleri"));
-  addTabItem(Tab::CustomFilters, QStringLiteral("Özel filtreler"));
-  addTabItem(Tab::Sites, QStringLiteral("Siteler"));
-  addTabItem(Tab::Statistics, QStringLiteral("İstatistikler"));
-  addTabItem(Tab::Logger, QStringLiteral("İstek günlüğü"));
-  addTabItem(Tab::Develop, QStringLiteral("Geliştir"));
-  addTabItem(Tab::About, QStringLiteral("Hakkında"));
+  addTabItem(Tab::Settings, I18n::text(QStringLiteral("menu.settings")));
+  addTabItem(Tab::Rulesets, I18n::text(QStringLiteral("blocker.tab_filter_lists")));
+  addTabItem(Tab::CustomFilters, I18n::text(QStringLiteral("blocker.tab_custom_filters")));
+  addTabItem(Tab::Sites, I18n::text(QStringLiteral("blocker.tab_sites")));
+  addTabItem(Tab::Statistics, I18n::text(QStringLiteral("blocker.tab_statistics")));
+  addTabItem(Tab::Logger, I18n::text(QStringLiteral("blocker.tab_logger")));
+  addTabItem(Tab::Develop, I18n::text(QStringLiteral("blocker.tab_develop")));
+  addTabItem(Tab::About, I18n::text(QStringLiteral("common.about")));
 
   mainLayout->addWidget(sidebar_);
 
@@ -275,6 +277,13 @@ DaliNiraBlockerPage::DaliNiraBlockerPage(DaliNiraBlockerService *service, QWidge
   if (service_) {
     connect(service_->settings(), &DaliNiraBlockerSettings::settingsChanged, this, &DaliNiraBlockerPage::updateModeUi);
   }
+  // Provider, source and generated-format rows combine translated templates
+  // with third-party metadata. Rebuild just this catalog on a live language
+  // switch because the generic widget retranslator cannot reverse-map a
+  // composed string back to its catalog key.
+  connect(&dalinira::i18n::LanguageManager::instance(),
+          &dalinira::i18n::LanguageManager::languageChanged,
+          this, [this] { refreshRulesetTab(); });
 
   updateModeUi();
 }
@@ -300,7 +309,7 @@ void DaliNiraBlockerPage::setActiveHost(const QString &host) {
     siteHostInput_->setText(activeHost_);
   }
   if (aboutActiveHostLabel_) {
-    aboutActiveHostLabel_->setText(activeHost_.isEmpty() ? QStringLiteral("Aktif web sekmesi yok") : activeHost_);
+    aboutActiveHostLabel_->setText(activeHost_.isEmpty() ? I18n::text(QStringLiteral("blocker.no_active_web_tab")) : activeHost_);
   }
   refreshSitesTab();
 }
@@ -326,18 +335,18 @@ void DaliNiraBlockerPage::createSettingsTab() {
   layout->setSpacing(20);
 
   // Header & Mode Pill
-  auto *heroGroup = new QGroupBox(QStringLiteral("Varsayılan Filtreleme Modu"), container);
+  auto *heroGroup = new QGroupBox(I18n::text(QStringLiteral("blocker.default_mode")), container);
   auto *heroLayout = new QVBoxLayout(heroGroup);
   heroLayout->setContentsMargins(18, 18, 18, 18);
   heroLayout->setSpacing(14);
 
   auto *heroTop = new QHBoxLayout;
-  modeDesc_ = new QLabel(QStringLiteral("Web sitesi başına özel mod seçilmediğinde bu mod kullanılır. Her mod, koruma düzeyi ve uyumluluk arasında farklı denge kurar."), heroGroup);
+  modeDesc_ = new QLabel(I18n::text(QStringLiteral("blocker.default_mode_desc")), heroGroup);
   modeDesc_->setWordWrap(true);
   modeDesc_->setStyleSheet(QStringLiteral("color: #9aa7b8; font-size: 13px;"));
   heroTop->addWidget(modeDesc_, 1);
 
-  modePill_ = new QLabel(QStringLiteral("İdeal"), heroGroup);
+  modePill_ = new QLabel(I18n::text(QStringLiteral("blocker.mode_optimal")), heroGroup);
   modePill_->setStyleSheet(QStringLiteral("background: #1f3b5c; color: #53d2ff; font-weight: 700; font-size: 12px; border-radius: 12px; padding: 4px 14px; border: 1px solid #2e598a;"));
   heroTop->addWidget(modePill_, 0, Qt::AlignTop);
   heroLayout->addLayout(heroTop);
@@ -387,18 +396,18 @@ void DaliNiraBlockerPage::createSettingsTab() {
   };
 
   cardsLayout->addWidget(createModeCard(
-      1, 35, QStringLiteral("Temel"), QStringLiteral("Hafif"),
-      QStringLiteral("Seçilen filtre listelerinden temel ağ filtrelemesi. Web sitelerindeki verileri okumak ve değiştirmek için izin gerektirmez."),
+      1, 35, I18n::text(QStringLiteral("blocker.mode_basic")), I18n::text(QStringLiteral("blocker.mode_light")),
+      I18n::text(QStringLiteral("blocker.mode_basic_desc")),
       &basicCard_));
 
   cardsLayout->addWidget(createModeCard(
-      2, 65, QStringLiteral("İdeal"), QStringLiteral("Dengeli"),
-      QStringLiteral("Gelişmiş ağ filtrelemesi ve seçilen filtre listelerinden genişletilmiş filtreleme."),
+      2, 65, I18n::text(QStringLiteral("blocker.mode_optimal")), I18n::text(QStringLiteral("common.balanced")),
+      I18n::text(QStringLiteral("blocker.mode_optimal_desc")),
       &idealCard_));
 
   cardsLayout->addWidget(createModeCard(
-      3, 95, QStringLiteral("Kapsamlı"), QStringLiteral("Güçlü"),
-      QStringLiteral("Gelişmiş ağ filtrelemenin yanında sert engelleme, görünür reklam temizliği ve ek YouTube sinyalleri."),
+      3, 95, I18n::text(QStringLiteral("blocker.mode_complete")), I18n::text(QStringLiteral("blocker.mode_strong")),
+      I18n::text(QStringLiteral("blocker.mode_complete_desc")),
       &aggressiveCard_));
 
   heroLayout->addLayout(cardsLayout);
@@ -410,16 +419,16 @@ void DaliNiraBlockerPage::createSettingsTab() {
   aggressiveCard_->setMouseTracking(true);
 
   // Behavior Section
-  auto *behaviorGroup = new QGroupBox(QStringLiteral("Davranış"), container);
+  auto *behaviorGroup = new QGroupBox(I18n::text(QStringLiteral("blocker.behavior")), container);
   auto *bLayout = new QVBoxLayout(behaviorGroup);
   bLayout->setContentsMargins(18, 18, 18, 18);
   bLayout->setSpacing(12);
 
-  autoReloadCheck_ = new GlowToggleSwitch(QStringLiteral("Filtreleme modunu değiştirirken sayfayı otomatik olarak yenile"), behaviorGroup);
-  showCountCheck_ = new GlowToggleSwitch(QStringLiteral("Engellenen isteklerin sayısını araç çubuğu simgesinde göster"), behaviorGroup);
-  strictBlockCheck_ = new GlowToggleSwitch(QStringLiteral("Sıkı engellemeyi etkinleştir (İstenmeyebilecek sitelere erişim engellenecek ve devam etme seçeneği sunulacaktır)"), behaviorGroup);
-  popupBlockCheck_ = new GlowToggleSwitch(QStringLiteral("Açılır pencere engellemeyi etkinleştir (Etkinleştirildiğinde, uygun filtreler web sitelerinin açtığı istenmeyen sekmeleri otomatik olarak kapatır)"), behaviorGroup);
-  developerModeCheck_ = new GlowToggleSwitch(QStringLiteral("Geliştirici modu (Teknik kullanıcılara uygun özelliklere ve log detaylarına izin ver)"), behaviorGroup);
+  autoReloadCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("blocker.auto_reload_on_mode_change")), behaviorGroup);
+  showCountCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("blocker.show_count_on_icon")), behaviorGroup);
+  strictBlockCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("blocker.strict_block")), behaviorGroup);
+  popupBlockCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("blocker.popup_block")), behaviorGroup);
+  developerModeCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("blocker.developer_mode")), behaviorGroup);
 
   bLayout->addWidget(autoReloadCheck_);
   bLayout->addWidget(showCountCheck_);
@@ -445,19 +454,19 @@ void DaliNiraBlockerPage::createSettingsTab() {
   });
 
   // Backup & Restore Section
-  auto *backupGroup = new QGroupBox(QStringLiteral("Yedekle"), container);
+  auto *backupGroup = new QGroupBox(I18n::text(QStringLiteral("blocker.backup_group")), container);
   auto *bkLayout = new QVBoxLayout(backupGroup);
   bkLayout->setContentsMargins(18, 18, 18, 18);
   bkLayout->setSpacing(12);
 
-  auto *bkDesc = new QLabel(QStringLiteral("Ayarlarınızı bir dosyaya yedekleyin veya yedeklenmiş bir dosyadan geri yükleyin."), backupGroup);
+  auto *bkDesc = new QLabel(I18n::text(QStringLiteral("blocker.backup_desc")), backupGroup);
   bkDesc->setStyleSheet(QStringLiteral("color: #9aa7b8; font-size: 13px;"));
   bkLayout->addWidget(bkDesc);
 
   auto *bkBtns = new QHBoxLayout;
-  auto *backupBtn = new QPushButton(QStringLiteral("Yedekle..."), backupGroup);
-  auto *restoreBtn = new QPushButton(QStringLiteral("Geri yükle..."), backupGroup);
-  auto *resetBtn = new QPushButton(QStringLiteral("Varsayılan ayarlara sıfırla..."), backupGroup);
+  auto *backupBtn = new QPushButton(I18n::text(QStringLiteral("blocker.backup_button")), backupGroup);
+  auto *restoreBtn = new QPushButton(I18n::text(QStringLiteral("blocker.restore_button")), backupGroup);
+  auto *resetBtn = new QPushButton(I18n::text(QStringLiteral("blocker.reset_defaults_button")), backupGroup);
 
   bkBtns->addWidget(backupBtn);
   bkBtns->addWidget(restoreBtn);
@@ -468,19 +477,19 @@ void DaliNiraBlockerPage::createSettingsTab() {
 
   connect(backupBtn, &QPushButton::clicked, this, [this]() {
     if (!service_) return;
-    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Reklam Engelleyici Ayarlarını Yedekle"), QStringLiteral("deliblock-settings.json"), QStringLiteral("JSON Dosyası (*.json)"));
+    const QString path = QFileDialog::getSaveFileName(this, I18n::text(QStringLiteral("blocker.backup_title")), QStringLiteral("deliblock-settings.json"), I18n::text(QStringLiteral("blocker.json_filter")));
     if (path.isEmpty()) return;
     QSaveFile file(path);
     const QByteArray bytes = QJsonDocument(service_->settings()->exportBackupJson()).toJson(QJsonDocument::Indented);
     if (file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit()) {
       QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-      QMessageBox::information(this, QStringLiteral("Yedekleme Başarılı"), QStringLiteral("Ayarlar başarıyla dosyaya yedeklendi."));
+      QMessageBox::information(this, I18n::text(QStringLiteral("blocker.backup_success_title")), I18n::text(QStringLiteral("blocker.backup_success")));
     }
   });
 
   connect(restoreBtn, &QPushButton::clicked, this, [this]() {
     if (!service_) return;
-    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Yedekten Geri Yükle"), QString(), QStringLiteral("JSON Dosyası (*.json)"));
+    const QString path = QFileDialog::getOpenFileName(this, I18n::text(QStringLiteral("blocker.restore_title")), QString(), I18n::text(QStringLiteral("blocker.json_filter")));
     if (path.isEmpty()) return;
     QFile file(path);
     if (file.open(QIODevice::ReadOnly) && file.size() <= 8 * 1024 * 1024) {
@@ -489,20 +498,20 @@ void DaliNiraBlockerPage::createSettingsTab() {
       if (err.error == QJsonParseError::NoError && doc.isObject()) {
         if (service_->settings()->importBackupJson(doc.object())) {
           updateModeUi();
-          QMessageBox::information(this, QStringLiteral("Geri Yükleme Başarılı"), QStringLiteral("Ayarlar başarıyla geri yüklendi."));
+          QMessageBox::information(this, I18n::text(QStringLiteral("blocker.restore_success_title")), I18n::text(QStringLiteral("blocker.restore_success")));
           return;
         }
       }
-      QMessageBox::warning(this, QStringLiteral("Hata"), QStringLiteral("Geçersiz yedek dosyası biçimi!"));
+      QMessageBox::warning(this, I18n::text(QStringLiteral("common.error")), I18n::text(QStringLiteral("blocker.invalid_backup")));
     }
   });
 
   connect(resetBtn, &QPushButton::clicked, this, [this]() {
     if (!service_) return;
-    if (QMessageBox::question(this, QStringLiteral("Sıfırlama Onayı"), QStringLiteral("Genel koruma ayarları, filtre listesi tercihleri, özel filtreler ve tüm site istisnaları fabrika varsayılanlarına sıfırlansın mı?")) == QMessageBox::Yes) {
+    if (QMessageBox::question(this, I18n::text(QStringLiteral("blocker.reset_confirm_title")), I18n::text(QStringLiteral("blocker.reset_confirm"))) == QMessageBox::Yes) {
       service_->settings()->resetToDefaults();
       refreshAll();
-      QMessageBox::information(this, QStringLiteral("Sıfırlandı"), QStringLiteral("Reklam engelleyici varsayılan ayarlara döndürüldü."));
+      QMessageBox::information(this, I18n::text(QStringLiteral("blocker.reset_done_title")), I18n::text(QStringLiteral("blocker.reset_done")));
     }
   });
 
@@ -535,13 +544,13 @@ void DaliNiraBlockerPage::updateModeUi() {
 
   if (modePill_) {
     if (mode == DaliNiraBlockerMode::Basic) {
-      modePill_->setText(QStringLiteral("Temel"));
+      modePill_->setText(I18n::text(QStringLiteral("blocker.mode_basic")));
       modePill_->setStyleSheet(QStringLiteral("background: #143542; color: #53d2ff; font-weight: 700; font-size: 12px; border-radius: 12px; padding: 4px 14px; border: 1px solid #20576e;"));
     } else if (mode == DaliNiraBlockerMode::Aggressive) {
-      modePill_->setText(QStringLiteral("Kapsamlı"));
+      modePill_->setText(I18n::text(QStringLiteral("blocker.mode_complete")));
       modePill_->setStyleSheet(QStringLiteral("background: #11382e; color: #5cf2c4; font-weight: 700; font-size: 12px; border-radius: 12px; padding: 4px 14px; border: 1px solid #1c614f;"));
     } else {
-      modePill_->setText(QStringLiteral("İdeal"));
+      modePill_->setText(I18n::text(QStringLiteral("blocker.mode_optimal")));
       modePill_->setStyleSheet(QStringLiteral("background: #1f3b5c; color: #86a7ff; font-weight: 700; font-size: 12px; border-radius: 12px; padding: 4px 14px; border: 1px solid #2e598a;"));
     }
   }
@@ -581,11 +590,11 @@ void DaliNiraBlockerPage::createRulesetsTab() {
     *outVal = vLabel;
   };
 
-  addStatTile(QStringLiteral("Bu oturum"), &rulesetSessionCount_);
-  addStatTile(QStringLiteral("Toplam"), &rulesetTotalCount_);
-  addStatTile(QStringLiteral("Ruleset"), &rulesetCount_);
-  addStatTile(QStringLiteral("Alan adı kuralı"), &rulesetDomainRuleCount_);
-  addStatTile(QStringLiteral("DNR kuralı"), &rulesetDnrRuleCount_);
+  addStatTile(I18n::text(QStringLiteral("blocker.stat_this_session")), &rulesetSessionCount_);
+  addStatTile(I18n::text(QStringLiteral("blocker.stat_total")), &rulesetTotalCount_);
+  addStatTile(I18n::text(QStringLiteral("blocker.stat_rulesets")), &rulesetCount_);
+  addStatTile(I18n::text(QStringLiteral("blocker.stat_domain_rules")), &rulesetDomainRuleCount_);
+  addStatTile(I18n::text(QStringLiteral("blocker.stat_dnr_rules")), &rulesetDnrRuleCount_);
 
   layout->addWidget(summaryBox);
 
@@ -597,7 +606,7 @@ void DaliNiraBlockerPage::createRulesetsTab() {
   auto *breakdownSectionLayout = new QVBoxLayout(breakdownGroup);
   breakdownSectionLayout->setContentsMargins(16, 14, 16, 16);
   breakdownSectionLayout->setSpacing(12);
-  auto *breakdownTitle = new QLabel(QStringLiteral("En Etkin Filtre Listeleri"), breakdownGroup);
+  auto *breakdownTitle = new QLabel(I18n::text(QStringLiteral("blocker.top_filter_lists")), breakdownGroup);
   breakdownTitle->setStyleSheet(QStringLiteral(
       "color: #e4ebf5; border: 0; font-size: 14px; font-weight: 700;"));
   breakdownSectionLayout->addWidget(breakdownTitle);
@@ -608,16 +617,27 @@ void DaliNiraBlockerPage::createRulesetsTab() {
   layout->addWidget(breakdownGroup);
 
   // Catalog Section
-  auto *catalogGroup = new QGroupBox(QStringLiteral("Filtre Listeleri Kataloğu"), container);
+  auto *catalogGroup = new QGroupBox(
+      I18n::text(QStringLiteral("blocker.third_party_filter_lists")), container);
   catalogGroup->setObjectName(QStringLiteral("ruleset-catalog-group"));
   auto *cMainLayout = new QVBoxLayout(catalogGroup);
   cMainLayout->setContentsMargins(16, 28, 16, 16);
   cMainLayout->setSpacing(12);
 
+  auto *provenanceNotice = new QLabel(
+      I18n::text(QStringLiteral("blocker.third_party_notice")), catalogGroup);
+  provenanceNotice->setObjectName(QStringLiteral("ruleset-native-engine-notice"));
+  provenanceNotice->setWordWrap(true);
+  provenanceNotice->setStyleSheet(QStringLiteral(
+      "background: #10243a; border: 1px solid #24517b; border-radius: 7px; "
+      "color: #b9ddff; font-size: 12px; padding: 10px;"));
+  cMainLayout->addWidget(provenanceNotice);
+
   auto *actionRow = new QHBoxLayout;
-  auto *updateBtn = new QPushButton(QStringLiteral("Yerel filtreleri doğrula"), catalogGroup);
-  updateBtn->setToolTip(QStringLiteral("Etkin yerel filtreleri tek sefer doğrular ve yeniden derler."));
-  rulesetUpdateStatus_ = new QLabel(QStringLiteral("Yerel filtreler hazır."), catalogGroup);
+  auto *updateBtn = new QPushButton(I18n::text(QStringLiteral("blocker.update_filters")), catalogGroup);
+  updateBtn->setObjectName(QStringLiteral("ruleset-update-filters-button"));
+  updateBtn->setToolTip(I18n::text(QStringLiteral("blocker.update_filters_desc")));
+  rulesetUpdateStatus_ = new QLabel(I18n::text(QStringLiteral("blocker.local_filters_ready")), catalogGroup);
   rulesetUpdateStatus_->setStyleSheet(QStringLiteral("color: #72849a; font-size: 12px;"));
   rulesetUpdateProgress_ = new QProgressBar(catalogGroup);
   rulesetUpdateProgress_->setRange(0, 1);
@@ -633,22 +653,28 @@ void DaliNiraBlockerPage::createRulesetsTab() {
   cMainLayout->addLayout(actionRow);
 
   auto *updateHint = new QLabel(
-      QStringLiteral("Bu tek seferlik işlem aşağıda açık olan tüm etkin listeleri birlikte doğrular ve yeniden derler. İnternetten filtre indirmez."),
+      I18n::text(QStringLiteral("blocker.update_notice")),
       catalogGroup);
   updateHint->setWordWrap(true);
   updateHint->setStyleSheet(QStringLiteral("color: #8c9ba8; font-size: 12px;"));
   cMainLayout->addWidget(updateHint);
 
+  autoUpdateListsCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("blocker.auto_update_lists")), catalogGroup);
+  autoUpdateListsCheck_->setObjectName(QStringLiteral("ruleset-auto-update"));
+  autoUpdateListsCheck_->setToolTip(I18n::text(QStringLiteral("blocker.auto_update_lists_desc")));
+  cMainLayout->addWidget(autoUpdateListsCheck_);
+  connect(autoUpdateListsCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+    if (service_) service_->settings()->setAutoUpdateRulesets(checked);
+  });
+
   connect(updateBtn, &QPushButton::clicked, this, [this]() {
-    if (service_) {
-      rulesetUpdateStatus_->setText(QStringLiteral("Doğrulanıyor..."));
-      service_->updateFiltersAsync();
-    }
+    if (service_) service_->updateFiltersAsync();
   });
 
   if (service_) {
     connect(service_, &DaliNiraBlockerService::filterUpdateStarted, this, [this, updateBtn]() {
       updateBtn->setEnabled(false);
+      if (rulesetUpdateStatus_) rulesetUpdateStatus_->setText(I18n::text(QStringLiteral("blocker.updating")));
       if (rulesetUpdateProgress_) {
         rulesetUpdateProgress_->setRange(0, 3);
         rulesetUpdateProgress_->setValue(0);
@@ -658,10 +684,11 @@ void DaliNiraBlockerPage::createRulesetsTab() {
     connect(service_, &DaliNiraBlockerService::filterUpdateProgress, this,
             [this](int completed, int total, const QString &stage) {
               if (rulesetUpdateStatus_) {
-                const QString label = stage == QLatin1String("parse") ? QStringLiteral("Kurallar ayrıştırılıyor")
-                    : stage == QLatin1String("cosmetic") ? QStringLiteral("Görsel filtreler hazırlanıyor")
-                    : stage == QLatin1String("swap") ? QStringLiteral("Motor etkinleştiriliyor")
-                    : QStringLiteral("Hazırlanıyor");
+                const QString label = stage == QLatin1String("download") ? I18n::text(QStringLiteral("blocker.stage_download"))
+                    : stage == QLatin1String("parse") ? I18n::text(QStringLiteral("blocker.stage_parse"))
+                    : stage == QLatin1String("cosmetic") ? I18n::text(QStringLiteral("blocker.stage_cosmetic"))
+                    : stage == QLatin1String("swap") ? I18n::text(QStringLiteral("blocker.stage_swap"))
+                    : I18n::text(QStringLiteral("blocker.stage_preparing"));
                 rulesetUpdateStatus_->setText(QStringLiteral("%1… %2/%3").arg(label).arg(completed).arg(total));
               }
               if (rulesetUpdateProgress_) {
@@ -693,6 +720,10 @@ void DaliNiraBlockerPage::refreshRulesetTab() {
   if (rulesetSessionCount_) rulesetSessionCount_->setText(QString::number(service_->sessionBlockedCount()));
   if (rulesetTotalCount_) rulesetTotalCount_->setText(QString::number(service_->totalBlockedCount()));
   if (rulesetCount_) rulesetCount_->setText(QString::number(service_->listManager()->availableLists().size()));
+  if (autoUpdateListsCheck_) {
+    const QSignalBlocker blocker(autoUpdateListsCheck_);
+    autoUpdateListsCheck_->setChecked(service_->settings()->autoUpdateRulesets());
+  }
   if (rulesetDomainRuleCount_) rulesetDomainRuleCount_->setText(QString::number(service_->filterEngine()->ruleCount()));
   if (rulesetDnrRuleCount_) rulesetDnrRuleCount_->setText(QString::number(service_->filterEngine()->ruleCount()));
 
@@ -705,14 +736,14 @@ void DaliNiraBlockerPage::refreshRulesetTab() {
     }
     const auto top = service_->topMatchedRulesets(6);
     if (top.isEmpty()) {
-      auto *empty = new QLabel(QStringLiteral("Ruleset eşleşmesi bekleniyor."), this);
+      auto *empty = new QLabel(I18n::text(QStringLiteral("blocker.waiting_ruleset_matches")), this);
       empty->setStyleSheet(QStringLiteral("color: #72849a; font-style: italic;"));
       rulesetBreakdownLayout_->addWidget(empty);
     } else {
       int rank = 1;
       for (const auto &p : top) {
         rulesetBreakdownLayout_->addWidget(createRankedMetricRow(
-            rank++, p.first, p.second, QStringLiteral("eşleşme"),
+            rank++, p.first, p.second, I18n::text(QStringLiteral("blocker.matches_unit")),
             QStringLiteral("#4ec9ff"), rulesetBreakdownLayout_->parentWidget()));
       }
     }
@@ -737,19 +768,74 @@ void DaliNiraBlockerPage::refreshRulesetTab() {
 
       auto *chk = new GlowToggleSwitch(row);
       chk->setChecked(selectionConfigured ? enabled.contains(list.id) : list.enabled);
-      chk->setToolTip(QStringLiteral("Bu filtre listesini etkin plana dahil et"));
+      chk->setToolTip(I18n::text(QStringLiteral("blocker.include_list_in_plan")));
       rLayout->addWidget(chk);
 
       auto *infoLayout = new QVBoxLayout;
       auto *nameLbl = new QLabel(list.name, row);
+      nameLbl->setObjectName(QStringLiteral("ruleset-name-") + list.id);
       nameLbl->setStyleSheet(QStringLiteral("font-size: 13px; font-weight: 600; color: #e4ebf5;"));
-      auto *metaLbl = new QLabel(QStringLiteral("%1 · %2 kural · v%3 · %4")
+      auto *metaLbl = new QLabel(I18n::text(QStringLiteral("blocker.list_meta"))
                                      .arg(list.group, QString::number(list.ruleCount), list.version,
                                           list.lastUpdated.toString(QStringLiteral("dd.MM.yyyy"))),
                                  row);
       metaLbl->setStyleSheet(QStringLiteral("font-size: 11px; color: #8c9ba8;"));
       infoLayout->addWidget(nameLbl);
       infoLayout->addWidget(metaLbl);
+
+      if (!list.provider.isEmpty()) {
+        auto *providerLbl = new QLabel(
+            I18n::text(QStringLiteral("blocker.list_provider")).arg(list.provider), row);
+        providerLbl->setObjectName(QStringLiteral("ruleset-provider-") + list.id);
+        providerLbl->setStyleSheet(QStringLiteral("font-size: 11px; color: #9fb2c8;"));
+        infoLayout->addWidget(providerLbl);
+      }
+
+      auto *provenanceRow = new QHBoxLayout;
+      provenanceRow->setContentsMargins(0, 0, 0, 0);
+      provenanceRow->setSpacing(10);
+      if (!list.sourceUrl.isEmpty()) {
+        auto *sourceLbl = new QLabel(row);
+        sourceLbl->setObjectName(QStringLiteral("ruleset-source-") + list.id);
+        sourceLbl->setText(QStringLiteral("<a href=\"%1\">%2</a>")
+                               .arg(list.sourceUrl.toHtmlEscaped(),
+                                    I18n::text(QStringLiteral("blocker.list_project_source"))
+                                        .arg(list.source).toHtmlEscaped()));
+        sourceLbl->setOpenExternalLinks(true);
+        sourceLbl->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        sourceLbl->setStyleSheet(QStringLiteral("font-size: 11px; color: #66b7ff;"));
+        provenanceRow->addWidget(sourceLbl);
+      }
+      if (!list.formatOrigin.isEmpty()) {
+        auto *formatLbl = new QLabel(
+            I18n::text(QStringLiteral("blocker.list_compiled_format")).arg(list.formatOrigin), row);
+        formatLbl->setObjectName(QStringLiteral("ruleset-format-") + list.id);
+        formatLbl->setStyleSheet(QStringLiteral("font-size: 11px; color: #8c9ba8;"));
+        provenanceRow->addWidget(formatLbl);
+      }
+      provenanceRow->addStretch(1);
+      infoLayout->addLayout(provenanceRow);
+
+      QString updateText;
+      const QString checked = list.lastUpdateCheck.toString(QStringLiteral("dd.MM.yyyy hh:mm"));
+      if (list.updateUrl.isEmpty())
+        updateText = I18n::text(QStringLiteral("blocker.list_update_bundled_only"));
+      else if (list.lastUpdateResult == QLatin1String("failed"))
+        updateText = I18n::text(list.activeSource == QLatin1String("bundled")
+                                    ? QStringLiteral("blocker.list_update_failed_bundled")
+                                    : QStringLiteral("blocker.list_update_failed_previous")).arg(checked);
+      else if (list.activeSource != QLatin1String("bundled"))
+        updateText = I18n::text(QStringLiteral("blocker.list_update_remote"))
+                         .arg(list.lastUpdated.toString(QStringLiteral("dd.MM.yyyy")), checked);
+      else
+        updateText = I18n::text(QStringLiteral("blocker.list_update_pending"));
+      auto *updateLbl = new QLabel(updateText, row);
+      updateLbl->setObjectName(QStringLiteral("ruleset-update-") + list.id);
+      updateLbl->setWordWrap(true);
+      updateLbl->setStyleSheet(list.lastUpdateResult == QLatin1String("failed")
+                                   ? QStringLiteral("font-size: 11px; color: #f2b35c;")
+                                   : QStringLiteral("font-size: 11px; color: #8c9ba8;"));
+      infoLayout->addWidget(updateLbl);
       rLayout->addLayout(infoLayout, 1);
 
       connect(chk, &QCheckBox::toggled, this, [this, list](bool checked) {
@@ -780,25 +866,25 @@ void DaliNiraBlockerPage::createCustomFiltersTab() {
   layout->setContentsMargins(28, 24, 28, 24);
   layout->setSpacing(18);
 
-  auto *editorGroup = new QGroupBox(QStringLiteral("Özel Filtreler"), container);
+  auto *editorGroup = new QGroupBox(I18n::text(QStringLiteral("blocker.tab_custom_filters")), container);
   auto *eLayout = new QVBoxLayout(editorGroup);
   eLayout->setContentsMargins(16, 16, 16, 16);
   eLayout->setSpacing(10);
 
-  auto *hint = new QLabel(QStringLiteral("Kural formatı: ||example.com/ads^ (bloklama), @@||example.com/allow^ (izin), example.com##.advertisement (kozmetik gizleme)"), editorGroup);
+  auto *hint = new QLabel(I18n::text(QStringLiteral("blocker.rule_format_hint")), editorGroup);
   hint->setStyleSheet(QStringLiteral("color: #8c9ba8; font-size: 12px;"));
   eLayout->addWidget(hint);
 
   userFilterEditor_ = new QPlainTextEdit(editorGroup);
-  userFilterEditor_->setPlaceholderText(QStringLiteral("Örnek:\n||doubleclick.net^\n@@||my-safe-site.com^\nexample.com##.ad-banner"));
+  userFilterEditor_->setPlaceholderText(I18n::text(QStringLiteral("blocker.rule_example_placeholder")));
   userFilterEditor_->setMinimumHeight(110);
   eLayout->addWidget(userFilterEditor_);
 
   auto *btnRow = new QHBoxLayout;
-  auto *addBtn = new QPushButton(QStringLiteral("Filtre ekle"), editorGroup);
+  auto *addBtn = new QPushButton(I18n::text(QStringLiteral("blocker.add_filter")), editorGroup);
   addBtn->setObjectName(QStringLiteral("primary-btn"));
-  auto *importBtn = new QPushButton(QStringLiteral("İçe aktar..."), editorGroup);
-  auto *exportBtn = new QPushButton(QStringLiteral("Dışa aktar..."), editorGroup);
+  auto *importBtn = new QPushButton(I18n::text(QStringLiteral("common.import_ellipsis")), editorGroup);
+  auto *exportBtn = new QPushButton(I18n::text(QStringLiteral("common.export_ellipsis")), editorGroup);
   userFilterValidation_ = new QLabel(editorGroup);
   userFilterValidation_->setStyleSheet(QStringLiteral("color: #5cf2c4; font-size: 12px;"));
 
@@ -819,7 +905,8 @@ void DaliNiraBlockerPage::createCustomFiltersTab() {
     QStringList errors;
     for (const QString &line : lines) {
       const QString trimmed = line.trimmed();
-      const QString error = DaliNiraBlockerEngine::validateCustomFilterLine(trimmed);
+      const QString error = DaliNiraBlockerEngine::validateCustomFilterLine(
+          trimmed, service_ ? service_->listManager()->redirectResources() : nullptr);
       if (!error.isEmpty()) {
         errors.append(QStringLiteral("%1: %2").arg(trimmed, error));
         continue;
@@ -833,10 +920,10 @@ void DaliNiraBlockerPage::createCustomFiltersTab() {
     userFilterEditor_->clear();
     if (errors.isEmpty()) {
       userFilterValidation_->setStyleSheet(QStringLiteral("color: #5cf2c4; font-size: 12px;"));
-      userFilterValidation_->setText(QStringLiteral("%1 kural eklendi.").arg(added));
+      userFilterValidation_->setText(I18n::text(QStringLiteral("blocker.rules_added")).arg(added));
     } else {
       userFilterValidation_->setStyleSheet(QStringLiteral("color: #ff8e99; font-size: 12px;"));
-      userFilterValidation_->setText(QStringLiteral("%1 eklendi, %2 kural reddedildi: %3")
+      userFilterValidation_->setText(I18n::text(QStringLiteral("blocker.rules_added_rejected"))
           .arg(added).arg(errors.size()).arg(errors.first()));
     }
     refreshCustomFiltersTab();
@@ -844,7 +931,7 @@ void DaliNiraBlockerPage::createCustomFiltersTab() {
 
   connect(importBtn, &QPushButton::clicked, this, [this]() {
     if (!service_) return;
-    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Filtre Listesi İçe Aktar"), QString(), QStringLiteral("Metin Dosyası (*.txt);;Tüm Dosyalar (*.*)"));
+    const QString path = QFileDialog::getOpenFileName(this, I18n::text(QStringLiteral("blocker.import_filter_list_title")), QString(), I18n::text(QStringLiteral("blocker.text_or_all_filter")));
     if (path.isEmpty()) return;
     QFile file(path);
     if (file.open(QIODevice::ReadOnly)) {
@@ -854,7 +941,8 @@ void DaliNiraBlockerPage::createCustomFiltersTab() {
       QStringList errors;
       for (const QString &l : lines) {
         const QString tr = l.trimmed();
-        const QString error = DaliNiraBlockerEngine::validateCustomFilterLine(tr);
+        const QString error = DaliNiraBlockerEngine::validateCustomFilterLine(
+            tr, service_ ? service_->listManager()->redirectResources() : nullptr);
         if (!error.isEmpty()) {
           errors.append(QStringLiteral("%1: %2").arg(tr, error));
           continue;
@@ -868,7 +956,7 @@ void DaliNiraBlockerPage::createCustomFiltersTab() {
       service_->settings()->setCustomFilters(current);
       if (!errors.isEmpty()) {
         userFilterValidation_->setStyleSheet(QStringLiteral("color: #ff8e99; font-size: 12px;"));
-        userFilterValidation_->setText(QStringLiteral("%1 geçersiz satır içe aktarılmadı: %2")
+        userFilterValidation_->setText(I18n::text(QStringLiteral("blocker.invalid_lines_skipped"))
             .arg(errors.size()).arg(errors.first()));
       }
       refreshCustomFiltersTab();
@@ -877,20 +965,20 @@ void DaliNiraBlockerPage::createCustomFiltersTab() {
 
   connect(exportBtn, &QPushButton::clicked, this, [this]() {
     if (!service_) return;
-    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Özel Filtreleri Dışa Aktar"), QStringLiteral("dalinira-user-filters.txt"), QStringLiteral("Metin Dosyası (*.txt)"));
+    const QString path = QFileDialog::getSaveFileName(this, I18n::text(QStringLiteral("blocker.export_custom_filters_title")), QStringLiteral("dalinira-user-filters.txt"), I18n::text(QStringLiteral("blocker.text_filter")));
     if (path.isEmpty()) return;
     QSaveFile file(path);
     const QByteArray bytes = service_->settings()->customFilters().join(QStringLiteral("\n")).toUtf8();
     if (file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit()) {
       QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-      QMessageBox::information(this, QStringLiteral("Dışa Aktarıldı"), QStringLiteral("Özel filtreler başarıyla kaydedildi."));
+      QMessageBox::information(this, I18n::text(QStringLiteral("blocker.exported_title")), I18n::text(QStringLiteral("blocker.custom_filters_saved")));
     }
   });
 
   layout->addWidget(editorGroup);
 
   // User Filter List
-  auto *listGroup = new QGroupBox(QStringLiteral("Kullanıcı Filtreleri Listesi"), container);
+  auto *listGroup = new QGroupBox(I18n::text(QStringLiteral("blocker.user_filter_list")), container);
   userFilterListLayout_ = new QVBoxLayout(listGroup);
   userFilterListLayout_->setContentsMargins(16, 16, 16, 16);
   userFilterListLayout_->setSpacing(8);
@@ -912,7 +1000,7 @@ void DaliNiraBlockerPage::refreshCustomFiltersTab() {
 
   const QStringList filters = service_->settings()->customFilters();
   if (filters.isEmpty()) {
-    auto *empty = new QLabel(QStringLiteral("Henüz kullanıcı filtresi yok."), this);
+    auto *empty = new QLabel(I18n::text(QStringLiteral("blocker.no_user_filters")), this);
     empty->setStyleSheet(QStringLiteral("color: #72849a; font-style: italic;"));
     userFilterListLayout_->addWidget(empty);
     return;
@@ -928,7 +1016,7 @@ void DaliNiraBlockerPage::refreshCustomFiltersTab() {
     textLbl->setStyleSheet(QStringLiteral("font-family: monospace; font-size: 13px; color: #e4ebf5;"));
     rLayout->addWidget(textLbl, 1);
 
-    auto *delBtn = new QPushButton(QStringLiteral("Sil"), row);
+    auto *delBtn = new QPushButton(I18n::text(QStringLiteral("common.delete")), row);
     delBtn->setStyleSheet(QStringLiteral("background: #3b2226; border-color: #5c2b33; color: #ff8e99;"));
     rLayout->addWidget(delBtn);
 
@@ -954,7 +1042,7 @@ void DaliNiraBlockerPage::createSitesTab() {
   layout->setContentsMargins(28, 24, 28, 24);
   layout->setSpacing(18);
 
-  auto *siteEditGroup = new QGroupBox(QStringLiteral("Site Koruması ve İzin Listesi"), container);
+  auto *siteEditGroup = new QGroupBox(I18n::text(QStringLiteral("blocker.site_protection_allowlist")), container);
   auto *sLayout = new QVBoxLayout(siteEditGroup);
   sLayout->setContentsMargins(16, 16, 16, 16);
   sLayout->setSpacing(12);
@@ -968,13 +1056,13 @@ void DaliNiraBlockerPage::createSitesTab() {
   siteHostInput_->setPlaceholderText(QStringLiteral("example.com"));
   siteHostInput_->setMinimumWidth(220);
 
-  siteWhitelistCheck_ = new GlowToggleSwitch(QStringLiteral("Beyaz Listeye Al (Whitelist)"), siteEditGroup);
-  siteAdsCheck_ = new GlowToggleSwitch(QStringLiteral("Reklam engelleme"), siteEditGroup);
+  siteWhitelistCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("blocker.allowlist_toggle")), siteEditGroup);
+  siteAdsCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("blocker.ad_blocking")), siteEditGroup);
   siteAdsCheck_->setChecked(true);
-  siteTrackersCheck_ = new GlowToggleSwitch(QStringLiteral("İzleyici koruması"), siteEditGroup);
+  siteTrackersCheck_ = new GlowToggleSwitch(I18n::text(QStringLiteral("blocker.tracker_protection")), siteEditGroup);
   siteTrackersCheck_->setChecked(true);
 
-  auto *saveBtn = new QPushButton(QStringLiteral("Kaydet"), siteEditGroup);
+  auto *saveBtn = new QPushButton(I18n::text(QStringLiteral("common.save")), siteEditGroup);
   saveBtn->setObjectName(QStringLiteral("primary-btn"));
 
   inputRow->addWidget(siteHostInput_);
@@ -1004,7 +1092,7 @@ void DaliNiraBlockerPage::createSitesTab() {
   layout->addWidget(siteEditGroup);
 
   // Site Policies List
-  auto *listGroup = new QGroupBox(QStringLiteral("Tanımlı Site Kuralları"), container);
+  auto *listGroup = new QGroupBox(I18n::text(QStringLiteral("blocker.site_rules")), container);
   sitePolicyListLayout_ = new QVBoxLayout(listGroup);
   sitePolicyListLayout_->setContentsMargins(16, 16, 16, 16);
   sitePolicyListLayout_->setSpacing(8);
@@ -1022,14 +1110,14 @@ void DaliNiraBlockerPage::refreshSitesTab() {
     if (!activeHost_.isEmpty()) {
       const SitePolicy p = service_->settings()->sitePolicy(activeHost_);
       if (p.whitelisted) {
-        siteActiveStatus_->setText(QStringLiteral("Aktif Site: %1 (Beyaz Listede — Koruma Kapalı)").arg(activeHost_));
+        siteActiveStatus_->setText(I18n::text(QStringLiteral("blocker.active_site_allowlisted")).arg(activeHost_));
         siteActiveStatus_->setStyleSheet(QStringLiteral("color: #ffb86c; font-size: 13px; font-weight: 600;"));
       } else {
-        siteActiveStatus_->setText(QStringLiteral("Aktif Site: %1 (Koruma Aktif)").arg(activeHost_));
+        siteActiveStatus_->setText(I18n::text(QStringLiteral("blocker.active_site_protected")).arg(activeHost_));
         siteActiveStatus_->setStyleSheet(QStringLiteral("color: #5cf2c4; font-size: 13px; font-weight: 600;"));
       }
     } else {
-      siteActiveStatus_->setText(QStringLiteral("Aktif web sekmesi yok"));
+      siteActiveStatus_->setText(I18n::text(QStringLiteral("blocker.no_active_web_tab")));
       siteActiveStatus_->setStyleSheet(QStringLiteral("color: #8c9ba8; font-size: 13px;"));
     }
   }
@@ -1043,7 +1131,7 @@ void DaliNiraBlockerPage::refreshSitesTab() {
 
     const auto policies = service_->settings()->sitePolicies();
     if (policies.isEmpty()) {
-      auto *empty = new QLabel(QStringLiteral("Henüz siteye özel kural yok."), this);
+      auto *empty = new QLabel(I18n::text(QStringLiteral("blocker.no_site_rules")), this);
       empty->setStyleSheet(QStringLiteral("color: #72849a; font-style: italic;"));
       sitePolicyListLayout_->addWidget(empty);
       return;
@@ -1062,16 +1150,16 @@ void DaliNiraBlockerPage::refreshSitesTab() {
       hostLbl->setStyleSheet(QStringLiteral("font-size: 13px; font-weight: 600; color: #e4ebf5; min-width: 160px;"));
       rLayout->addWidget(hostLbl);
 
-      QString statusStr = p.whitelisted ? QStringLiteral("Beyaz Listede") : QStringLiteral("Reklam: %1 · İzleyici: %2")
-                                                                                .arg(p.adBlocking ? QStringLiteral("Açık") : QStringLiteral("Kapalı"),
-                                                                                     p.trackerProtection ? QStringLiteral("Açık") : QStringLiteral("Kapalı"));
+      QString statusStr = p.whitelisted ? I18n::text(QStringLiteral("blocker.allowlisted")) : I18n::text(QStringLiteral("blocker.site_status"))
+                                                                                .arg(p.adBlocking ? I18n::text(QStringLiteral("common.on")) : I18n::text(QStringLiteral("common.off")),
+                                                                                     p.trackerProtection ? I18n::text(QStringLiteral("common.on")) : I18n::text(QStringLiteral("common.off")));
       auto *statusLbl = new QLabel(statusStr, row);
       statusLbl->setStyleSheet(p.whitelisted ? QStringLiteral("color: #ffb86c; font-size: 12px;") : QStringLiteral("color: #8c9ba8; font-size: 12px;"));
       rLayout->addWidget(statusLbl, 1);
 
-      auto *toggleBtn = new QPushButton(p.whitelisted ? QStringLiteral("Beyaz Listeden Çıkar") : QStringLiteral("Beyaz Listeye Al"), row);
-      auto *pauseBtn = new QPushButton(QStringLiteral("10 dk Kapat"), row);
-      auto *delBtn = new QPushButton(QStringLiteral("Sil"), row);
+      auto *toggleBtn = new QPushButton(p.whitelisted ? I18n::text(QStringLiteral("blocker.remove_from_allowlist")) : I18n::text(QStringLiteral("blocker.add_to_allowlist")), row);
+      auto *pauseBtn = new QPushButton(I18n::text(QStringLiteral("blocker.pause_10_min")), row);
+      auto *delBtn = new QPushButton(I18n::text(QStringLiteral("common.delete")), row);
       delBtn->setStyleSheet(QStringLiteral("background: #3b2226; border-color: #5c2b33; color: #ff8e99;"));
 
       rLayout->addWidget(toggleBtn);
@@ -1133,15 +1221,15 @@ void DaliNiraBlockerPage::createStatisticsTab() {
     *outVal = vLabel;
   };
 
-  addGridStat(0, 0, QStringLiteral("Bugün"), &statsToday_);
-  addGridStat(0, 1, QStringLiteral("Bu hafta"), &statsWeek_);
-  addGridStat(0, 2, QStringLiteral("Bu ay"), &statsMonth_);
-  addGridStat(1, 0, QStringLiteral("Toplam"), &statsTotal_);
-  addGridStat(1, 1, QStringLiteral("İzleyiciler"), &statsTrackers_);
-  addGridStat(1, 2, QStringLiteral("Tahmini Tasarruf"), &statsSaved_);
-  addGridStat(2, 0, QStringLiteral("Tahmini hızlanma"), &statsSpeed_);
-  addGridStat(2, 1, QStringLiteral("Whitelist site sayısı"), &statsWhitelistSites_);
-  addGridStat(2, 2, QStringLiteral("Whitelist ile izin verilen"), &statsWhitelistAllowed_);
+  addGridStat(0, 0, I18n::text(QStringLiteral("common.today")), &statsToday_);
+  addGridStat(0, 1, I18n::text(QStringLiteral("blocker.stat_this_week")), &statsWeek_);
+  addGridStat(0, 2, I18n::text(QStringLiteral("blocker.stat_this_month")), &statsMonth_);
+  addGridStat(1, 0, I18n::text(QStringLiteral("blocker.stat_total")), &statsTotal_);
+  addGridStat(1, 1, I18n::text(QStringLiteral("blocker.stat_trackers")), &statsTrackers_);
+  addGridStat(1, 2, I18n::text(QStringLiteral("blocker.stat_estimated_savings")), &statsSaved_);
+  addGridStat(2, 0, I18n::text(QStringLiteral("blocker.stat_speedup")), &statsSpeed_);
+  addGridStat(2, 1, I18n::text(QStringLiteral("blocker.stat_allowlisted_sites")), &statsWhitelistSites_);
+  addGridStat(2, 2, I18n::text(QStringLiteral("blocker.stat_allowlist_allowed")), &statsWhitelistAllowed_);
 
   layout->addWidget(gridFrame);
 
@@ -1167,12 +1255,12 @@ void DaliNiraBlockerPage::createStatisticsTab() {
   };
 
   auto *topSitesGroup = createRankingSection(
-      QStringLiteral("En Çok Engellenen Siteler"), container, &topSitesLayout_);
+      I18n::text(QStringLiteral("blocker.top_blocked_sites")), container, &topSitesLayout_);
   topSitesLayout_->setSpacing(12);
   layout->addWidget(topSitesGroup);
 
   auto *topListsGroup = createRankingSection(
-      QStringLiteral("En Etkin Filtre Listeleri"), container, &topListsLayout_);
+      I18n::text(QStringLiteral("blocker.top_filter_lists")), container, &topListsLayout_);
   topListsLayout_->setSpacing(12);
   layout->addWidget(topListsGroup);
 
@@ -1192,8 +1280,8 @@ void DaliNiraBlockerPage::refreshStatisticsTab() {
 
   if (statsSaved_) {
     const quint64 bytes = service_->estimatedBytesSaved();
-    if (bytes < 1024 * 1024) statsSaved_->setText(QStringLiteral("%1 KB").arg(bytes / 1024));
-    else statsSaved_->setText(QStringLiteral("%1 MB").arg(QString::number(bytes / (1024.0 * 1024.0), 'f', 1)));
+    if (bytes < 1024 * 1024) statsSaved_->setText(I18n::text(QStringLiteral("units.kilobytes")).arg(bytes / 1024));
+    else statsSaved_->setText(I18n::text(QStringLiteral("units.megabytes")).arg(QString::number(bytes / (1024.0 * 1024.0), 'f', 1)));
   }
 
   if (statsSpeed_) {
@@ -1216,14 +1304,14 @@ void DaliNiraBlockerPage::refreshStatisticsTab() {
     }
     const auto top = service_->topBlockedHosts(6);
     if (top.isEmpty()) {
-      auto *empty = new QLabel(QStringLiteral("Henüz engellenen site kaydı yok."), this);
+      auto *empty = new QLabel(I18n::text(QStringLiteral("blocker.no_blocked_sites")), this);
       empty->setStyleSheet(QStringLiteral("color: #72849a; font-style: italic;"));
       topSitesLayout_->addWidget(empty);
     } else {
       int rank = 1;
       for (const auto &p : top) {
         topSitesLayout_->addWidget(createRankedMetricRow(
-            rank++, p.first, p.second, QStringLiteral("engelleme"),
+            rank++, p.first, p.second, I18n::text(QStringLiteral("blocker.blocks_unit")),
             QStringLiteral("#5cf2c4"), topSitesLayout_->parentWidget()));
       }
     }
@@ -1238,14 +1326,14 @@ void DaliNiraBlockerPage::refreshStatisticsTab() {
     }
     const auto top = service_->topMatchedRulesets(6);
     if (top.isEmpty()) {
-      auto *empty = new QLabel(QStringLiteral("Henüz eşleşen kural seti kaydı yok."), this);
+      auto *empty = new QLabel(I18n::text(QStringLiteral("blocker.no_ruleset_matches")), this);
       empty->setStyleSheet(QStringLiteral("color: #72849a; font-style: italic;"));
       topListsLayout_->addWidget(empty);
     } else {
       int rank = 1;
       for (const auto &p : top) {
         topListsLayout_->addWidget(createRankedMetricRow(
-            rank++, p.first, p.second, QStringLiteral("eşleşme"),
+            rank++, p.first, p.second, I18n::text(QStringLiteral("blocker.matches_unit")),
             QStringLiteral("#4ec9ff"), topListsLayout_->parentWidget()));
       }
     }
@@ -1263,11 +1351,11 @@ void DaliNiraBlockerPage::createLoggerTab() {
   // Search & Filter Header
   auto *header = new QHBoxLayout;
   loggerSearch_ = new QLineEdit(container);
-  loggerSearch_->setPlaceholderText(QStringLiteral("URL, kural veya liste ara..."));
+  loggerSearch_->setPlaceholderText(I18n::text(QStringLiteral("blocker.logger_search_placeholder")));
   loggerActionCombo_ = new QComboBox(container);
-  loggerActionCombo_->addItem(QStringLiteral("Tümü"), QStringLiteral("all"));
-  loggerActionCombo_->addItem(QStringLiteral("Engellenen"), QStringLiteral("block"));
-  loggerActionCombo_->addItem(QStringLiteral("İzin verilen"), QStringLiteral("allow"));
+  loggerActionCombo_->addItem(I18n::text(QStringLiteral("common.all")), QStringLiteral("all"));
+  loggerActionCombo_->addItem(I18n::text(QStringLiteral("blocker.blocked")), QStringLiteral("block"));
+  loggerActionCombo_->addItem(I18n::text(QStringLiteral("blocker.allowed")), QStringLiteral("allow"));
 
   header->addWidget(loggerSearch_, 1);
   header->addWidget(loggerActionCombo_);
@@ -1276,8 +1364,8 @@ void DaliNiraBlockerPage::createLoggerTab() {
   // Table
   logTable_ = new QTableWidget(container);
   logTable_->setColumnCount(6);
-  logTable_->setHorizontalHeaderLabels({QStringLiteral("Zaman"), QStringLiteral("Tip"), QStringLiteral("Aksiyon"),
-                                        QStringLiteral("Liste / Sebep"), QStringLiteral("Kural"), QStringLiteral("URL")});
+  logTable_->setHorizontalHeaderLabels({I18n::text(QStringLiteral("blocker.log_col_time")), I18n::text(QStringLiteral("blocker.log_col_type")), I18n::text(QStringLiteral("blocker.log_col_action")),
+                                        I18n::text(QStringLiteral("blocker.log_col_list")), I18n::text(QStringLiteral("blocker.log_col_rule")), QStringLiteral("URL")});
   logTable_->horizontalHeader()->setStretchLastSection(true);
   logTable_->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft);
   logTable_->verticalHeader()->setVisible(false);
@@ -1310,12 +1398,12 @@ void DaliNiraBlockerPage::createLoggerTab() {
     *outVal = v;
   };
 
-  addDiagTile(QStringLiteral("Yüklü filtre"), &diagLoaded_);
-  addDiagTile(QStringLiteral("Aktif liste"), &diagActive_);
-  addDiagTile(QStringLiteral("Engellenen"), &diagBlocked_);
-  addDiagTile(QStringLiteral("İzin verilen"), &diagAllowed_);
-  addDiagTile(QStringLiteral("İşleme süresi"), &diagTime_);
-  addDiagTile(QStringLiteral("Bellek"), &diagMemory_);
+  addDiagTile(I18n::text(QStringLiteral("blocker.diag_loaded_filters")), &diagLoaded_);
+  addDiagTile(I18n::text(QStringLiteral("blocker.diag_active_lists")), &diagActive_);
+  addDiagTile(I18n::text(QStringLiteral("blocker.blocked")), &diagBlocked_);
+  addDiagTile(I18n::text(QStringLiteral("blocker.allowed")), &diagAllowed_);
+  addDiagTile(I18n::text(QStringLiteral("blocker.diag_processing_time")), &diagTime_);
+  addDiagTile(I18n::text(QStringLiteral("blocker.diag_memory")), &diagMemory_);
 
   layout->addWidget(diagBox);
   stack_->addWidget(container);
@@ -1349,8 +1437,16 @@ void DaliNiraBlockerPage::refreshLoggerTab() {
     logTable_->setItem(row, 0, new QTableWidgetItem(entry.timestamp.toString(QStringLiteral("hh:mm:ss"))));
     logTable_->setItem(row, 1, new QTableWidgetItem(entry.resourceTypeStr));
 
-    auto *actItem = new QTableWidgetItem(entry.action == DaliNiraBlockerAction::Block ? QStringLiteral("ENGEL") :
-                                         entry.action == DaliNiraBlockerAction::Redirect ? QStringLiteral("YÖNLENDİR") : QStringLiteral("İZİN"));
+    // The final action, and for redirects and allows what kind they were.
+    QString actionLabel;
+    if (entry.action == DaliNiraBlockerAction::Block) actionLabel = I18n::text(QStringLiteral("blocker.log_block"));
+    else if (entry.reason == QLatin1String("dnr-remove-param")) actionLabel = I18n::text(QStringLiteral("blocker.log_params_removed"));
+    else if (entry.reason == QLatin1String("dnr-redirect-resource")) actionLabel = I18n::text(QStringLiteral("blocker.log_redirect_resource"));
+    else if (entry.action == DaliNiraBlockerAction::Redirect) actionLabel = I18n::text(QStringLiteral("blocker.log_redirect"));
+    else if (entry.reason == QLatin1String("dnr-allow") || entry.reason == QLatin1String("user-allow"))
+      actionLabel = I18n::text(QStringLiteral("blocker.log_allow_exception"));
+    else actionLabel = I18n::text(QStringLiteral("blocker.log_allow"));
+    auto *actItem = new QTableWidgetItem(actionLabel);
     if (entry.action == DaliNiraBlockerAction::Block) actItem->setForeground(QColor(0xff, 0x6b, 0x6b));
     else if (entry.action == DaliNiraBlockerAction::Redirect) actItem->setForeground(QColor(0xff, 0xb8, 0x6c));
     else actItem->setForeground(QColor(0x5c, 0xf2, 0xc4));
@@ -1376,7 +1472,7 @@ void DaliNiraBlockerPage::refreshLoggerTab() {
   }
   if (diagMemory_) {
     const quint64 memBytes = service_->estimatedMemoryBytes();
-    diagMemory_->setText(QStringLiteral("Tahmini: %1 MB").arg(QString::number(memBytes / (1024.0 * 1024.0), 'f', 2)));
+    diagMemory_->setText(I18n::text(QStringLiteral("blocker.diag_estimated_mb")).arg(QString::number(memBytes / (1024.0 * 1024.0), 'f', 2)));
   }
 }
 
@@ -1389,13 +1485,13 @@ void DaliNiraBlockerPage::createDevelopTab() {
   layout->setSpacing(14);
 
   auto *topBar = new QHBoxLayout;
-  auto *vLabel = new QLabel(QStringLiteral("Görünüm:"), container);
+  auto *vLabel = new QLabel(I18n::text(QStringLiteral("blocker.view_label")), container);
   developViewCombo_ = new QComboBox(container);
-  developViewCombo_->addItem(QStringLiteral("Filtreleme modu ayrıntıları"), QStringLiteral("modes"));
-  developViewCombo_->addItem(QStringLiteral("DNR ruleset özeti"), QStringLiteral("dnr"));
-  developViewCombo_->addItem(QStringLiteral("Oturum eşleşme özeti"), QStringLiteral("session"));
+  developViewCombo_->addItem(I18n::text(QStringLiteral("blocker.view_mode_details")), QStringLiteral("modes"));
+  developViewCombo_->addItem(I18n::text(QStringLiteral("blocker.view_dnr_summary")), QStringLiteral("dnr"));
+  developViewCombo_->addItem(I18n::text(QStringLiteral("blocker.view_session_summary")), QStringLiteral("session"));
 
-  auto *resetStatsBtn = new QPushButton(QStringLiteral("Sayacı sıfırla"), container);
+  auto *resetStatsBtn = new QPushButton(I18n::text(QStringLiteral("blocker.reset_counter")), container);
 
   topBar->addWidget(vLabel);
   topBar->addWidget(developViewCombo_);
@@ -1425,25 +1521,15 @@ void DaliNiraBlockerPage::refreshDevelopTab() {
 
   QString text;
   if (view == QLatin1String("dnr")) {
-    text = QStringLiteral("DNR Kural Özeti:\n"
-                          "Yüklü Toplam Kural: %1\n"
-                          "Özel Kullanıcı Kuralları: %2\n"
-                          "Aktif Ruleset Sayısı: %3\n\n"
-                          "Eşleşen Kural Setleri:\n")
+    text = I18n::text(QStringLiteral("blocker.dnr_summary_text"))
                .arg(QString::number(service_->filterEngine()->ruleCount()),
                     QString::number(service_->filterEngine()->customRuleCount()),
                     QString::number(service_->listManager()->availableLists().size()));
     for (const auto &p : service_->topMatchedRulesets()) {
-      text += QStringLiteral("  - %1: %2 eşleşme\n").arg(p.first, QString::number(p.second));
+      text += I18n::text(QStringLiteral("blocker.dnr_summary_line")).arg(p.first, QString::number(p.second));
     }
   } else if (view == QLatin1String("session")) {
-    text = QStringLiteral("Oturum İstatistik Özeti:\n"
-                          "Oturumda Engellenen İstek: %1\n"
-                          "Toplam Engellenen İstek: %2\n"
-                          "Toplam İzin Verilen İstek: %3\n"
-                          "İzleyici İstekleri: %4\n"
-                          "Whitelist İle İzin Verilen: %5\n\n"
-                          "Son Engellenen İstekler (Son 10):\n")
+    text = I18n::text(QStringLiteral("blocker.session_summary_text"))
                .arg(QString::number(service_->sessionBlockedCount()),
                     QString::number(service_->totalBlockedCount()),
                     QString::number(service_->totalAllowedCount()),
@@ -1457,23 +1543,13 @@ void DaliNiraBlockerPage::refreshDevelopTab() {
       }
     }
   } else {
-    text = QStringLiteral("DaliNira Reklam Engelleyici Mod Özeti:\n"
-                          "Aktif Mod: %1\n"
-                          "Sıkı Engelleme (Strict Block): %2\n"
-                          "Açılır Pencere Engelleme (Popup Block): %3\n"
-                          "Geliştirici Modu: %4\n"
-                          "Otomatik Sayfa Yenileme: %5\n"
-                          "Kalkan Sayacı Gösterimi: %6\n\n"
-                          "Filtre Motoru Yapılandırması:\n"
-                          "  - Network Request Interception: QWebEngineUrlRequestInterceptor\n"
-                          "  - Dynamic Cosmetic Stylesheets: Aktif\n"
-                          "  - Strict Protection Redirects: dalinira://newtab?strictblock=1\n")
+    text = I18n::text(QStringLiteral("blocker.mode_summary_text"))
                .arg(modeToString(service_->settings()->mode()),
-                    service_->settings()->strictBlock() ? QStringLiteral("Açık") : QStringLiteral("Kapalı"),
-                    service_->settings()->popupBlock() ? QStringLiteral("Açık") : QStringLiteral("Kapalı"),
-                    service_->settings()->developerMode() ? QStringLiteral("Açık") : QStringLiteral("Kapalı"),
-                    service_->settings()->autoReloadOnModeChange() ? QStringLiteral("Açık") : QStringLiteral("Kapalı"),
-                    service_->settings()->showBlockedCountOnToolbar() ? QStringLiteral("Açık") : QStringLiteral("Kapalı"));
+                    service_->settings()->strictBlock() ? I18n::text(QStringLiteral("common.on")) : I18n::text(QStringLiteral("common.off")),
+                    service_->settings()->popupBlock() ? I18n::text(QStringLiteral("common.on")) : I18n::text(QStringLiteral("common.off")),
+                    service_->settings()->developerMode() ? I18n::text(QStringLiteral("common.on")) : I18n::text(QStringLiteral("common.off")),
+                    service_->settings()->autoReloadOnModeChange() ? I18n::text(QStringLiteral("common.on")) : I18n::text(QStringLiteral("common.off")),
+                    service_->settings()->showBlockedCountOnToolbar() ? I18n::text(QStringLiteral("common.on")) : I18n::text(QStringLiteral("common.off")));
   }
 
   developEditor_->setPlainText(text);
@@ -1489,15 +1565,13 @@ void DaliNiraBlockerPage::createAboutTab() {
   layout->setContentsMargins(28, 24, 28, 24);
   layout->setSpacing(18);
 
-  auto *aboutGroup = new QGroupBox(QStringLiteral("DaliNira Blocker Hakkında"), container);
+  auto *aboutGroup = new QGroupBox(I18n::text(QStringLiteral("blocker.about_title")), container);
   auto *aLayout = new QVBoxLayout(aboutGroup);
   aLayout->setContentsMargins(18, 18, 18, 18);
   aLayout->setSpacing(14);
 
   auto *body = new QLabel(
-      QStringLiteral("DaliNira Blocker, yerel kural seti mantığını Chromium ağ istek motoruyla birleştirir. "
-                     "Ağ engelleme doğrudan Qt WebEngine UrlRequestInterceptor seviyesinde gerçekleşirken, görünür reklam temizliği "
-                     "ise sayfa içi güvenli CSS kuralları ile yapılır."),
+      I18n::text(QStringLiteral("blocker.about_body")),
       aboutGroup);
   body->setWordWrap(true);
   body->setStyleSheet(QStringLiteral("color: #b8c4d4; font-size: 13px; line-height: 1.5;"));
@@ -1508,7 +1582,7 @@ void DaliNiraBlockerPage::createAboutTab() {
   auto *hLayout = new QHBoxLayout(hostBox);
   auto *globe = new QLabel(QStringLiteral("🌐"), hostBox);
   globe->setStyleSheet(QStringLiteral("font-size: 20px;"));
-  aboutActiveHostLabel_ = new QLabel(QStringLiteral("Aktif web sekmesi yok"), hostBox);
+  aboutActiveHostLabel_ = new QLabel(I18n::text(QStringLiteral("blocker.no_active_web_tab")), hostBox);
   aboutActiveHostLabel_->setStyleSheet(QStringLiteral("font-size: 14px; font-weight: 600; color: #4ec9ff;"));
 
   hLayout->addWidget(globe);
@@ -1516,7 +1590,7 @@ void DaliNiraBlockerPage::createAboutTab() {
   aLayout->addWidget(hostBox);
 
   auto *verLbl = new QLabel(
-      QStringLiteral("Sürüm: %1 (Native Qt/C++ Motoru) · Lisans: GPL-3.0-only / DaliNira Project")
+      I18n::text(QStringLiteral("blocker.about_version"))
           .arg(QStringLiteral(DALINIRA_BROWSER_VERSION)),
       aboutGroup);
   verLbl->setStyleSheet(QStringLiteral("color: #72849a; font-size: 12px;"));

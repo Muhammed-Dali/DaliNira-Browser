@@ -2,7 +2,10 @@
 #include "adult_content_protection.h"
 #include "security_utils.h"
 
+#include "i18n/language_manager.h"
+
 #include <QCoreApplication>
+#include <QSettings>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
@@ -447,6 +450,32 @@ int main(int argc, char **argv) {
     }
   }
   assert(restoredMetadata);
+
+  // A restored history entry keeps no stale language: after a live switch its
+  // status follows the new UI language (the Downloads page is often opened
+  // only after switching, e.g. Turkish -> English must not show "Tamamlandı").
+  {
+    QTemporaryDir settingsRoot;
+    assert(settingsRoot.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+    auto &languages = dalinira::i18n::LanguageManager::instance();
+    int refreshes = 0;
+    QObject::connect(&restored, &MediaDownloadService::jobsChanged, [&refreshes] { ++refreshes; });
+    for (const QString &code : {QStringLiteral("tr"), QStringLiteral("en"), QStringLiteral("ar"), QStringLiteral("fr")}) {
+      const int before = refreshes;
+      languages.setLanguagePreference(code);
+      assert(languages.activeLanguageCode() == code);
+      assert(refreshes > before && "views are told to redraw in the new language");
+      bool sawCompleted = false;
+      for (const MediaDownloadJob &job : restored.jobs()) {
+        if (job.state != MediaDownloadState::Completed) continue;
+        sawCompleted = true;
+        assert(job.statusText == languages.translateIn(code, QStringLiteral("downloads.state_completed")));
+      }
+      assert(sawCompleted);
+    }
+  }
 
   const QString malformedHistoryPath = QDir(temporary.path()).filePath(QStringLiteral("malformed-history.json"));
   QJsonArray malformedJobs;

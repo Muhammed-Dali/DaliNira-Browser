@@ -6,6 +6,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QTimer>
+#include "i18n/i18n.h"
 
 namespace {
 constexpr int kDefaultTimeoutMs = 12000;
@@ -26,14 +27,14 @@ void LibreTranslateProvider::translateBatch(
 ) {
   if (!isConfigured()) {
     if (callback) {
-      callback({false, {}, TranslationError::NotConfigured, QStringLiteral("LibreTranslate sunucu adresi yapılandırılmamış.")});
+      callback({false, {}, TranslationError::NotConfigured, I18n::text(QStringLiteral("translate.libretranslate_not_configured"))});
     }
     return;
   }
 
   if (!nam_) {
     if (callback) {
-      callback({false, {}, TranslationError::ProviderUnavailable, QStringLiteral("Ağ yöneticisi kullanılamıyor.")});
+      callback({false, {}, TranslationError::ProviderUnavailable, I18n::text(QStringLiteral("translate.network_manager_unavailable"))});
     }
     return;
   }
@@ -104,7 +105,7 @@ void LibreTranslateProvider::translateBatch(
 
     if (parseError.error != QJsonParseError::NoError) {
       if (callback) {
-        callback({false, {}, TranslationError::InvalidResponse, QStringLiteral("LibreTranslate yanıtı geçerli JSON formatında değil.")});
+        callback({false, {}, TranslationError::InvalidResponse, I18n::text(QStringLiteral("translate.libretranslate_invalid_json"))});
       }
       return;
     }
@@ -140,7 +141,7 @@ void LibreTranslateProvider::translateBatch(
 
     if (translatedList.size() != expectedCount) {
       if (callback) {
-        callback({false, {}, TranslationError::InvalidResponse, QStringLiteral("Çeviri sonucu beklenen metin sayısıyla eşleşmedi.")});
+        callback({false, {}, TranslationError::InvalidResponse, I18n::text(QStringLiteral("translate.count_mismatch"))});
       }
       return;
     }

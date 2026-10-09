@@ -1,9 +1,20 @@
 name: Linux CI
 
+# Normal pushes and pull requests run the build and the non-GUI test tier
+# (unit + integration, Qt offscreen platform, no display server). The GUI tier
+# (real windows, WebKit and QtWebEngine processes) runs only when requested:
+# Actions > Linux CI > Run workflow > gui_tests. Packages are built and
+# fresh-install tested by packages.yml.
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      gui_tests:
+        description: Also run the GUI test tier (Xvfb, software rendering; no GPU on CI runners)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -13,6 +24,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  metadata:
+    name: Release metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Versions, PKGBUILD/.SRCINFO and file names agree
+        run: scripts/check-release-metadata.sh
+
   linux-compatibility:
     name: Linux compatibility (${{ matrix.distribution }})
     runs-on: ubuntu-latest
@@ -43,7 +63,10 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             build-essential ca-certificates cmake ffmpeg git ninja-build nodejs \
             libssl-dev libpsl-dev pkg-config qt6-base-dev qt6-image-formats-plugins qt6-svg-dev \
-            qt6-webengine-dev xauth xvfb dbus dbus-x11
+            qt6-webengine-dev dbus \
+            libwebkit2gtk-4.1-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav \
+            gstreamer1.0-gl gstreamer1.0-alsa
 
       - name: Install Fedora build dependencies
         if: ${{ matrix.package_family == 'dnf' }}
@@ -53,7 +76,9 @@ jobs:
             cmake ffmpeg-free gcc-c++ git ninja-build nodejs openssl-devel \
             libpsl-devel pkgconf-pkg-config \
             qt6-qtbase-devel qt6-qtimageformats qt6-qtsvg-devel \
-            qt6-qtwebengine-devel xorg-x11-server-Xvfb xorg-x11-xauth dbus dbus-x11
+            qt6-qtwebengine-devel dbus \
+            webkit2gtk4.1-devel gstreamer1-devel gstreamer1-plugins-base \
+            gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugin-libav
 
       - name: Install Arch build dependencies
         if: ${{ matrix.package_family == 'pacman' }}
@@ -62,7 +87,8 @@ jobs:
           pacman -Syu --noconfirm --needed \
             cmake ffmpeg git ninja nodejs openssl libpsl pkgconf \
             qt6-base qt6-imageformats qt6-svg qt6-webengine \
-            xorg-server-xvfb xorg-xauth dbus
+            dbus \
+            webkit2gtk-4.1 gst-plugins-base gst-plugins-good gst-plugins-bad gst-libav
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -108,9 +134,9 @@ jobs:
           # Store PID for later cleanup
           echo $DBUS_PID > /tmp/dbus.pid
 
-      - name: Test
+      - name: Non-GUI tests
         env:
-          QT_QPA_PLATFORM: xcb
+          QT_QPA_PLATFORM: offscreen
           QT_QPA_PLATFORM_PLUGIN_PATH: ${{ matrix.package_family == 'apt' && '/usr/lib/x86_64-linux-gnu/qt6/plugins' || (matrix.package_family == 'dnf' && '/usr/lib64/qt6/plugins' || '/usr/lib/qt6/plugins') }}
           QTWEBENGINE_DISABLE_SANDBOX: "1"
           QTWEBENGINE_CHROMIUM_FLAGS: --no-sandbox --disable-gpu --disable-web-resources
@@ -119,11 +145,38 @@ jobs:
         run: |
           # Verify D-Bus one more time
           ls -la /run/dbus/system_bus_socket || echo "Warning: D-Bus socket not found"
-          
-          # The three-window fixture is covered by the local and clean-package
-          # gates; nested CI containers do not reliably start its third renderer.
+          ctest --test-dir build --output-on-failure -LE gui \
+            --timeout ${{ matrix.package_family == 'pacman' && '180' || '120' }}
+
+      - name: Install Xvfb for the GUI tier
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.gui_tests }}
+        shell: bash
+        run: |
+          case "${{ matrix.package_family }}" in
+            apt) DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb xauth dbus-x11 ;;
+            dnf) dnf install -y xorg-x11-server-Xvfb xorg-x11-xauth dbus-x11 ;;
+            pacman) pacman -S --noconfirm --needed xorg-server-xvfb xorg-xauth ;;
+          esac
+
+      - name: GUI tests (requested)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.gui_tests }}
+        env:
+          QT_QPA_PLATFORM: xcb
+          QT_QPA_PLATFORM_PLUGIN_PATH: ${{ matrix.package_family == 'apt' && '/usr/lib/x86_64-linux-gnu/qt6/plugins' || (matrix.package_family == 'dnf' && '/usr/lib64/qt6/plugins' || '/usr/lib/qt6/plugins') }}
+          QTWEBENGINE_DISABLE_SANDBOX: "1"
+          QTWEBENGINE_CHROMIUM_FLAGS: --no-sandbox --disable-gpu --disable-web-resources
+          DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+          DALINIRA_SLOW_WEBENGINE_CI: ${{ matrix.package_family == 'pacman' && '1' || '0' }}
+          DALINIRA_GUI_TESTS: "1"
+          # CI runners have no GPU; keep every GL user on Mesa's software
+          # rasterizer. Desktops use scripts/safe-gui-test.sh instead.
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          # One test at a time (the GUI tests are RUN_SERIAL). The three-window
+          # fixture is covered by the local and clean-package gates; nested CI
+          # containers do not reliably start its third renderer.
           xvfb-run -a --error-file=/tmp/xvfb-error.log \
-            ctest --test-dir build --output-on-failure \
+            ctest --test-dir build --output-on-failure -L gui -j1 \
             -E '^browser-tab-attach-stress$' \
             --timeout ${{ matrix.package_family == 'pacman' && '180' || '120' }}
 

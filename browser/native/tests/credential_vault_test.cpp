@@ -18,6 +18,8 @@ namespace {
 class MockKeyringProvider : public DeviceKeyring::Provider {
  public:
   bool available = true;
+  bool storeSucceeds = true;
+  bool loadSucceeds = true;
   QMap<QString, QByteArray> storage;
   int clearCalls = 0;
   int storeCalls = 0;
@@ -25,13 +27,13 @@ class MockKeyringProvider : public DeviceKeyring::Provider {
 
   bool isAvailable() const override { return available; }
   bool storeSecret(const QString &vaultKeyId, const QByteArray &secret) override {
-    if (!available) return false;
+    if (!available || !storeSucceeds) return false;
     ++storeCalls;
     storage[vaultKeyId] = secret;
     return true;
   }
   bool loadSecret(const QString &vaultKeyId, QByteArray *secret) override {
-    if (!available || !storage.contains(vaultKeyId)) return false;
+    if (!available || !loadSucceeds || !storage.contains(vaultKeyId)) return false;
     ++loadCalls;
     *secret = storage.value(vaultKeyId);
     return true;
@@ -102,11 +104,14 @@ int main() {
     const QString master = QStringLiteral("DeviceBoundMaster#2026");
     CredentialVault vault(keyringRoot.path());
     assert(vault.create(master));
-    assert(vault.schemaVersion() == 3);
+    assert(vault.schemaVersion() == 4);
     assert(vault.isDeviceBound());
     assert(vault.deviceBinding() == QStringLiteral("secret-service"));
     assert(mockKeyring->storeCalls > 0);
     assert(!mockKeyring->storage.isEmpty());
+    const QString canonicalId = vault.canonicalKeyringId();
+    assert(!canonicalId.isEmpty() && !canonicalId.endsWith(QStringLiteral("-nosalt")));
+    assert(mockKeyring->storage.contains(canonicalId));
 
     // Save a secret
     assert(vault.save({QStringLiteral("https://secure.example.com"), QStringLiteral("device-user"), QStringLiteral("DeviceBoundSecret#999"), QString{}}));
@@ -138,6 +143,59 @@ int main() {
     std::cout << "[PASS] OS Keyring / Device-Secret Binding (Schema v3)" << std::endl;
   }
 
+  // 2b. Recover only a cryptographically valid legacy <vault-id>-nosalt secret.
+  {
+    std::cout << "[RUN] Legacy nosalt keyring recovery" << std::endl;
+    auto mockKeyring = std::make_shared<MockKeyringProvider>();
+    DeviceKeyring::setCustomProviderForTesting(mockKeyring);
+    QTemporaryDir root; assert(root.isValid());
+    const QString master = QStringLiteral("LegacyNosaltMaster#2026");
+    const QString storageId = QStringLiteral("11111111-1111-1111-1111-111111111111");
+    {
+      CredentialVault vault(root.path(), nullptr, storageId);
+      assert(vault.create(master));
+      assert(vault.save({QStringLiteral("https://nosalt.example"), QStringLiteral("legacy-user"), QStringLiteral("legacy-value"), {}}));
+      const QString canonical = vault.canonicalKeyringId();
+      const QByteArray secret = mockKeyring->storage.take(canonical);
+      assert(!secret.isEmpty());
+      mockKeyring->storage.insert(storageId + QStringLiteral("-nosalt"), secret);
+      vault.lock();
+    }
+    {
+      CredentialVault recovered(root.path(), nullptr, storageId);
+      assert(recovered.unlock(master));
+      const QString canonical = recovered.canonicalKeyringId();
+      assert(mockKeyring->storage.contains(canonical));
+      assert(!mockKeyring->storage.contains(storageId + QStringLiteral("-nosalt")));
+      recovered.lock();
+    }
+    {
+      CredentialVault repeated(root.path(), nullptr, storageId);
+      assert(repeated.unlock(master));
+      assert(!mockKeyring->storage.contains(storageId + QStringLiteral("-nosalt")));
+    }
+
+    // An invalid compatibility secret must neither migrate nor be deleted.
+    const QString badId = QStringLiteral("22222222-2222-2222-2222-222222222222");
+    {
+      CredentialVault bad(root.path(), nullptr, badId);
+      assert(bad.create(master));
+      const QString canonical = bad.canonicalKeyringId();
+      mockKeyring->storage.remove(canonical);
+      mockKeyring->storage.insert(badId + QStringLiteral("-nosalt"), QByteArray(32, 'x'));
+      bad.lock();
+    }
+    {
+      CredentialVault rejected(root.path(), nullptr, badId);
+      assert(!rejected.unlock(master));
+      assert(rejected.lastError() == QStringLiteral("keyring-unavailable"));
+      assert(mockKeyring->storage.contains(badId + QStringLiteral("-nosalt")));
+      assert(!mockKeyring->storage.contains(rejected.canonicalKeyringId()));
+    }
+    DeviceKeyring::resetCustomProviderForTesting();
+    std::cout << "[PASS] Legacy nosalt keyring recovery" << std::endl;
+  }
+
   // 3. Backward-Compatible Migration from Schema v2 to Schema v3
   {
     std::cout << "[RUN] Backward-Compatible Migration from Schema v2 to Schema v3" << std::endl;
@@ -165,7 +223,7 @@ int main() {
       assert(!migrating.isDeviceBound());
       assert(migrating.unlock(master));
       // Upon unlock, it should have seamlessly upgraded to Schema v3 with device binding
-      assert(migrating.schemaVersion() == 3);
+      assert(migrating.schemaVersion() == 4);
       assert(migrating.isDeviceBound());
       assert(migrating.deviceBinding() == QStringLiteral("secret-service"));
       assert(mockKeyring->storeCalls > 0);
@@ -220,8 +278,28 @@ int main() {
     CredentialVault corruptRestart(corruptRoot.path());
     assert(corruptRestart.unlock(master));
     CredentialSecret tamperedSecret;
-    assert(!corruptRestart.reveal(corruptId, &tamperedSecret));
-    assert(corruptRestart.lastError() == QStringLiteral("corrupt-vault"));
+    assert(corruptRestart.reveal(corruptId, &tamperedSecret));
+    assert(tamperedSecret.username == QStringLiteral("tamper-user"));
+    tamperedSecret.wipe();
+    corruptRestart.lock();
+
+    // If neither primary nor backup authenticates, unlock fails closed.
+    for (const QString &candidate : {corruptPath, corruptPath + QStringLiteral(".bak")}) {
+      QFile file(candidate); assert(file.open(QIODevice::ReadOnly));
+      QJsonObject object = QJsonDocument::fromJson(file.readAll()).object(); file.close();
+      QJsonArray candidateRecords = object.value(QStringLiteral("records")).toArray();
+      QJsonObject candidateRecord = candidateRecords.at(0).toObject();
+      QString candidateTag = candidateRecord.value(QStringLiteral("tag")).toString();
+      candidateTag[0] = candidateTag[0] == QLatin1Char('A') ? QLatin1Char('B') : QLatin1Char('A');
+      candidateRecord.insert(QStringLiteral("tag"), candidateTag);
+      candidateRecords[0] = candidateRecord;
+      object.insert(QStringLiteral("records"), candidateRecords);
+      assert(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+      file.write(QJsonDocument(object).toJson(QJsonDocument::Compact)); file.close();
+    }
+    CredentialVault noRecovery(corruptRoot.path());
+    assert(!noRecovery.unlock(master));
+    assert(noRecovery.lastError() == QStringLiteral("corrupt-vault"));
 
     // Unsupported schema version protection (never overwrite unknown future vault versions)
     QTemporaryDir futureRoot;
@@ -295,21 +373,41 @@ int main() {
     const QString master = QStringLiteral("MultiMaster#2026");
     const QString changedMaster = QStringLiteral("MultiChangedMaster#2027");
 
+    auto mockKeyring = std::make_shared<MockKeyringProvider>();
+    DeviceKeyring::setCustomProviderForTesting(mockKeyring);
     QTemporaryDir multiRoot; CredentialVaultManager multi(multiRoot.path()); QString personalId, workId;
     assert(multi.createVault(QStringLiteral("Kişisel"), master, &personalId));
     assert(multi.saveToVault(personalId, {QStringLiteral("https://example.net"), QStringLiteral("personal-user"), QStringLiteral("personal-secret"), QString{}}));
     assert(multi.createVault(QStringLiteral("İş"), changedMaster, &workId));
     assert(multi.saveToVault(workId, {QStringLiteral("https://example.net"), QStringLiteral("work-user"), QStringLiteral("work-secret"), QString{}}));
     assert(multi.forOrigin(QUrl(QStringLiteral("https://example.net/login"))).size() == 2);
+    const QVector<CredentialMetadata> ownedRecords = multi.forOrigin(QUrl(QStringLiteral("https://example.net/login")));
+    for (const CredentialMetadata &record : ownedRecords) {
+      assert(multi.owningVaultId(record.id) == record.vaultId);
+    }
+    assert(multi.setActiveVault(personalId));
+    multi.lockVault(workId);
+    assert(!multi.unlockVault(workId, master));
+    assert(multi.unlockVault(workId, changedMaster));
     const QString backupPath = multiRoot.path() + QStringLiteral("/portable.dalinira-vault-backup");
     const QString backupPassword = QStringLiteral("BackupPassword#2026");
+    multi.lockVault(personalId);
     assert(multi.exportBackup(backupPath, backupPassword));
     QFile backupFile(backupPath); assert(backupFile.open(QIODevice::ReadOnly)); const QByteArray backupBytes = backupFile.readAll(); assert(!backupBytes.contains("personal-secret") && !backupBytes.contains("work-secret"));
-    QTemporaryDir restoredRoot; CredentialVaultManager restored(restoredRoot.path()); QStringList imported;
-    assert(!restored.importBackup(backupPath, QStringLiteral("WrongBackup#2026"), &imported));
-    assert(restored.importBackup(backupPath, backupPassword, &imported) && imported.size() == 2 && restored.vaults().size() == 2);
-    for (const VaultMetadata &restoredVault : restored.vaults()) assert(restored.unlockVault(restoredVault.id, restoredVault.name == QStringLiteral("Kişisel") ? master : changedMaster));
-    assert(restored.forOrigin(QUrl(QStringLiteral("https://example.net/login"))).size() == 2);
+    QTemporaryDir restoredRoot;
+    {
+      CredentialVaultManager restored(restoredRoot.path()); QStringList imported;
+      assert(!restored.importBackup(backupPath, QStringLiteral("WrongBackup#2026"), &imported));
+      assert(restored.importBackup(backupPath, backupPassword, &imported) && imported.size() == 2 && restored.vaults().size() == 2);
+    }
+    // Genuine restart-equivalent reload: imported device secrets must be found
+    // by their canonical salted ids rather than an in-memory cache.
+    {
+      CredentialVaultManager restartedRestore(restoredRoot.path());
+      for (const VaultMetadata &restoredVault : restartedRestore.vaults())
+        assert(restartedRestore.unlockVault(restoredVault.id, restoredVault.name == QStringLiteral("Kişisel") ? master : changedMaster));
+      assert(restartedRestore.forOrigin(QUrl(QStringLiteral("https://example.net/login"))).size() == 2);
+    }
     multi.lockVault(personalId);
     assert(multi.forOrigin(QUrl(QStringLiteral("https://example.net/login"))).size() == 1);
     assert(multi.unlockVault(personalId, master));
@@ -319,7 +417,75 @@ int main() {
     CredentialVaultManager multiRestart(multiRoot.path());
     assert(multiRestart.vaults().size() == 1 && multiRestart.activeVaultId() == workId);
     assert(multiRestart.unlockVault(workId, changedMaster) && multiRestart.list().isEmpty());
+    DeviceKeyring::resetCustomProviderForTesting();
     std::cout << "[PASS] Multi-Vault Management, Portable Export & Import" << std::endl;
+  }
+
+  // 8. A device-bound backup fails closed when any required secret is missing.
+  {
+    std::cout << "[RUN] Device-bound backup fail-closed" << std::endl;
+    auto mockKeyring = std::make_shared<MockKeyringProvider>();
+    DeviceKeyring::setCustomProviderForTesting(mockKeyring);
+    QTemporaryDir root; assert(root.isValid());
+    CredentialVaultManager manager(root.path());
+    QString id;
+    assert(manager.createVault(QStringLiteral("Bound"), QStringLiteral("BoundMaster#2026"), &id));
+    manager.lockVault(id);
+    mockKeyring->storage.clear();
+    const QString path = root.path() + QStringLiteral("/must-not-exist.dalinira-vault-backup");
+    assert(!manager.exportBackup(path, QStringLiteral("BackupMaster#2026")));
+    assert(manager.lastError() == QStringLiteral("backup-device-secret-unavailable"));
+    assert(!QFile::exists(path));
+    DeviceKeyring::resetCustomProviderForTesting();
+    std::cout << "[PASS] Device-bound backup fail-closed" << std::endl;
+  }
+
+  // 9. Keyed origin-index isolation and vault-scoped sensitive authorization.
+  {
+    std::cout << "[RUN] Keyed origin index and sensitive authorization" << std::endl;
+    auto unavailableKeyring = std::make_shared<MockKeyringProvider>();
+    unavailableKeyring->available = false;
+    DeviceKeyring::setCustomProviderForTesting(unavailableKeyring);
+    QTemporaryDir firstRoot, secondRoot;
+    CredentialVault first(firstRoot.path()), second(secondRoot.path());
+    assert(first.create(QStringLiteral("FirstMaster#2026")));
+    assert(second.create(QStringLiteral("SecondMaster#2026")));
+    const CredentialSecret common{QStringLiteral("https://same-origin.example"),
+                                  QStringLiteral("fixture-user"), QStringLiteral("fixture-secret")};
+    assert(first.save(common));
+    assert(second.save(common));
+    const auto readTokens = [](const QString &root) {
+      QFile file(root + QStringLiteral("/credential-vault/origin-index.json"));
+      assert(file.open(QIODevice::ReadOnly));
+      const QJsonObject object = QJsonDocument::fromJson(file.readAll()).object();
+      assert(object.value(QStringLiteral("version")).toInt() == 2);
+      assert(!object.contains(QStringLiteral("originHashes")));
+      return object.value(QStringLiteral("originTokens")).toArray();
+    };
+    const QJsonArray firstTokens = readTokens(firstRoot.path());
+    const QJsonArray secondTokens = readTokens(secondRoot.path());
+    assert(firstTokens.size() == 1 && secondTokens.size() == 1);
+    assert(firstTokens.at(0).toString() != secondTokens.at(0).toString());
+    assert(firstTokens.at(0).toString() != QStringLiteral("https://same-origin.example"));
+
+    qint64 clock = 100000;
+    QTemporaryDir managerRoot;
+    CredentialVaultManager manager(managerRoot.path());
+    manager.setTimeProviderForTesting([&clock] { return clock; });
+    QString firstId, secondId;
+    assert(manager.createVault(QStringLiteral("First"), QStringLiteral("FirstMaster#2026"), &firstId));
+    assert(manager.createVault(QStringLiteral("Second"), QStringLiteral("SecondMaster#2026"), &secondId));
+    assert(!manager.authorizeSensitiveAction(secondId, QStringLiteral("FirstMaster#2026")));
+    assert(manager.authorizeSensitiveAction(secondId, QStringLiteral("SecondMaster#2026")));
+    assert(manager.hasSensitiveAuthorization(secondId));
+    assert(!manager.hasSensitiveAuthorization(firstId));
+    clock += 60001;
+    assert(!manager.hasSensitiveAuthorization(secondId));
+    assert(manager.authorizeSensitiveAction(secondId, QStringLiteral("SecondMaster#2026")));
+    manager.lockVault(secondId);
+    assert(!manager.hasSensitiveAuthorization(secondId));
+    DeviceKeyring::resetCustomProviderForTesting();
+    std::cout << "[PASS] Keyed origin index and sensitive authorization" << std::endl;
   }
 
   std::cout << "All DaliNira Credential Vault Security & Keyring tests passed successfully!" << std::endl;

@@ -116,6 +116,7 @@ class DaliNiraBlockerPage final : public QWidget {
   QVBoxLayout *rulesetBreakdownLayout_ = nullptr;
   QVBoxLayout *rulesetCatalogLayout_ = nullptr;
   QLabel *rulesetUpdateStatus_ = nullptr;
+  QCheckBox *autoUpdateListsCheck_ = nullptr;
   QProgressBar *rulesetUpdateProgress_ = nullptr;
 
   // Custom Filters Tab elements

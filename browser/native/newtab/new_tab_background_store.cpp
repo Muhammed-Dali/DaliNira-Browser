@@ -7,6 +7,7 @@
 #include <QImageReader>
 #include <QImageWriter>
 #include <QSaveFile>
+#include "i18n/i18n.h"
 
 namespace {
 constexpr qint64 kMaximumSourceBytes = 25 * 1024 * 1024;
@@ -32,28 +33,28 @@ NewTabBackgroundStore::NewTabBackgroundStore(const QString &profileDataDirectory
 NewTabBackgroundStore::ImportResult NewTabBackgroundStore::importImage(const QString &sourcePath) {
   const QFileInfo source(sourcePath);
   if (!source.isFile() || !source.isReadable())
-    return {ImportError::InvalidImage, QStringLiteral("Görsel dosyası okunamıyor.")};
+    return {ImportError::InvalidImage, I18n::text(QStringLiteral("newtab.bg_unreadable"))};
   if (source.size() > kMaximumSourceBytes)
-    return {ImportError::FileTooLarge, QStringLiteral("Görsel 25 MB sınırını aşıyor.")};
+    return {ImportError::FileTooLarge, I18n::text(QStringLiteral("newtab.bg_too_large"))};
   const QString suffix = source.suffix().toLower();
   if (suffix != QLatin1String("png") && suffix != QLatin1String("jpg")
       && suffix != QLatin1String("jpeg") && suffix != QLatin1String("webp"))
-    return {ImportError::UnsupportedFormat, QStringLiteral("Yalnızca PNG, JPG/JPEG ve WebP desteklenir.")};
+    return {ImportError::UnsupportedFormat, I18n::text(QStringLiteral("newtab.bg_formats"))};
 
   QImageReader reader(source.absoluteFilePath());
   reader.setDecideFormatFromContent(true);
   reader.setAutoTransform(true);
   const QByteArray detectedFormat = reader.format();
   if (!isSupportedFormat(detectedFormat))
-    return {ImportError::UnsupportedFormat, QStringLiteral("Dosyanın gerçek görsel formatı desteklenmiyor.")};
+    return {ImportError::UnsupportedFormat, I18n::text(QStringLiteral("newtab.bg_real_format_unsupported"))};
   const QSize sourceSize = reader.size();
   if (!sourceSize.isValid() || sourceSize.width() > kMaximumDimension || sourceSize.height() > kMaximumDimension
       || static_cast<qint64>(sourceSize.width()) * sourceSize.height() > kMaximumPixels)
-    return {ImportError::UnsafeDimensions, QStringLiteral("Görsel boyutları güvenli sınırları aşıyor.")};
+    return {ImportError::UnsafeDimensions, I18n::text(QStringLiteral("newtab.bg_unsafe_dimensions"))};
   if (sourceSize.width() > kStoredWidth || sourceSize.height() > kStoredHeight)
     reader.setScaledSize(sourceSize.scaled(kStoredWidth, kStoredHeight, Qt::KeepAspectRatio));
   QImage image = reader.read();
-  if (image.isNull()) return {ImportError::InvalidImage, QStringLiteral("Görsel bozuk veya çözümlenemiyor.")};
+  if (image.isNull()) return {ImportError::InvalidImage, I18n::text(QStringLiteral("newtab.bg_corrupt"))};
   image = image.convertToFormat(QImage::Format_ARGB32);
 
   const QImage thumbnail = image.scaled(kThumbnailWidth, kThumbnailHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -66,7 +67,7 @@ NewTabBackgroundStore::ImportResult NewTabBackgroundStore::importImage(const QSt
       || !writeImageAtomically(pendingThumbnail, thumbnail, "JPEG", 84)) {
     QFile::remove(pendingImage);
     QFile::remove(pendingThumbnail);
-    return {ImportError::StorageFailure, QStringLiteral("Yönetilen arka plan kopyası kaydedilemedi.")};
+    return {ImportError::StorageFailure, I18n::text(QStringLiteral("newtab.bg_store_failed"))};
   }
 
   const QString imageBackup = managedImagePath() + QStringLiteral(".backup");
@@ -84,7 +85,7 @@ NewTabBackgroundStore::ImportResult NewTabBackgroundStore::importImage(const QSt
       QFile::rename(thumbnailBackup, thumbnailPath());
     QFile::remove(pendingImage);
     QFile::remove(pendingThumbnail);
-    return {ImportError::StorageFailure, QStringLiteral("Yönetilen arka plan kopyası kaydedilemedi.")};
+    return {ImportError::StorageFailure, I18n::text(QStringLiteral("newtab.bg_store_failed"))};
   }
   const bool installedImage = QFile::rename(pendingImage, managedImagePath());
   const bool installedThumbnail = installedImage
@@ -96,7 +97,7 @@ NewTabBackgroundStore::ImportResult NewTabBackgroundStore::importImage(const QSt
     if (hadThumbnail && QFileInfo::exists(thumbnailBackup)) QFile::rename(thumbnailBackup, thumbnailPath());
     QFile::remove(pendingImage);
     QFile::remove(pendingThumbnail);
-    return {ImportError::StorageFailure, QStringLiteral("Yönetilen arka plan kopyası kaydedilemedi.")};
+    return {ImportError::StorageFailure, I18n::text(QStringLiteral("newtab.bg_store_failed"))};
   }
   QFile::remove(imageBackup);
   QFile::remove(thumbnailBackup);

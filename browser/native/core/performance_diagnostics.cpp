@@ -12,7 +12,6 @@
 #include <QFile>
 #include <QSet>
 #include <QTextStream>
-#include <QWebEnginePage>
 
 #if defined(Q_OS_WIN)
 #include <windows.h>
@@ -111,11 +110,11 @@ void PerformanceDiagnostics::reportNow() const {
     deadlineChecks = performance->deadlineCheckCount();
     for (const auto &id : ids) {
       const auto metadata = performance->metadata(id);
-      if (metadata.lifecycleState == QWebEnginePage::LifecycleState::Frozen) ++frozenCount;
-      if (metadata.lifecycleState == QWebEnginePage::LifecycleState::Discarded) ++discardedCount;
+      if (metadata.lifecycleState == dalinira::TabLifecycleState::Frozen) ++frozenCount;
+      if (metadata.lifecycleState == dalinira::TabLifecycleState::Discarded) ++discardedCount;
       const auto *record = tabManager_->record(id);
-      if (record && record->page && record->page->renderProcessPid() > 0)
-        rendererPids.insert(record->page->renderProcessPid());
+      if (record && record->lifecycle && record->lifecycle->rendererProcessId() > 0)
+        rendererPids.insert(record->lifecycle->rendererProcessId());
     }
   }
   for (qint64 pid : rendererPids) {

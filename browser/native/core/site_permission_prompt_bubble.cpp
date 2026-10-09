@@ -5,10 +5,11 @@
 #include <QKeyEvent>
 #include <QPainter>
 #include <QStyleOption>
+#include "i18n/i18n.h"
 
 namespace {
 QString formatOriginDisplay(const QUrl &url) {
-  if (!url.isValid()) return QStringLiteral("Bilinmeyen site");
+  if (!url.isValid()) return I18n::text(QStringLiteral("permission.unknown_site"));
   QString host = url.host().trimmed();
   if (host.isEmpty()) return url.toDisplayString();
   const int port = url.port();
@@ -152,8 +153,8 @@ void SitePermissionPromptBubble::initializeUi() {
   closeBtn_ = new QToolButton(this);
   closeBtn_->setObjectName(QStringLiteral("permission-close-btn"));
   closeBtn_->setText(QStringLiteral("✕"));
-  closeBtn_->setToolTip(QStringLiteral("Kapat (Esc)"));
-  closeBtn_->setAccessibleName(QStringLiteral("İzin penceresini kapat"));
+  closeBtn_->setToolTip(I18n::text(QStringLiteral("permission.close_tooltip")));
+  closeBtn_->setAccessibleName(I18n::text(QStringLiteral("permission.close_acc")));
   headerLayout->addWidget(closeBtn_, 0, Qt::AlignRight);
 
   mainLayout->addLayout(headerLayout);
@@ -168,20 +169,20 @@ void SitePermissionPromptBubble::initializeUi() {
   auto *buttonsLayout = new QVBoxLayout;
   buttonsLayout->setSpacing(7);
 
-  allowThisVisitBtn_ = new QPushButton(QStringLiteral("Bu ziyaret sırasında izin ver"), this);
+  allowThisVisitBtn_ = new QPushButton(I18n::text(QStringLiteral("permission.allow_this_visit")), this);
   allowThisVisitBtn_->setObjectName(QStringLiteral("permission-allow-visit-btn"));
-  allowThisVisitBtn_->setAccessibleName(QStringLiteral("Yalnızca bu ziyaret sırasında izin ver"));
+  allowThisVisitBtn_->setAccessibleName(I18n::text(QStringLiteral("permission.allow_this_visit_acc")));
   allowThisVisitBtn_->setDefault(true);
   buttonsLayout->addWidget(allowThisVisitBtn_);
 
-  alwaysAllowBtn_ = new QPushButton(QStringLiteral("Her zaman izin ver"), this);
+  alwaysAllowBtn_ = new QPushButton(I18n::text(QStringLiteral("permission.always_allow")), this);
   alwaysAllowBtn_->setObjectName(QStringLiteral("permission-always-allow-btn"));
-  alwaysAllowBtn_->setAccessibleName(QStringLiteral("Bu siteye her zaman izin ver"));
+  alwaysAllowBtn_->setAccessibleName(I18n::text(QStringLiteral("permission.always_allow_acc")));
   buttonsLayout->addWidget(alwaysAllowBtn_);
 
-  blockBtn_ = new QPushButton(QStringLiteral("Engelle"), this);
+  blockBtn_ = new QPushButton(I18n::text(QStringLiteral("permission.block")), this);
   blockBtn_->setObjectName(QStringLiteral("permission-block-btn"));
-  blockBtn_->setAccessibleName(QStringLiteral("Bu izni engelle"));
+  blockBtn_->setAccessibleName(I18n::text(QStringLiteral("permission.block_acc")));
   buttonsLayout->addWidget(blockBtn_);
 
   mainLayout->addLayout(buttonsLayout);
@@ -223,47 +224,47 @@ void SitePermissionPromptBubble::setupPrompt(const QUrl &origin, QWebEnginePermi
   switch (type) {
     case QWebEnginePermission::PermissionType::Geolocation:
       iconId = BrowserIcon::Location;
-      featureDesc = QStringLiteral("konumunuzu kullanmak istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.geolocation"));
       break;
     case QWebEnginePermission::PermissionType::MediaVideoCapture:
       iconId = BrowserIcon::Camera;
-      featureDesc = QStringLiteral("kameranızı kullanmak istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.camera"));
       break;
     case QWebEnginePermission::PermissionType::MediaAudioCapture:
       iconId = BrowserIcon::Microphone;
-      featureDesc = QStringLiteral("mikrofonunuzu kullanmak istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.microphone"));
       break;
     case QWebEnginePermission::PermissionType::MediaAudioVideoCapture:
       iconId = BrowserIcon::Camera;
-      featureDesc = QStringLiteral("kameranızı ve mikrofonunuzu kullanmak istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.camera_microphone"));
       break;
     case QWebEnginePermission::PermissionType::DesktopVideoCapture:
       iconId = BrowserIcon::Video;
-      featureDesc = QStringLiteral("ekranınızı paylaşmak istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.screen"));
       break;
     case QWebEnginePermission::PermissionType::DesktopAudioVideoCapture:
       iconId = BrowserIcon::Video;
-      featureDesc = QStringLiteral("ekran ve sesinizi paylaşmak istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.screen_audio"));
       break;
     case QWebEnginePermission::PermissionType::Notifications:
       iconId = BrowserIcon::Notification;
-      featureDesc = QStringLiteral("bildirim göndermek istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.notifications"));
       break;
     case QWebEnginePermission::PermissionType::ClipboardReadWrite:
       iconId = BrowserIcon::Clipboard;
-      featureDesc = QStringLiteral("panoya erişmek istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.clipboard"));
       break;
     case QWebEnginePermission::PermissionType::LocalFontsAccess:
       iconId = BrowserIcon::Fonts;
-      featureDesc = QStringLiteral("yerel yazı tiplerini kullanmak istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.fonts"));
       break;
     case QWebEnginePermission::PermissionType::MouseLock:
       iconId = BrowserIcon::Mouse;
-      featureDesc = QStringLiteral("fare imlecini kilitlemek istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.mouselock"));
       break;
     default:
       iconId = BrowserIcon::Privacy;
-      featureDesc = QStringLiteral("özel bir site izni istiyor");
+      featureDesc = I18n::text(QStringLiteral("permission.generic"));
       break;
   }
 
@@ -284,14 +285,14 @@ void SitePermissionPromptBubble::setupPromptLegacy(const QUrl &origin, const QSt
   originLabel_->setToolTip(canonicalOrigin_);
 
   iconLabel_->setPixmap(BrowserIcons::icon(icon).pixmap(QSize(18, 18)));
-  promptTextLabel_->setText(formatPermissionPromptText(displayHost, featureText + QStringLiteral(" iznini istiyor")));
+  promptTextLabel_->setText(formatPermissionPromptText(displayHost, I18n::text(QStringLiteral("permission.wants_feature")).arg(featureText)));
 
   allowThisVisitBtn_->setFocus();
   adjustSize();
 }
 
 QString SitePermissionPromptBubble::formatPermissionPromptText(const QString &displayHost, const QString &featureDescription) {
-  return QStringLiteral("%1, %2.").arg(displayHost, featureDescription);
+  return I18n::text(QStringLiteral("permission.prompt_title")).arg(displayHost, featureDescription);
 }
 
 void SitePermissionPromptBubble::keyPressEvent(QKeyEvent *event) {

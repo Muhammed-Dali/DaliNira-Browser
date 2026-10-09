@@ -1,6 +1,7 @@
 #pragma once
 
 #include "translation_provider.h"
+#include "i18n/i18n.h"
 
 #include <QNetworkAccessManager>
 #include <QPointer>
@@ -12,7 +13,7 @@ class GoogleGtxProvider final : public ITranslationProvider {
   ~GoogleGtxProvider() override = default;
 
   QString id() const override { return QStringLiteral("google_gtx"); }
-  QString displayName() const override { return QStringLiteral("Google Translate (Experimental / Unofficial)"); }
+  QString displayName() const override { return I18n::text(QStringLiteral("settings.languages.provider_gtx")); }
   bool requiresApiKey() const override { return false; }
   bool isConfigured() const override { return true; }
 

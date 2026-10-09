@@ -1,207 +1,52 @@
-# Password Manager Port Audit
+# DaliNira Password Manager Security Notes
 
-Status: NOT READY — implementation work in progress.
+Status: remediation validation in progress. This describes the current Qt implementation, not a release certification.
 
-## A. Legacy Password Manager Architecture
+## Storage and cryptography
 
-The Electron source of truth is `DaliNira-WebMedia/modules/credential-vault.js`.
-It stores a randomly generated data key encrypted with AES-256-GCM, wraps that
-key using scrypt plus an OS `safeStorage` device secret, encrypts each record
-with AES-256-GCM, and accepts only canonical HTTPS origins.  Renderer access is
-through narrowly scoped IPC handlers in `main.js`; form collection runs in the
-guest preload and requests a user-approved save/update prompt.
+`CredentialVaultManager` owns one or more `CredentialVault` instances shared by Chromium and WebKit. Vaults are compact local JSON envelopes under the application-data `credential-vault` directory; they are not SQLite, settings entries, or plaintext credential files.
 
-## B. New Qt Password Manager Architecture
+Current schema 4 uses a random 256-bit data key per vault; AES-256-GCM for data-key wrapping and independent record encryption; random 96-bit nonces and 128-bit tags; and PBKDF2-HMAC-SHA256 with 600,000 iterations, a random 128-bit salt, and a 256-bit result. Record ids are authenticated as AAD. An HMAC-SHA256 collection tag covers record identity, order, timestamps, ciphertext, nonce, and tag. The origin index uses a per-vault data-key HMAC, not plaintext origins or unkeyed hashes.
 
-`CredentialVault` is owned by `BrowserProfileService`; it is the sole vault
-implementation. `PasswordManagerPage` is a native internal tab. Web content is
-not given a QObject, QWebChannel, or JavaScript API. `BrowserWindow` owns the
-one-time user-approved fill and save/update prompt flow.
+Schema 2/3 vaults remain readable and migrate idempotently after a successful unlock. The migration authenticates existing data and updates metadata/data-key wrapping without needless record re-encryption. Strong rollback prevention would require an external OS-backed monotonic state and is not claimed.
 
-## B1. Legacy Save-Pipeline Evidence
+The data key and cached device secret are cleared on lock. Qt implicit sharing means perfect process-memory zeroization cannot be guaranteed, but native pending candidates and temporary byte arrays are cleared where practical.
 
-The legacy implementation does **not** wait for a server-confirmed successful
-login. `webviewAdblockPreload.js:1118-1200` captures a candidate on a form
-submit, a login-control pointer press, or Enter. It requires a visible password
-field in a visible HTML form whose resolved action is HTTPS and has the current
-origin. The username is the last visible `email`, `text`, or `tel` field whose
-autocomplete/name/id indicates user, email, login, or identifier.
+## Linux device binding
 
-On username input, `stageUsername` sends only the username to native code.
-`main.js:9945-9951` stores it under a guest-frame-and-origin key for five
-minutes. A later password document can use it only with that same key; a
-cross-origin flow cannot consume it. `main.js:10001-10030` validates the
-origin against the sender frame, rejects disabled or locked vaults, suppresses
-concurrent prompts, and opens the native `dialog.showMessageBox` immediately.
-Its exact buttons are `Kaydet`/`Şimdi değil`, or `Güncelle`/`Şimdi değil` for
-an existing `(origin, username)` record. It has no “never for this site” state.
+When Secret Service/libsecret is available, a random 256-bit per-vault device secret is stored in the OS credential store. The PBKDF2 result and device secret are combined using HMAC-SHA256. Canonical keyring identifiers include the destination vault id and authenticated vault salt.
 
-Consequently a wrong password can also produce a prompt in the legacy product;
-the save signal is a candidate, not proof of authentication. The Qt port keeps
-the candidate only in native memory for 45 seconds and defers its prompt until
-the same tab/origin observes a successful main-frame navigation to a different
-URL, or a SPA signal where the visible password field disappears after the
-candidate. This is an intentional safety correction required by the current
-acceptance criteria, rather than a claim of legacy parity. A vault that has
-not been created is locked, so legacy suppresses the candidate rather than
-retaining a plaintext password for later setup. Records carry origin, username,
-and password only; `password-manager.js` renders the origin text and does not
-resolve or persist a credential favicon/platform icon.
+Import validates envelope metadata before storing the device secret. A compatibility path accepts an old `<vault-id>-nosalt` entry only when it cryptographically unwraps the existing data key; it stores and verifies the canonical entry before removing the legacy one.
 
-The Qt manager captures the current browser-tab favicon at an approved
-login save and stores its small PNG representation inside that same encrypted
-credential record. The manager renders this real site icon after restart; a
-recognizable platform/generic-host badge remains only as a fallback when no
-favicon was available. No separate unencrypted origin-to-icon index is kept.
+If Secret Service is unavailable, a new vault remains AES-GCM encrypted but uses master-password-only protection. The UI states this explicitly. Existing fallback vaults stay accessible and can use the existing safe upgrade after a later unlock. Windows DPAPI and macOS Keychain support are not implemented or claimed.
 
-## C. Parity Matrix
+## Backup and recovery
 
-| Capability | Legacy | Qt state |
-| --- | --- | --- |
-| Single encrypted vault | Yes | Complete |
-| Locked startup / manual lock | Yes | Complete |
-| Auto-lock | Configurable | Complete: 1/5/15/30 minutes |
-| Exact HTTPS origin policy | Yes | Complete |
-| Save/update prompt | Yes | Complete, top-level form only |
-| Password manager internal tab | Yes | Complete |
-| Toolbar/settings entry | Yes | Complete |
-| Generator | Yes | Complete, native CSPRNG UI |
-| Master-password change | Yes | Complete |
-| OS safe-storage device secret | Yes | Missing |
-| Import/export | No user-default export | Not implemented |
+Exports are AES-256-GCM archives protected by a separate backup password through PBKDF2-HMAC-SHA256 (600,000 iterations). Export verifies every included device-bound vault, including locked secondary vaults, and fails instead of omitting required device material. Import authenticates the archive, validates each envelope, derives the canonical keyring id from its actual salt, and rolls back an incomplete destination where practical.
 
-## D. Toolbar/Icon Parity
+Unlock validates the wrapped key, collection tag, and every record. A structurally valid but cryptographically invalid primary does not suppress recovery: `.bak` is used only if its schema, wrapped key, collection, and records all authenticate. If neither copy authenticates, the vault fails closed. A backup can still be an older valid snapshot.
 
-The Qt toolbar uses the existing project password icon and opens or activates
-one `dalinira://passwords` tab. TabManager rejects a duplicate internal id. The
-legacy app has `icons/app/dalinira_password_manager_512.png`, but no independent
-toolbar key-vector asset suitable for direct reuse was found; the Qt browser's
-existing `browser-icons/password.svg` is retained to match its chrome.
+## Chromium and WebKit integration
 
-## E. Vault/Crypto Design
+Both engines use the same native vault and storage. Chromium uses a narrow `QWebChannel` registered only in `QWebEngineScript::ApplicationWorld`; credentials no longer travel through console messages. WebKitGTK registers a narrow script-message handler only in DaliNira's isolated content world and injects capture only into the top frame.
 
-Schema version 2 uses PBKDF2-HMAC-SHA256 (600,000 iterations), a random 16-byte
-salt, AES-256-GCM wrapping of a random 32-byte data key, and AES-256-GCM per
-record with a random 12-byte nonce. A record id is authenticated as AAD. Tags
-are verified before JSON is parsed. The data key is cleared on lock.
+Both paths accept canonical HTTPS only, compare the claimed origin to the native top-level URL, clear pending state on navigation/destruction, require trusted login-related capture events, and require explicit user action for fill. Fill reauthentication is bound to the selected record's owning vault. Scheme, host, and non-default port must match exactly; parent/subdomain, HTTP/HTTPS, custom-port, and iframe boundaries fail closed.
 
-## F. Master Password Flow
+Web pages receive neither credential lists nor a general vault API. Like any browser autofill, page script can observe a value after the user authorizes insertion into that page's DOM.
 
-The master password is never persisted, logged, passed on the command line, or
-stored in settings. Create, unlock, and master-password change are invoked by
-the native page. The page runs expensive calls on a worker task and displays a
-busy state. A recursive vault mutex serializes worker, UI, and idle-timer
-access to sensitive vault state. Failed unlocks receive exponential bounded
-delay.
+## Native UI and local protections
 
-Before a first vault can be created, the native page presents the legacy-style
-experimental-feature consent card. Both the notice acknowledgement and the
-local encrypted-storage acknowledgement are required. The creation card then
-validates the master password live: 12+ characters, lowercase, uppercase,
-number, symbol, and confirmation match. The create button remains disabled
-until every rule is met. Once created, the empty-vault page exposes search,
-masked-username visibility control, add, manual lock, auto-lock, disable,
-master-change, and destructive reset controls. Reset deletes the encrypted
-vault and backup after explicit confirmation.
+Editing/revealing, copying, and encrypted export require vault-specific reauthentication. Its authorization window is one minute and clears on vault lock or process teardown; autofill retains per-operation reauthentication. Clipboard clearing after 30 seconds occurs only if the clipboard still contains DaliNira's value.
 
-## G. Credential Storage
+Unix vault directories are restricted to 0700 and vault, backup, security-state, origin-index, vault-index, and encrypted-export files to 0600 while atomic `QSaveFile` writes are retained.
 
-`credential-vault/vault-v2.json` contains only KDF parameters, wrapped key,
-and encrypted records. Directory and vault permissions are owner-only; writes
-use `QSaveFile` and keep an encrypted `.bak` copy. A corrupt primary vault can
-only fall back to a schema-validated non-symlink backup.
+## Remaining threat-model limits
 
-## H. Autofill and Save Flow
+- Malware running as the user may observe secrets while unlocked or after fill/copy.
+- PBKDF2 raises offline-guessing cost but cannot compensate for a weak password.
+- A valid older snapshot cannot be identified without an external monotonic trust anchor.
+- Perfect memory zeroization and an “unhackable” implementation are not claimed.
 
-Fill is explicit: the user chooses “Bu sayfayı kayıtlı girişle doldur”. The
-browser checks vault unlock state and exact canonical HTTPS origin, chooses an
-account if ambiguous, and writes only visible enabled login fields in the
-top-level document. Candidate collection uses an ApplicationWorld script for
-trusted form submission, submit-control clicks, and Enter submissions. It
-stages a username only in native memory for up to five minutes and only for the
-same tab and canonical HTTPS origin, allowing username-first login flows. It
-rejects subframes, validates same-origin HTTPS form actions and the active
-native URL. A password candidate is then kept only in native memory for 45
-seconds and prompts only after same-origin successful-navigation or SPA
-password-disappearance evidence. The native prompt remains bound to the
-origin and originating tab before calling save/update.
+## Validation notes
 
-When an unlocked vault contains a credential for the loaded origin, the native
-browser injects the legacy-style yellow key (`🔑`) button beside a safe visible
-password field. The key is also available while an existing vault is locked,
-so users can unlock-and-fill from the field without visiting the manager tab.
-The page receives neither account metadata nor a vault API. Its click must
-carry a fresh, per-tab/per-origin random token known only to the isolated
-ApplicationWorld script; native code validates that token and then runs the
-same account-selection/fill flow as the browser menu. A locked vault requires
-native master-password verification; its decrypted key is never retained by
-the page.
-
-For HTTPS registration forms, a separate isolated `✦` suggestion button is
-shown only for safe visible `new-password` fields or a password/confirmation
-pair. Its native request carries a fresh tab-and-origin token. Each accepted
-click uses `QRandomGenerator::system()` to generate a new 24-character value
-with upper/lowercase letters, digits, and symbols, then fills every detected
-new-password/confirmation field with that same ephemeral value. It is not
-saved until the normal post-registration save approval is accepted.
-
-## I. Origin/Phishing and JS Boundary Protections
-
-Origin comparison is scheme + canonical host + non-default port equality. No
-substring, eTLD approximation, HTTP downgrade, opaque origin, file/data URL,
-or iframe fill is allowed. Page code has no vault list/read/key bridge. Page
-scripts can observe values after browser fills the DOM, which is an inherent
-web autofill limitation; user gesture and exact-origin checks constrain it.
-
-## J. Threat Model Results
-
-| Threat | Control | Remaining risk |
-| --- | --- | --- |
-| Lookalike site | Exact canonical HTTPS origin | User can manually save a bad origin |
-| Cross-origin iframe | No subframe capture/fill | None in current fill path |
-| Stolen vault file | PBKDF2 + AES-GCM | PBKDF2 is weaker than Argon2id/scrypt |
-| Corrupt vault | Bounds checks, GCM tag, backup | Backup can be older |
-| Local symlink | Reject symlink vault/backup | Parent directory race needs OS-level hardening |
-| Clipboard snooping | Explicit copy, conditional 30-second clear | OS clipboard is globally observable |
-| Brute force | Bounded exponential delay | Offline PBKDF2 attacks remain possible |
-| Web API abuse | No bridge/QWebChannel | Console-based candidate signal is user-prompt gated |
-
-## K. Automated Evidence
-
-`browser-credential-vault-test` covers locked startup, weak/wrong/correct
-master handling, changed master handling, encrypted-at-rest strings, origin
-mismatch, HTTP denial, record update/delete/persistence, nonce refresh,
-tampered GCM tag fail-closed, restart locking, owner-only permissions, and
-vault reset removal.
-
-`browser-password-manager-page-test` runs the native widget offscreen and
-checks the two mandatory consent checkboxes, disabled/enabled experimental
-action, every live master-password rule, confirmation gating, and the empty
-vault's search, visibility, add, lock, auto-lock, disable, master-change, and
-reset controls.
-
-The full CTest suite has pre-existing Chromium sandbox-host failures in this
-environment. Those failures prevent a full runtime acceptance claim.
-
-Latest `npm test`: 7/16 tests passed, including `browser-credential-vault-test`.
-The other 9 failures terminate before test logic at Chromium
-`sandbox_host_linux.cc` with `Operation not permitted`; they are not password
-manager assertion failures, but still block the required end-to-end acceptance
-result in this environment.
-
-The WebEngine internal-tab test was retried with both
-`QTWEBENGINE_DISABLE_SANDBOX=1` and `QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox`.
-Both still terminate in `sandbox_host_linux.cc` before test setup, so neither
-can prove the script-to-native console bridge in this container. The normal
-native build and the vault test pass; a desktop runtime login remains the
-required acceptance check.
-
-## L. Release Verdict
-
-High: OS secure-storage binding is incomplete.
-
-Medium: import/export/restore and full WebEngine runtime coverage are missing.
-
-Low: UI does not yet display recovery provenance prominently.
-
-FINAL: NOT READY.
+Targeted tests cover keyring migration, device-bound backup/import/restart, multi-vault ownership, collection and record tampering, backup recovery, keyed origin-index isolation, permissions, and vault-scoped authorization. The Chromium autofill suite checks trusted events, origin/frame/navigation rules, and removal of console transport; on this machine it reaches the known QtWebEngine sandbox-host teardown SIGTRAP after the preceding assertions pass. Real Chromium and WebKit GUI results must be reported separately using isolated synthetic profiles.

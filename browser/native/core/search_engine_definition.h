@@ -9,7 +9,6 @@ namespace dalinira::core {
 struct SearchEngineDefinition {
   const char *id;
   const char *iconAsset;
-  const char *placeholder;
   const char *searchUrl;
   const char *suggestUrl;
   const char *queryParam;

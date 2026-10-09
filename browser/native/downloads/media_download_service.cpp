@@ -20,9 +20,11 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QUrlQuery>
 
 #include <algorithm>
 #include <utility>
+#include "i18n/i18n.h"
 
 namespace {
 
@@ -30,9 +32,9 @@ constexpr qsizetype kMaximumMetadataBytes = 32 * 1024 * 1024;
 constexpr int kMaximumPersistedJobs = 200;
 constexpr int kMaximumProtectionUrls = 512;
 const QString kAdultProtectionAnalysisMessage =
-    QStringLiteral("Yetişkin İçerik Koruması bu bağlantının analiz edilmesini engelledi.");
+    I18n::text(QStringLiteral("media.adult_blocked_analysis"));
 const QString kAdultProtectionDownloadMessage =
-    QStringLiteral("Yetişkin İçerik Koruması bu indirmenin başlatılmasını engelledi.");
+    I18n::text(QStringLiteral("media.adult_blocked_download"));
 
 bool isProtectedUrlBlocked(const QUrl &url) {
   if (!url.isValid()) return false;
@@ -130,19 +132,19 @@ QStringList defaultFfmpegCandidates(const QString &name) {
 }
 
 QString sizeLabel(qint64 bytes) {
-  if (bytes <= 0) return QStringLiteral("boyut bilinmiyor");
-  if (bytes >= 1024 * 1024 * 1024LL) return QStringLiteral("%1 GB").arg(bytes / 1024.0 / 1024.0 / 1024.0, 0, 'f', 2);
-  return QStringLiteral("%1 MB").arg(bytes / 1024.0 / 1024.0, 0, 'f', 1);
+  if (bytes <= 0) return I18n::text(QStringLiteral("media.size_unknown"));
+  if (bytes >= 1024 * 1024 * 1024LL) return I18n::text(QStringLiteral("units.gigabytes")).arg(bytes / 1024.0 / 1024.0 / 1024.0, 0, 'f', 2);
+  return I18n::text(QStringLiteral("units.megabytes")).arg(bytes / 1024.0 / 1024.0, 0, 'f', 1);
 }
 
 QString stateText(MediaDownloadState state) {
   switch (state) {
-    case MediaDownloadState::Queued: return QStringLiteral("Sırada");
-    case MediaDownloadState::Downloading: return QStringLiteral("İndiriliyor");
-    case MediaDownloadState::Processing: return QStringLiteral("İşleniyor");
-    case MediaDownloadState::Completed: return QStringLiteral("Tamamlandı");
-    case MediaDownloadState::Failed: return QStringLiteral("Başarısız");
-    case MediaDownloadState::Cancelled: return QStringLiteral("İptal edildi");
+    case MediaDownloadState::Queued: return I18n::text(QStringLiteral("downloads.state_queued"));
+    case MediaDownloadState::Downloading: return I18n::text(QStringLiteral("downloads.state_downloading"));
+    case MediaDownloadState::Processing: return I18n::text(QStringLiteral("downloads.state_processing"));
+    case MediaDownloadState::Completed: return I18n::text(QStringLiteral("downloads.state_completed"));
+    case MediaDownloadState::Failed: return I18n::text(QStringLiteral("common.failed"));
+    case MediaDownloadState::Cancelled: return I18n::text(QStringLiteral("downloads.state_cancelled"));
   }
   return {};
 }
@@ -250,12 +252,19 @@ MediaDownloadService::MediaDownloadService(const QString &defaultDownloadDirecto
     if (!pendingAnalysisUrl_.isEmpty()) {
       pendingAnalysisUrl_ = QUrl{};
       emit analysisFailed(existingUsable
-          ? QStringLiteral("yt-dlp güncellenemedi; mevcut sürüm kullanılabilir.") : message);
+          ? I18n::text(QStringLiteral("media.ytdlp_update_failed_current")) : message);
     } else if (existingUsable) {
-      emit enginePreparationStatus(QStringLiteral("Güncelleme başarısız; mevcut yt-dlp kullanılmaya devam ediyor."), 0);
+      emit enginePreparationStatus(I18n::text(QStringLiteral("media.update_failed_using_current")), 0);
     }
   });
   loadHistory();
+  // Status texts are cached in the UI language; re-express them after a live
+  // language switch so views built later never show the previous language.
+  connect(&dalinira::i18n::LanguageManager::instance(), &dalinira::i18n::LanguageManager::languageChanged,
+          this, [this] {
+            for (auto &job : jobs_) job.statusText = I18n::retranslated(job.statusText);
+            emit jobsChanged();
+          });
 }
 
 MediaDownloadService::~MediaDownloadService() {
@@ -271,15 +280,15 @@ MediaDownloadService::~MediaDownloadService() {
 
 bool MediaDownloadService::isSupportedMediaUrl(const QUrl &url, QString *reason) {
   const auto reject = [reason](const QString &message) { if (reason) *reason = message; return false; };
-  if (!url.isValid() || url.isEmpty()) return reject(QStringLiteral("Geçerli bir bağlantı girin."));
+  if (!url.isValid() || url.isEmpty()) return reject(I18n::text(QStringLiteral("media.enter_valid_link")));
   if (url.scheme().compare(QStringLiteral("http"), Qt::CaseInsensitive) != 0
       && url.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) != 0) {
-    return reject(QStringLiteral("Yalnızca HTTP veya HTTPS bağlantıları desteklenir."));
+    return reject(I18n::text(QStringLiteral("media.only_http_https")));
   }
   if (!url.userName().isEmpty() || !url.password().isEmpty()) {
-    return reject(QStringLiteral("Kimlik bilgisi içeren bağlantılar güvenlik nedeniyle reddedildi."));
+    return reject(I18n::text(QStringLiteral("media.credentials_rejected")));
   }
-  if (url.host().isEmpty()) return reject(QStringLiteral("Bağlantıda geçerli bir sunucu adı yok."));
+  if (url.host().isEmpty()) return reject(I18n::text(QStringLiteral("media.no_valid_host")));
   if (reason) reason->clear();
   return true;
 }
@@ -290,7 +299,7 @@ bool MediaDownloadService::parseAnalysisJson(const QByteArray &json, const QUrl 
   QJsonParseError parseError;
   const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
   if (!document.isObject()) {
-    if (error) *error = QStringLiteral("Medya bilgisi okunamadı.");
+    if (error) *error = I18n::text(QStringLiteral("media.info_unreadable"));
     return false;
   }
   const QJsonObject root = document.object();
@@ -332,9 +341,9 @@ bool MediaDownloadService::parseAnalysisJson(const QByteArray &json, const QUrl 
       seenVideo.insert(option.id);
       const QString quality = option.height > 0
           ? QStringLiteral("%1p%2").arg(option.height).arg(option.fps > 30 ? QStringLiteral(" %1fps").arg(option.fps) : QString{})
-          : QStringLiteral("Video");
+          : I18n::text(QStringLiteral("media.kind_video"));
       option.label = QStringLiteral("%1 · %2 · %3%4").arg(quality, option.extension,
-          option.videoCodec.section(QLatin1Char('.'), 0, 0), option.hasAudio ? QStringLiteral(" · ses dahil") : QString{})
+          option.videoCodec.section(QLatin1Char('.'), 0, 0), option.hasAudio ? I18n::text(QStringLiteral("media.includes_audio_suffix")) : QString{})
           + QStringLiteral(" · ") + sizeLabel(option.estimatedBytes);
       parsed.videoFormats.append(option);
     }
@@ -354,7 +363,7 @@ bool MediaDownloadService::parseAnalysisJson(const QByteArray &json, const QUrl 
     return a.audioBitrate > b.audioBitrate;
   });
   if (parsed.title.isEmpty() || (parsed.videoFormats.isEmpty() && parsed.audioFormats.isEmpty())) {
-    if (error) *error = QStringLiteral("Bu bağlantıda desteklenen video veya ses bulunamadı.");
+    if (error) *error = I18n::text(QStringLiteral("media.no_supported_media"));
     return false;
   }
   *result = parsed;
@@ -373,6 +382,7 @@ QStringList MediaDownloadService::buildDownloadArguments(const MediaDownloadRequ
                    QStringLiteral("--progress-template"),
                    QStringLiteral("download:DALINIRA_PROGRESS:%(progress._percent_str)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s"),
                    QStringLiteral("--progress-template"), QStringLiteral("postprocess:DALINIRA_POST:%(progress.status)s"),
+                   QStringLiteral("--print"), QStringLiteral("after_video:DALINIRA_FILE:%(filepath)s"),
                    QStringLiteral("--print"), QStringLiteral("after_move:DALINIRA_FILE:%(filepath)s"),
                    // yt-dlp's --print implicitly enables --quiet. Explicitly
                    // undo it so download progress continues to reach the UI.
@@ -469,9 +479,9 @@ bool MediaDownloadService::analyze(const QUrl &url, bool adultContentProtectionE
     return false;
   }
   if (!ytDlpAvailable()) {
-    if (!updateManager_) { emit analysisFailed(QStringLiteral("Hiç çalışan yt-dlp bulunamadı.")); return false; }
+    if (!updateManager_) { emit analysisFailed(I18n::text(QStringLiteral("media.no_working_ytdlp"))); return false; }
     pendingAnalysisUrl_ = url;
-    emit enginePreparationStatus(QStringLiteral("İndirme motoru hazırlanıyor…"), 0);
+    emit enginePreparationStatus(I18n::text(QStringLiteral("media.engine_preparing")), 0);
     updateManager_->ensureInstalled();
     return true;
   }
@@ -509,7 +519,7 @@ void MediaDownloadService::tryNextJavaScriptRuntime() {
   }
   const auto candidate = jsRuntimeCandidates_.at(jsRuntimeCandidateIndex_++);
   jsRuntimeOutput_.clear();
-  emit enginePreparationStatus(QStringLiteral("JavaScript çalışma zamanı doğrulanıyor…"), 0);
+  emit enginePreparationStatus(I18n::text(QStringLiteral("media.verifying_js_runtime")), 0);
   jsRuntimeProcess_ = new QProcess(this);
   QProcess *const launched = jsRuntimeProcess_;
   launched->setProgram(candidate.second);
@@ -599,7 +609,7 @@ void MediaDownloadService::startAnalysisProcess(const QUrl &url) {
     analysisTimeout_->stop();
     analysisProcess_->deleteLater();
     analysisProcess_ = nullptr;
-    emit analysisFailed(QStringLiteral("yt-dlp işlemi başlatılamadı."));
+    emit analysisFailed(I18n::text(QStringLiteral("media.ytdlp_start_failed")));
   });
   connect(analysisProcess_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
           [this, launchedAnalysis](int exitCode, QProcess::ExitStatus exitStatus) {
@@ -701,7 +711,7 @@ QUuid MediaDownloadService::enqueue(const MediaDownloadRequest &candidate, QStri
   job.id = QUuid::createUuid();
   job.url = request.url;
   job.title = request.title.trimmed().left(240);
-  if (job.title.isEmpty()) job.title = QStringLiteral("Medya indirmesi");
+  if (job.title.isEmpty()) job.title = I18n::text(QStringLiteral("media.default_job_title"));
   job.targetDirectory = request.targetDirectory;
   job.source = request.source.trimmed().left(120);
   job.thumbnailUrl = request.thumbnailUrl.left(2048);
@@ -812,7 +822,7 @@ void MediaDownloadService::startNextDownload() {
   connect(downloadProcess_, &QProcess::errorOccurred, this, [this, launchedDownload](QProcess::ProcessError error) {
     if (downloadErrorTail_.isEmpty()) downloadErrorTail_ = QByteArrayLiteral("process-start-failed");
     if (error == QProcess::FailedToStart && downloadProcess_ == launchedDownload) {
-      finishCurrent(MediaDownloadState::Failed, QStringLiteral("yt-dlp işlemi başlatılamadı."));
+      finishCurrent(MediaDownloadState::Failed, I18n::text(QStringLiteral("media.ytdlp_start_failed")));
     }
   });
   connect(downloadProcess_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
@@ -907,9 +917,9 @@ void MediaDownloadService::processDownloadLine(const QString &line) {
       jobs_[index].state = MediaDownloadState::Processing;
       const MediaDownloadRequest request = requests_.value(currentJobId_);
       if (request.kind == MediaDownloadKind::AudioConvert) {
-        jobs_[index].statusText = QStringLiteral("Dönüştürülüyor");
+        jobs_[index].statusText = I18n::text(QStringLiteral("downloads.converting"));
       } else if (request.kind == MediaDownloadKind::Video && !request.formatHasAudio) {
-        jobs_[index].statusText = QStringLiteral("Birleştiriliyor");
+        jobs_[index].statusText = I18n::text(QStringLiteral("media.merging"));
       } else {
         jobs_[index].statusText = stateText(jobs_[index].state);
       }
@@ -918,16 +928,70 @@ void MediaDownloadService::processDownloadLine(const QString &line) {
     return;
   }
   if (line.startsWith(QStringLiteral("DALINIRA_FILE:"))) {
-    const QString reported = line.mid(12).trimmed();
+    QString reported = line.mid(12).trimmed();
+    if (reported.startsWith(QLatin1Char('"')) && reported.endsWith(QLatin1Char('"')) && reported.size() >= 2) {
+      reported = reported.mid(1, reported.size() - 2).trimmed();
+    }
     const QFileInfo output(reported);
     const QString absolute = output.isAbsolute() ? output.absoluteFilePath()
         : QDir(jobs_[index].targetDirectory).absoluteFilePath(reported);
-    const QDir root(jobs_[index].targetDirectory);
-    const QString relative = root.relativeFilePath(QDir::cleanPath(absolute));
-    if (!QDir::isAbsolutePath(relative) && relative != QLatin1String("..")
-        && !relative.startsWith(QStringLiteral("../")) && !relative.startsWith(QStringLiteral("..\\"))) {
-      jobs_[index].outputPath = QDir::cleanPath(absolute);
+    const QString cleanAbsolute = QDir::cleanPath(absolute);
+    const QString cleanTarget = QDir::cleanPath(jobs_[index].targetDirectory);
+
+    if (!cleanAbsolute.endsWith(QLatin1String(".part"), Qt::CaseInsensitive)
+        && !cleanAbsolute.endsWith(QLatin1String(".ytdl"), Qt::CaseInsensitive)
+        && !cleanAbsolute.endsWith(QLatin1String(".temp"), Qt::CaseInsensitive)) {
+      const QDir root(cleanTarget);
+      const QString relative = root.relativeFilePath(cleanAbsolute);
+      bool safe = (!QDir::isAbsolutePath(relative) && relative != QLatin1String("..")
+                   && !relative.startsWith(QStringLiteral("../"))
+                   && !relative.startsWith(QStringLiteral("..\\")));
+      if (!safe) {
+        const QString canonRoot = QFileInfo(cleanTarget).canonicalFilePath();
+        const QString canonFile = QFileInfo(cleanAbsolute).canonicalFilePath();
+        if (!canonRoot.isEmpty() && !canonFile.isEmpty()) {
+          const QString canonRel = QDir(canonRoot).relativeFilePath(canonFile);
+          if (!QDir::isAbsolutePath(canonRel) && canonRel != QLatin1String("..")
+              && !canonRel.startsWith(QStringLiteral("../"))
+              && !canonRel.startsWith(QStringLiteral("..\\"))) {
+            safe = true;
+          }
+        }
+      }
+      if (safe) {
+        jobs_[index].outputPath = cleanAbsolute;
+      }
     }
+    return;
+  }
+  if (line.startsWith(QStringLiteral("[Merger] Merging formats into \"")) && line.endsWith(QLatin1Char('"'))) {
+    const QString candidate = line.mid(31, line.size() - 32).trimmed();
+    if (!candidate.isEmpty() && !candidate.endsWith(QLatin1String(".part"), Qt::CaseInsensitive)) {
+      const QString absolute = QFileInfo(candidate).isAbsolute() ? candidate
+          : QDir(jobs_[index].targetDirectory).filePath(candidate);
+      const QString clean = QDir::cleanPath(absolute);
+      if (clean.startsWith(QDir::cleanPath(jobs_[index].targetDirectory))) {
+        jobs_[index].outputPath = clean;
+      }
+    }
+    return;
+  }
+  if (line.startsWith(QStringLiteral("[ExtractAudio] Destination: "))
+      || line.startsWith(QStringLiteral("[download] Destination: "))) {
+    const qsizetype idxColon = line.indexOf(QLatin1String("Destination: "));
+    if (idxColon >= 0) {
+      const QString candidate = line.mid(idxColon + 13).trimmed();
+      if (!candidate.isEmpty() && !candidate.endsWith(QLatin1String(".part"), Qt::CaseInsensitive)
+          && !candidate.endsWith(QLatin1String(".ytdl"), Qt::CaseInsensitive)) {
+        const QString absolute = QFileInfo(candidate).isAbsolute() ? candidate
+            : QDir(jobs_[index].targetDirectory).filePath(candidate);
+        const QString clean = QDir::cleanPath(absolute);
+        if (clean.startsWith(QDir::cleanPath(jobs_[index].targetDirectory))) {
+          jobs_[index].outputPath = clean;
+        }
+      }
+    }
+    return;
   }
 }
 
@@ -940,6 +1004,12 @@ void MediaDownloadService::finishCurrent(MediaDownloadState state, const QString
     jobs_[index].errorText = error;
     if (state == MediaDownloadState::Completed) {
       jobs_[index].percent = 100.0;
+      if (jobs_[index].outputPath.isEmpty() || !QFileInfo::exists(jobs_[index].outputPath)) {
+        const QString resolved = resolveCompletedFilePath(jobs_[index]);
+        if (!resolved.isEmpty()) {
+          jobs_[index].outputPath = resolved;
+        }
+      }
       const QFileInfo output(jobs_[index].outputPath);
       if (output.isFile()) {
         QMimeDatabase database;
@@ -969,17 +1039,68 @@ void MediaDownloadService::finishCurrent(MediaDownloadState state, const QString
 
 QString MediaDownloadService::categorizedError(const QByteArray &stderrOutput, int exitCode) {
   const QString text = QString::fromUtf8(stderrOutput).toLower();
-  if (text.contains(QStringLiteral("analysis-timeout"))) return QStringLiteral("Medya analizi zaman aşımına uğradı.");
-  if (text.contains(QStringLiteral("unsupported url"))) return QStringLiteral("Bu bağlantıda desteklenen video veya ses bulunamadı.");
+  if (text.contains(QStringLiteral("analysis-timeout"))) return I18n::text(QStringLiteral("media.analysis_timeout"));
+  if (text.contains(QStringLiteral("unsupported url"))) return I18n::text(QStringLiteral("media.no_supported_media"));
   if (text.contains(QStringLiteral("private video")) || text.contains(QStringLiteral("login")) || text.contains(QStringLiteral("sign in")))
-    return QStringLiteral("İçerik özel veya oturum açmayı gerektiriyor.");
-  if (text.contains(QStringLiteral("no space left"))) return QStringLiteral("Hedef diskte yeterli alan yok.");
-  if (text.contains(QStringLiteral("permission denied"))) return QStringLiteral("Hedef klasöre yazma izni yok.");
-  if (text.contains(QStringLiteral("requested format"))) return QStringLiteral("Seçilen format artık kullanılamıyor; içeriği yeniden analiz edin.");
+    return I18n::text(QStringLiteral("media.private_or_login"));
+  if (text.contains(QStringLiteral("no space left"))) return I18n::text(QStringLiteral("media.no_disk_space"));
+  if (text.contains(QStringLiteral("permission denied"))) return I18n::text(QStringLiteral("media.no_write_permission"));
+  if (text.contains(QStringLiteral("requested format"))) return I18n::text(QStringLiteral("media.format_no_longer_available"));
   if (text.contains(QStringLiteral("network")) || text.contains(QStringLiteral("timed out")) || text.contains(QStringLiteral("unable to download")))
-    return QStringLiteral("Ağ bağlantısı veya medya sunucusu hatası oluştu.");
-  if (text.contains(QStringLiteral("process-start-failed"))) return QStringLiteral("yt-dlp işlemi başlatılamadı.");
-  return QStringLiteral("Medya işlemi başarısız oldu (kod %1).").arg(exitCode);
+    return I18n::text(QStringLiteral("media.network_error"));
+  if (text.contains(QStringLiteral("process-start-failed"))) return I18n::text(QStringLiteral("media.ytdlp_start_failed"));
+  return I18n::text(QStringLiteral("media.process_failed_code")).arg(exitCode);
+}
+
+QString MediaDownloadService::extractMediaId(const QUrl &url) {
+  if (!url.isValid()) return {};
+  const QUrlQuery query(url);
+  if (query.hasQueryItem(QStringLiteral("v"))) {
+    const QString val = query.queryItemValue(QStringLiteral("v")).trimmed();
+    if (!val.isEmpty()) return val;
+  }
+  const QString path = url.path();
+  const QStringList parts = path.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+  if (!parts.isEmpty()) {
+    return parts.last().trimmed();
+  }
+  return {};
+}
+
+QString MediaDownloadService::resolveCompletedFilePath(const MediaDownloadJob &job) const {
+  if (job.targetDirectory.isEmpty()) return {};
+  const QDir dir(job.targetDirectory);
+  if (!dir.exists()) return {};
+
+  const QString mediaId = extractMediaId(job.url);
+  if (!mediaId.isEmpty() && mediaId.size() >= 4) {
+    const QString pattern = QStringLiteral("*[%1].*").arg(mediaId);
+    const QFileInfoList matches = dir.entryInfoList({pattern}, QDir::Files, QDir::Time);
+    for (const QFileInfo &info : matches) {
+      const QString name = info.fileName();
+      if (!name.endsWith(QLatin1String(".part"), Qt::CaseInsensitive)
+          && !name.endsWith(QLatin1String(".ytdl"), Qt::CaseInsensitive)
+          && !name.endsWith(QLatin1String(".temp"), Qt::CaseInsensitive)) {
+        return info.absoluteFilePath();
+      }
+    }
+  }
+
+  const QString safeTitle = BrowserSecurity::sanitizeDownloadFileName(job.title);
+  if (!safeTitle.isEmpty() && safeTitle != QLatin1String("download")) {
+    const QString pattern = QStringLiteral("%1*").arg(safeTitle.left(25));
+    const QFileInfoList matches = dir.entryInfoList({pattern}, QDir::Files, QDir::Time);
+    for (const QFileInfo &info : matches) {
+      const QString name = info.fileName();
+      if (!name.endsWith(QLatin1String(".part"), Qt::CaseInsensitive)
+          && !name.endsWith(QLatin1String(".ytdl"), Qt::CaseInsensitive)
+          && !name.endsWith(QLatin1String(".temp"), Qt::CaseInsensitive)) {
+        return info.absoluteFilePath();
+      }
+    }
+  }
+
+  return {};
 }
 
 void MediaDownloadService::persistHistory() const {

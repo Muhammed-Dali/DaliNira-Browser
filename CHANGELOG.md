@@ -2,6 +2,40 @@
 
 All notable release-facing changes to DaliNira Browser are documented here.
 
+## [8.0.0] - 2026-10-05
+
+### Added
+
+- **Dual-engine architecture**: Chromium (Qt WebEngine) and WebKitGTK behind a shared `EngineView`/`EngineBackend` abstraction, selectable in onboarding and Settings → System, with a separate tab/session workspace per engine.
+- **Onboarding**: language, engine, layout and theme, search engine and privacy options, and browser data import.
+- **Layouts**: vertical tabs on the left or right and a floating sidebar, alongside the classic tab strip.
+- **Tab sleeping**: two-stage light/full sleep, unsaved-input protection, a sleeping-tab indicator, Wake actions, and per-tab memory in the hover card where it can be measured exactly.
+- **Privacy**: Global Privacy Control, HTTPS by default with a one-time fallback, link debouncing (`$urlskip`), fingerprinting noise, WebKitGTK third-party cookie blocking with ITP, and Chromium cache/connection partitioning.
+- **Find in page**: redesigned find bar, toolbar button, Ctrl+G / Ctrl+Shift+G.
+- **Shortcut row**: drag-and-drop reordering of Quick Access shortcuts.
+- **Feedback**: Settings → About links to the GitHub bug-report and feature-request forms, plus a **Send Email** action that opens a reviewable draft in the user's mail application (version and engine only); no browsing data is attached.
+- French interface translation; live language switching for all four interface languages (English, Turkish, Arabic, French).
+- Engine-parity, onboarding, window-platform, and feedback-link regression suites; a localization audit; a GUI test safety runner.
+- Packaging and CI jobs that build and fresh-install the portable archive and the `.deb`, `.rpm` and Arch packages.
+
+### Changed
+
+- The DaliNira blocker runs natively in both engines. Tracking parameters are now stripped in a single pass using an extended built-in list.
+- The page-translation popup no longer blocks the page.
+- Refined New Tab page, tab strip, toolbar icons, context menus, and settings pages.
+
+### Fixed
+
+- WebKitGTK X11 error handling, keyboard focus handover, and stacking of native overlays.
+- Clean shutdown of retained WebKitGTK web processes such as service workers.
+- Ad-blocking scripts on page-initiated cross-site navigations in Chromium.
+- New Tab page no longer scrolls.
+- Settings → About names the engine actually running (WebKitGTK and its version under WebKit) and shows the product name correctly.
+- The WebKit New Tab page uses the profile's search engine, as the address bar does.
+- Translation target and preferred languages default to the interface language instead of Turkish.
+- Onboarding icons load from the application resources on every installation.
+- The tab-sleep timing row in Settings → Performance no longer squeezes its label.
+
 ## [7.2.1] - 2026-09-23
 
 ### Fixed

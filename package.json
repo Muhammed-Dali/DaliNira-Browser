@@ -1,10 +1,10 @@
 {
   "name": "dalinira-browser",
-  "version": "7.2.1",
+  "version": "8.0.0",
   "description": "DaliNira Browser - Modern Qt/C++ desktop browser with integrated privacy, advanced download manager, and audiophile sound engine",
   "private": true,
   "scripts": {
-    "start": "node scripts/dev-linux.js",
+    "start": "bash scripts/dev-linux.sh",
     "build": "cmake -S . -B build -G Ninja && cmake --build build"
   },
   "keywords": [

@@ -3,6 +3,7 @@
 #include "credential_vault.h"
 
 #include <QObject>
+#include <QHash>
 #include <QStringList>
 #include <QVector>
 
@@ -31,6 +32,10 @@ class CredentialVaultManager final : public QObject {
   bool exists() const;
   bool isLocked() const;
   bool isVaultLocked(const QString &id) const;
+  bool isActiveVaultDeviceBound() const;
+  bool authorizeSensitiveAction(const QString &vaultId, const QString &masterPassword);
+  bool hasSensitiveAuthorization(const QString &vaultId) const;
+  void clearSensitiveAuthorization(const QString &vaultId = {});
   QString lastError() const;
   int autoLockTimeoutMs() const;
   bool setAutoLockTimeoutMs(int timeoutMs);
@@ -47,6 +52,7 @@ class CredentialVaultManager final : public QObject {
   bool createVault(const QString &name, const QString &masterPassword, QString *id = nullptr);
   bool unlock(const QString &masterPassword);
   bool unlockVault(const QString &id, const QString &masterPassword);
+  QString owningVaultId(const QString &recordId) const;
   void lock();
   void lockVault(const QString &id);
   bool deleteVault(const QString &id);
@@ -90,4 +96,5 @@ class CredentialVaultManager final : public QObject {
   QString activeId_;
   mutable QString lastError_;
   std::function<qint64()> timeProvider_;
+  QHash<QString, qint64> sensitiveAuthorizationExpiry_;
 };

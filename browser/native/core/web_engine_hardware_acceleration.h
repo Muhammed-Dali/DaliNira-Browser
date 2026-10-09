@@ -62,6 +62,20 @@ class WebEngineHardwareAcceleration {
                                     const QString &devDriDir = QStringLiteral("/dev/dri"));
 
   /**
+   * @brief Chromium network-state partitioning QtWebEngine leaves off: the
+   * HTTP cache (with its code cache, HTTP auth cache and Chrome's cross-site
+   * navigation bit) and the connection pools are keyed by the top-level site,
+   * as in Chrome (cache) and Brave (connections).
+   */
+  static QStringList privacyFlags();
+
+  /**
+   * @brief Merges privacyFlags() into QTWEBENGINE_CHROMIUM_FLAGS; call before
+   * QtWebEngine starts.
+   */
+  static void applyPrivacyFlags();
+
+  /**
    * @brief Returns the cached status of the last initialization probe.
    */
   static HardwareAccelerationStatus currentStatus();

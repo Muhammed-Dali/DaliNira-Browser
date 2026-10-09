@@ -36,16 +36,41 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include "i18n/i18n.h"
+#include "i18n/widget_i18n.h"
+#include "i18n/language_manager.h"
 
 namespace {
+// `name` is either a catalog key ("audio.*") or an untranslated DSP proper
+// name such as "De-esser".
 struct ModuleDefinition { const char *id; const char *name; const char *symbol; };
+
+QString displayName(const char *nameOrKey) {
+  const QString value = QString::fromUtf8(nameOrKey);
+  return value.startsWith(QLatin1String("audio.")) ? I18n::text(value) : value;
+}
+
+// Controller status text in the active UI language (it may have been
+// produced before a live language switch).
+QString localizedDetail(const WebAudioEffectsController::Status &status) {
+  if (status.detailKey.isEmpty()) return I18n::retranslated(status.detail);
+  QString text = I18n::text(status.detailKey);
+  for (const QString &arg : status.detailArgs) text = text.arg(arg);
+  return text;
+}
+
+// Argument for a live-retranslated composed string (widget_i18n.h bind*).
+QString nameArg(const char *nameOrKey) {
+  const QString value = QString::fromUtf8(nameOrKey);
+  return value.startsWith(QLatin1String("audio.")) ? QLatin1Char('@') + value : value;
+}
 constexpr std::array<ModuleDefinition, 22> kModules = {{
-    {"output", "Ses Çıkışı (Odyofil)", "♫"}, {"eq32", "Ekolayzır (32-Bantlı)", "≋"}, {"reverb", "Reverb (BASS FX)", "↝"},
-    {"compressor", "Dinamik Kompresör", "⌁"}, {"limiter", "Limiter", "┫"}, {"bassboost", "Bas Güçlendirici", "◖"},
-    {"autogain", "Auto Gain / Normalize", "↕"}, {"truepeak", "True Peak Limiter + Meter", "▥"}, {"peq", "Parametrik EQ (PEQ)", "⌁"},
-    {"dynamiceq", "Dynamic EQ", "⌁"}, {"exciter", "Netleştirici (Exciter)", "✦"}, {"deesser", "De-esser", "S"},
-    {"noisegate", "Akıllı Noise Gate", "⌁"}, {"stereowidener", "Stereo Widener v2", "↔"}, {"echo", "Echo (Yankı)", "↩"},
-    {"softecho", "Saf Echo (Yumuşak)", "⌁"}, {"convreverb", "Konvolüsyon Reverb (IR)", "▣"}, {"crossfeed", "Crossfeed (Kulaklık)", "◉"},
+    {"output", "audio.module_output", "♫"}, {"eq32", "audio.module_eq32", "≋"}, {"reverb", "audio.reverb_heading", "↝"},
+    {"compressor", "audio.module_compressor", "⌁"}, {"limiter", "audio.limiter", "┫"}, {"bassboost", "audio.module_bass_booster", "◖"},
+    {"autogain", "audio.auto_gain", "↕"}, {"truepeak", "True Peak Limiter + Meter", "▥"}, {"peq", "audio.module_peq", "⌁"},
+    {"dynamiceq", "Dynamic EQ", "⌁"}, {"exciter", "audio.module_exciter", "✦"}, {"deesser", "De-esser", "S"},
+    {"noisegate", "audio.module_noise_gate", "⌁"}, {"stereowidener", "Stereo Widener v2", "↔"}, {"echo", "audio.module_echo", "↩"},
+    {"softecho", "audio.module_soft_echo", "⌁"}, {"convreverb", "audio.module_conv_reverb", "▣"}, {"crossfeed", "audio.module_crossfeed", "◉"},
     {"surround", "Surround (5.1/7.1)", "▥"}, {"bassmono", "Bass Mono", "◍"}, {"tapesat", "Tape Saturation", "▤"}, {"bitdither", "Bit-depth / Dither", "▦"}
 }};
 
@@ -289,9 +314,10 @@ AudioEffectsPage::AudioEffectsPage(WebAudioEffectsController *controller, QWidge
   navigation_->setIconSize(QSize(20, 20));
   navigation_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   for (const ModuleDefinition &module : kModules) {
-    auto *item = new QListWidgetItem(QIcon(QStringLiteral(":/side-widget-icons/sound-effects.svg")),
-                                     QStringLiteral("%1   %2").arg(QString::fromUtf8(module.symbol), QString::fromUtf8(module.name)));
-    item->setToolTip(QString::fromUtf8(module.name));
+    auto *item = new QListWidgetItem(QIcon(QStringLiteral(":/side-widget-icons/sound-effects.svg")), QString());
+    dalinira::i18n::bindItemText(item, QStringLiteral("=%1   %2"),
+                                 {QString::fromUtf8(module.symbol), nameArg(module.name)});
+    item->setToolTip(displayName(module.name));
     navigation_->addItem(item);
   }
   pages_ = new QStackedWidget(body);
@@ -474,6 +500,15 @@ AudioEffectsPage::AudioEffectsPage(WebAudioEffectsController *controller, QWidge
     QPushButton#audio-effects-balance-quick:hover { background: #10303a; }
     QLabel#audio-effects-placeholder { color: #aebac4; font-size: 15px; }
   )CSS"));
+  // Live language switch: static strings and bound composed strings are
+  // refreshed by retranslateWidgetTree; controller-driven text is recomputed.
+  connect(&dalinira::i18n::LanguageManager::instance(), &dalinira::i18n::LanguageManager::languageChanged,
+          this, [this] {
+            dalinira::i18n::retranslateWidgetTree(this);
+            for (int row = 0; row < navigation_->count() && row < static_cast<int>(kModules.size()); ++row)
+              navigation_->item(row)->setToolTip(displayName(kModules[row].name));
+            updateFromController();
+          });
 }
 
 void AudioEffectsPage::scheduleControllerSync() {
@@ -559,13 +594,13 @@ void AudioEffectsPage::createEqualizerPage() {
 
   auto *header = new QHBoxLayout;
   auto *heading = new QVBoxLayout;
-  heading->addWidget(label(QStringLiteral("≋  32-Bantlı Profesyonel Ekolayzır"), content, QStringLiteral("audio-effects-title")));
-  heading->addWidget(label(QStringLiteral("DALI Web Audio peaking filtreleriyle hassas frekans kontrolü."), content,
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.eq32_heading")), content, QStringLiteral("audio-effects-title")));
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.eq32_desc")), content,
                            QStringLiteral("audio-effects-subtitle")));
-  auto *reset = new QPushButton(QStringLiteral("Sıfırla"), content);
+  auto *reset = new QPushButton(I18n::text(QStringLiteral("common.reset")), content);
   reset->setObjectName(QStringLiteral("audio-effects-reset"));
   header->addLayout(heading, 1);
-  auto *presetBrowser = new QPushButton(QStringLiteral("Hazır Ayarlar"), content);
+  auto *presetBrowser = new QPushButton(I18n::text(QStringLiteral("audio.presets")), content);
   presetBrowser->setObjectName(QStringLiteral("audio-effects-reset"));
   connect(presetBrowser, &QPushButton::clicked, this, &AudioEffectsPage::eqPresetBrowserRequested);
   header->addWidget(presetBrowser, 0, Qt::AlignTop);
@@ -613,7 +648,7 @@ void AudioEffectsPage::createEqualizerPage() {
     slider->setPageStep(10);
     slider->setTickPosition(QSlider::NoTicks);
     slider->setMinimumHeight(166);
-    slider->setAccessibleName(QStringLiteral("%1 Hz ekolayzır bandı").arg(frequencies[index]));
+    dalinira::i18n::bindAccessibleName(slider, QStringLiteral("audio.eq_band"), {QString::number(frequencies[index])});
     auto *frequency = new FrequencyLabel(frequencyLabel(frequencies[index]), band);
     bandLayout->addWidget(value);
     bandLayout->addWidget(slider, 1, Qt::AlignHCenter);
@@ -635,19 +670,19 @@ void AudioEffectsPage::createEqualizerPage() {
   auto *toneLayout = new QVBoxLayout(toneCard);
   toneLayout->setContentsMargins(20, 16, 20, 16);
   toneLayout->setSpacing(10);
-  auto *moduleTitle = label(QStringLiteral("DaliNira Modülü"), toneCard, QStringLiteral("audio-effects-card-title"));
+  auto *moduleTitle = label(I18n::text(QStringLiteral("audio.dalinira_module")), toneCard, QStringLiteral("audio-effects-card-title"));
   moduleTitle->setAlignment(Qt::AlignCenter);
   toneLayout->addWidget(moduleTitle);
   auto *dialRow = new QHBoxLayout;
   const struct { const char *title; const char *hint; QDial **dial; QLabel **value; } tones[] = {
-      {"Bas", "Derin low shelf • 100 Hz", &bassDial_, &bassValue_},
-      {"Mid", "Peaking • 1.2 kHz", &midDial_, &midValue_},
-      {"Tiz", "High shelf • 10 kHz", &trebleDial_, &trebleValue_},
+      {"audio.tone_bass", "audio.tone_bass_desc", &bassDial_, &bassValue_},
+      {"audio.tone_mid", "Peaking • 1.2 kHz", &midDial_, &midValue_},
+      {"audio.tone_treble", "High shelf • 10 kHz", &trebleDial_, &trebleValue_},
       {"Stereo Expander", "Stereo Expander", &stereoExpanderDial_, &stereoExpanderValue_}
   };
   for (int index = 0; index < 4; ++index) {
     auto *column = new QVBoxLayout;
-    auto *title = label(QString::fromUtf8(tones[index].title), toneCard, QStringLiteral("audio-effects-card-title"));
+    auto *title = label(displayName(tones[index].title), toneCard, QStringLiteral("audio-effects-card-title"));
     title->setAlignment(Qt::AlignCenter);
     auto *dial = new EffectDial(EffectDial::Style::Tone, toneCard);
     dial->setObjectName(QStringLiteral("audio-effects-preamp"));
@@ -659,10 +694,10 @@ void AudioEffectsPage::createEqualizerPage() {
     dial->refreshColor();
     dial->setNotchesVisible(true);
     dial->setFixedSize(112, 112);
-    dial->setAccessibleName(QString::fromUtf8(tones[index].title));
+    dial->setAccessibleName(displayName(tones[index].title));
     auto *value = label({}, toneCard, QStringLiteral("audio-effects-preamp-value"));
     value->setAlignment(Qt::AlignCenter);
-    auto *hint = label(QString::fromUtf8(tones[index].hint), toneCard, QStringLiteral("audio-effects-detail"));
+    auto *hint = label(displayName(tones[index].hint), toneCard, QStringLiteral("audio-effects-detail"));
     hint->setAlignment(Qt::AlignCenter);
     *tones[index].dial = dial;
     *tones[index].value = value;
@@ -674,17 +709,17 @@ void AudioEffectsPage::createEqualizerPage() {
   }
   toneLayout->addLayout(dialRow);
   auto *acousticRow = new QHBoxLayout;
-  acousticRow->addWidget(label(QStringLiteral("Akustik Mekan:"), toneCard, QStringLiteral("audio-effects-detail")));
+  acousticRow->addWidget(label(I18n::text(QStringLiteral("audio.acoustic_space")), toneCard, QStringLiteral("audio-effects-detail")));
   acousticSpaceSelect_ = new QComboBox(toneCard);
   acousticSpaceSelect_->setObjectName(QStringLiteral("audio-effects-acoustic-space"));
-  acousticSpaceSelect_->addItem(QStringLiteral("Kapalı"), QStringLiteral("off"));
-  acousticSpaceSelect_->addItem(QStringLiteral("Küçük Oda"), QStringLiteral("small"));
-  acousticSpaceSelect_->addItem(QStringLiteral("Orta Oda"), QStringLiteral("medium"));
-  acousticSpaceSelect_->addItem(QStringLiteral("Büyük Oda"), QStringLiteral("large"));
-  acousticSpaceSelect_->addItem(QStringLiteral("Salon"), QStringLiteral("hall"));
+  acousticSpaceSelect_->addItem(I18n::text(QStringLiteral("common.off")), QStringLiteral("off"));
+  acousticSpaceSelect_->addItem(I18n::text(QStringLiteral("audio.space_small_room")), QStringLiteral("small"));
+  acousticSpaceSelect_->addItem(I18n::text(QStringLiteral("audio.space_medium_room")), QStringLiteral("medium"));
+  acousticSpaceSelect_->addItem(I18n::text(QStringLiteral("audio.space_large_room")), QStringLiteral("large"));
+  acousticSpaceSelect_->addItem(I18n::text(QStringLiteral("audio.space_hall")), QStringLiteral("hall"));
   acousticRow->addWidget(acousticSpaceSelect_, 1);
   toneLayout->addLayout(acousticRow);
-  auto *moduleReset = new QPushButton(QStringLiteral("Modülü Sıfırla"), toneCard);
+  auto *moduleReset = new QPushButton(I18n::text(QStringLiteral("audio.reset_module")), toneCard);
   moduleReset->setObjectName(QStringLiteral("audio-effects-module-reset"));
   toneLayout->addWidget(moduleReset);
   moduleRow->addWidget(toneCard, 1);
@@ -693,7 +728,7 @@ void AudioEffectsPage::createEqualizerPage() {
   balanceCard->setMinimumWidth(240);
   auto *balanceLayout = new QVBoxLayout(balanceCard);
   balanceLayout->setContentsMargins(18, 16, 18, 16);
-  auto *balanceTitle = label(QStringLiteral("Denge (Sol ↔ Sağ)"), balanceCard, QStringLiteral("audio-effects-card-title"));
+  auto *balanceTitle = label(I18n::text(QStringLiteral("audio.balance_title")), balanceCard, QStringLiteral("audio-effects-card-title"));
   balanceTitle->setAlignment(Qt::AlignCenter);
   balanceValue_ = label({}, balanceCard, QStringLiteral("audio-effects-card-title"));
   balanceValue_->setAlignment(Qt::AlignCenter);
@@ -702,7 +737,7 @@ void AudioEffectsPage::createEqualizerPage() {
   balanceSlider_->setRange(-100, 100);
   balanceSlider_->setSingleStep(1);
   balanceSlider_->setPageStep(10);
-  balanceSlider_->setAccessibleName(QStringLiteral("Sol sağ denge"));
+  balanceSlider_->setAccessibleName(I18n::text(QStringLiteral("audio.balance_accessible")));
   auto *quick = new QHBoxLayout;
   for (const int value : {-10, 0, 10}) {
     auto *button = new QPushButton(value > 0 ? QStringLiteral("+%1").arg(value) : QString::number(value), balanceCard);
@@ -714,11 +749,11 @@ void AudioEffectsPage::createEqualizerPage() {
   balanceLayout->addWidget(balanceValue_);
   balanceLayout->addWidget(balanceSlider_);
   auto *balanceLabels = new QHBoxLayout;
-  balanceLabels->addWidget(label(QStringLiteral("Sol"), balanceCard, QStringLiteral("audio-effects-detail")));
-  auto *centre = label(QStringLiteral("Merkez"), balanceCard, QStringLiteral("audio-effects-detail"));
+  balanceLabels->addWidget(label(I18n::text(QStringLiteral("audio.left")), balanceCard, QStringLiteral("audio-effects-detail")));
+  auto *centre = label(I18n::text(QStringLiteral("audio.center")), balanceCard, QStringLiteral("audio-effects-detail"));
   centre->setAlignment(Qt::AlignCenter);
   balanceLabels->addWidget(centre, 1);
-  auto *right = label(QStringLiteral("Sağ"), balanceCard, QStringLiteral("audio-effects-detail"));
+  auto *right = label(I18n::text(QStringLiteral("audio.right")), balanceCard, QStringLiteral("audio-effects-detail"));
   right->setAlignment(Qt::AlignRight);
   balanceLabels->addWidget(right);
   balanceLayout->addLayout(balanceLabels);
@@ -753,11 +788,11 @@ void AudioEffectsPage::createOutputPage() {
 
   auto *header = new QHBoxLayout;
   auto *heading = new QVBoxLayout;
-  auto *title = label(QStringLiteral("♫  Ses Çıkışı (Odyofil)"), content, QStringLiteral("audio-effects-title"));
-  auto *subtitle = label(QStringLiteral("DALI Web Audio grafiği, web sayfalarındaki audio/video elemanlarının çıkış kazancını işler."), content, QStringLiteral("audio-effects-subtitle"));
+  auto *title = label(I18n::text(QStringLiteral("audio.output_heading")), content, QStringLiteral("audio-effects-title"));
+  auto *subtitle = label(I18n::text(QStringLiteral("audio.output_desc")), content, QStringLiteral("audio-effects-subtitle"));
   heading->addWidget(title);
   heading->addWidget(subtitle);
-  auto *reset = new QPushButton(QStringLiteral("Sıfırla"), content);
+  auto *reset = new QPushButton(I18n::text(QStringLiteral("common.reset")), content);
   reset->setObjectName(QStringLiteral("audio-effects-reset"));
   header->addLayout(heading, 1);
   header->addWidget(reset, 0, Qt::AlignTop);
@@ -766,7 +801,7 @@ void AudioEffectsPage::createOutputPage() {
   auto *runtimeCard = card(content);
   auto *runtimeLayout = new QVBoxLayout(runtimeCard);
   runtimeLayout->setContentsMargins(16, 14, 16, 14);
-  runtimeLayout->addWidget(label(QStringLiteral("DALI Web Audio Çıkış Yolu"), runtimeCard, QStringLiteral("audio-effects-card-title")));
+  runtimeLayout->addWidget(label(I18n::text(QStringLiteral("audio.output_path")), runtimeCard, QStringLiteral("audio-effects-card-title")));
   auto *runtimeDetail = label({}, runtimeCard, QStringLiteral("audio-effects-detail"));
   runtimeDetail->setObjectName(QStringLiteral("audio-effects-output-detail"));
   runtimeLayout->addWidget(runtimeDetail);
@@ -775,7 +810,7 @@ void AudioEffectsPage::createOutputPage() {
   auto *gainCard = card(content);
   auto *gainLayout = new QVBoxLayout(gainCard);
   gainLayout->setContentsMargins(20, 18, 20, 18);
-  auto *gainTitle = label(QStringLiteral("Ana Kazanç (Preamp)"), gainCard, QStringLiteral("audio-effects-card-title"));
+  auto *gainTitle = label(I18n::text(QStringLiteral("audio.master_gain")), gainCard, QStringLiteral("audio-effects-card-title"));
   gainTitle->setAlignment(Qt::AlignCenter);
   preampDial_ = new QDial(gainCard);
   preampDial_->setObjectName(QStringLiteral("audio-effects-preamp"));
@@ -786,7 +821,7 @@ void AudioEffectsPage::createOutputPage() {
   preampDial_->setFixedSize(132, 132);
   preampValue_ = label({}, gainCard, QStringLiteral("audio-effects-preamp-value"));
   preampValue_->setAlignment(Qt::AlignCenter);
-  auto *gainHint = label(QStringLiteral("DALI Web Audio preamp: −24.0 dB ile +24.0 dB."), gainCard, QStringLiteral("audio-effects-detail"));
+  auto *gainHint = label(I18n::text(QStringLiteral("audio.master_gain_desc")), gainCard, QStringLiteral("audio-effects-detail"));
   gainHint->setAlignment(Qt::AlignCenter);
   gainLayout->addWidget(gainTitle);
   gainLayout->addWidget(preampDial_, 0, Qt::AlignHCenter);
@@ -828,12 +863,12 @@ void AudioEffectsPage::createReverbPage() {
   iconLayout->addWidget(glyph);
   auto *heading = new QVBoxLayout;
   heading->setSpacing(4);
-  heading->addWidget(label(QStringLiteral("Reverb (BASS FX)"), header, QStringLiteral("audio-effects-reverb-title")));
-  heading->addWidget(label(QStringLiteral("BASS_FX_DX8_REVERB efekti ile profesyonel oda simülasyonu."), header,
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.reverb_heading")), header, QStringLiteral("audio-effects-reverb-title")));
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.reverb_desc")), header,
                            QStringLiteral("audio-effects-reverb-subtitle")));
-  reverbToggle_ = new GlowToggleSwitch(QStringLiteral("Etkinleştir"), header);
+  reverbToggle_ = new GlowToggleSwitch(I18n::text(QStringLiteral("common.enable")), header);
   reverbToggle_->setObjectName(QStringLiteral("audio-effects-reverb-toggle"));
-  reverbToggle_->setAccessibleName(QStringLiteral("Reverb Etkinleştir"));
+  reverbToggle_->setAccessibleName(I18n::text(QStringLiteral("audio.reverb_enable")));
   moduleToggles_.insert(QStringLiteral("reverb"), reverbToggle_);
   headerLayout->addWidget(icon);
   headerLayout->addLayout(heading, 1);
@@ -872,11 +907,11 @@ void AudioEffectsPage::createReverbPage() {
     *dialTarget = dial;
     *valueTarget = value;
   };
-  addDial(QStringLiteral("Room Size"), 0, 30000, 10, &reverbRoomSizeDial_, &reverbRoomSizeValue_);
-  addDial(QStringLiteral("Damping"), 0, 1000, 1, &reverbDampingDial_, &reverbDampingValue_);
-  addDial(QStringLiteral("Wet/Dry Mix"), -960, 0, 1, &reverbWetDryDial_, &reverbWetDryValue_);
-  addDial(QStringLiteral("HF Ratio"), 1, 999, 1, &reverbHfRatioDial_, &reverbHfRatioValue_);
-  addDial(QStringLiteral("Input Gain"), -960, 120, 1, &reverbInputGainDial_, &reverbInputGainValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_room_size")), 0, 30000, 10, &reverbRoomSizeDial_, &reverbRoomSizeValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_damping")), 0, 1000, 1, &reverbDampingDial_, &reverbDampingValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_wet_dry")), -960, 0, 1, &reverbWetDryDial_, &reverbWetDryValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_hf_ratio")), 1, 999, 1, &reverbHfRatioDial_, &reverbHfRatioValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_input_gain")), -960, 120, 1, &reverbInputGainDial_, &reverbInputGainValue_);
   controlsLayout->addLayout(knobRow);
   controlsLayout->addSpacing(24);
 
@@ -885,22 +920,23 @@ void AudioEffectsPage::createReverbPage() {
   auto *presetsLayout = new QVBoxLayout(presets);
   presetsLayout->setContentsMargins(17, 14, 17, 16);
   presetsLayout->setSpacing(12);
-  presetsLayout->addWidget(label(QStringLiteral("📁  Hazır Ayarlar"), presets,
+  presetsLayout->addWidget(label(I18n::text(QStringLiteral("audio.presets_heading")), presets,
                                  QStringLiteral("audio-effects-reverb-presets-title")));
   auto *presetButtons = new QHBoxLayout;
   presetButtons->setContentsMargins(0, 0, 0, 0);
   presetButtons->setSpacing(8);
   const struct { const char *id; const char *title; const char *symbol; } presetDefinitions[] = {
-      {"smallRoom", "Küçük Oda", "⌂"}, {"largeRoom", "Büyük Oda", "▤"}, {"concertHall", "Konser Salonu", "▥"},
-      {"cathedral", "Katedral", "♜"}, {"studioPlate", "Studio Plate", "▣"}, {"arena", "Arena", "▥"},
+      {"smallRoom", "audio.space_small_room", "⌂"}, {"largeRoom", "audio.space_large_room", "▤"}, {"concertHall", "audio.preset_concert_hall", "▥"},
+      {"cathedral", "audio.preset_cathedral", "♜"}, {"studioPlate", "Studio Plate", "▣"}, {"arena", "audio.preset_arena", "▥"},
       {"vocalRoom", "Vocal Room", "♩"}, {"ambientWash", "Ambient Wash", "⌁"}, {"slapback", "Slapback", "✦"},
       {"dreamVox", "Dream Vox", "✧"},
   };
   for (const auto &preset : presetDefinitions) {
     const QString id = QString::fromLatin1(preset.id);
-    auto *button = new QPushButton(QStringLiteral("%1  %2").arg(QString::fromUtf8(preset.symbol), QString::fromUtf8(preset.title)), presets);
+    auto *button = new QPushButton(presets);
+    dalinira::i18n::bindText(button, QStringLiteral("=%1  %2"), {QString::fromUtf8(preset.symbol), nameArg(preset.title)});
     button->setObjectName(QStringLiteral("audio-effects-reverb-preset"));
-    button->setAccessibleName(QStringLiteral("Reverb hazır ayarı: %1").arg(QString::fromUtf8(preset.title)));
+    dalinira::i18n::bindAccessibleName(button, QStringLiteral("audio.reverb_preset"), {nameArg(preset.title)});
     button->setProperty("presetId", id);
     button->setProperty("active", false);
     presetButtons->addWidget(button);
@@ -910,9 +946,9 @@ void AudioEffectsPage::createReverbPage() {
   }
   presetsLayout->addLayout(presetButtons);
   controlsLayout->addWidget(presets);
-  auto *reset = new QPushButton(QStringLiteral("Sıfırla"), controls);
+  auto *reset = new QPushButton(I18n::text(QStringLiteral("common.reset")), controls);
   reset->setObjectName(QStringLiteral("audio-effects-reset"));
-  reset->setAccessibleName(QStringLiteral("Reverb Sıfırla"));
+  reset->setAccessibleName(I18n::text(QStringLiteral("audio.reverb_reset")));
   controlsLayout->addWidget(reset, 0, Qt::AlignLeft);
   controlsLayout->addStretch();
   layout->addWidget(controls, 1);
@@ -967,12 +1003,12 @@ void AudioEffectsPage::createCompressorPage() {
   iconLayout->addWidget(glyph);
   auto *heading = new QVBoxLayout;
   heading->setSpacing(4);
-  heading->addWidget(label(QStringLiteral("Dinamik Kompresör"), header, QStringLiteral("audio-effects-compressor-title")));
-  heading->addWidget(label(QStringLiteral("Ses dinamik aralığını kontrol eder, yüksek sesleri düşürür."), header,
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.module_compressor")), header, QStringLiteral("audio-effects-compressor-title")));
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.compressor_desc")), header,
                            QStringLiteral("audio-effects-compressor-subtitle")));
-  compressorToggle_ = new GlowToggleSwitch(QStringLiteral("Etkinleştir"), header);
+  compressorToggle_ = new GlowToggleSwitch(I18n::text(QStringLiteral("common.enable")), header);
   compressorToggle_->setObjectName(QStringLiteral("audio-effects-compressor-toggle"));
-  compressorToggle_->setAccessibleName(QStringLiteral("Dinamik Kompresör Etkinleştir"));
+  compressorToggle_->setAccessibleName(I18n::text(QStringLiteral("audio.compressor_enable")));
   moduleToggles_.insert(QStringLiteral("compressor"), compressorToggle_);
   headerLayout->addWidget(icon);
   headerLayout->addLayout(heading, 1);
@@ -990,20 +1026,21 @@ void AudioEffectsPage::createCompressorPage() {
   auto *presetsLayout = new QVBoxLayout(presets);
   presetsLayout->setContentsMargins(17, 13, 17, 15);
   presetsLayout->setSpacing(10);
-  presetsLayout->addWidget(label(QStringLiteral("📁  Hazır Ayarlar"), presets,
+  presetsLayout->addWidget(label(I18n::text(QStringLiteral("audio.presets_heading")), presets,
                                  QStringLiteral("audio-effects-compressor-presets-title")));
   auto *presetButtons = new QHBoxLayout;
   presetButtons->setContentsMargins(0, 0, 0, 0);
   presetButtons->setSpacing(8);
   const struct { const char *id; const char *title; const char *symbol; } presetDefinitions[] = {
-      {"gentle", "Yumuşak", "⌁"}, {"vocal", "Vokal", "♪"}, {"night", "Gece", "☾"},
-      {"punch", "Güçlü", "✦"}, {"broadcast", "Yayın", "◉"},
+      {"gentle", "audio.preset_gentle", "⌁"}, {"vocal", "audio.preset_vocal", "♪"}, {"night", "audio.preset_night", "☾"},
+      {"punch", "audio.preset_punch", "✦"}, {"broadcast", "audio.preset_broadcast", "◉"},
   };
   for (const auto &preset : presetDefinitions) {
     const QString id = QString::fromLatin1(preset.id);
-    auto *button = new QPushButton(QStringLiteral("%1  %2").arg(QString::fromUtf8(preset.symbol), QString::fromUtf8(preset.title)), presets);
+    auto *button = new QPushButton(presets);
+    dalinira::i18n::bindText(button, QStringLiteral("=%1  %2"), {QString::fromUtf8(preset.symbol), nameArg(preset.title)});
     button->setObjectName(QStringLiteral("audio-effects-compressor-preset"));
-    button->setAccessibleName(QStringLiteral("Dinamik Kompresör hazır ayarı: %1").arg(QString::fromUtf8(preset.title)));
+    dalinira::i18n::bindAccessibleName(button, QStringLiteral("audio.compressor_preset"), {nameArg(preset.title)});
     button->setProperty("presetId", id);
     button->setProperty("active", false);
     presetButtons->addWidget(button);
@@ -1041,12 +1078,12 @@ void AudioEffectsPage::createCompressorPage() {
     *dialTarget = dial;
     *valueTarget = value;
   };
-  addDial(QStringLiteral("Threshold"), -600, 0, 10, &compressorThresholdDial_, &compressorThresholdValue_);
-  addDial(QStringLiteral("Ratio"), 10, 200, 10, &compressorRatioDial_, &compressorRatioValue_);
-  addDial(QStringLiteral("Attack"), 1, 1000, 10, &compressorAttackDial_, &compressorAttackValue_);
-  addDial(QStringLiteral("Release"), 100, 10000, 10, &compressorReleaseDial_, &compressorReleaseValue_);
-  addDial(QStringLiteral("Makeup Gain"), -120, 240, 10, &compressorMakeupDial_, &compressorMakeupValue_);
-  addDial(QStringLiteral("Knee"), 0, 100, 10, &compressorKneeDial_, &compressorKneeValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_threshold")), -600, 0, 10, &compressorThresholdDial_, &compressorThresholdValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_ratio")), 10, 200, 10, &compressorRatioDial_, &compressorRatioValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_attack")), 1, 1000, 10, &compressorAttackDial_, &compressorAttackValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_release")), 100, 10000, 10, &compressorReleaseDial_, &compressorReleaseValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_makeup_gain")), -120, 240, 10, &compressorMakeupDial_, &compressorMakeupValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_knee")), 0, 100, 10, &compressorKneeDial_, &compressorKneeValue_);
   controlsLayout->addLayout(knobRow);
 
   auto *meterCard = new QFrame(controls);
@@ -1055,7 +1092,7 @@ void AudioEffectsPage::createCompressorPage() {
   meterLayout->setContentsMargins(17, 12, 17, 13);
   meterLayout->setSpacing(7);
   auto *meterHeading = new QHBoxLayout;
-  meterHeading->addWidget(label(QStringLiteral("Gain Reduction"), meterCard,
+  meterHeading->addWidget(label(I18n::text(QStringLiteral("audio.gain_reduction")), meterCard,
                                 QStringLiteral("audio-effects-compressor-meter-title")));
   meterHeading->addStretch();
   compressorGainReductionValue_ = label(QStringLiteral("0.0 dB"), meterCard,
@@ -1064,7 +1101,7 @@ void AudioEffectsPage::createCompressorPage() {
   meterLayout->addLayout(meterHeading);
   compressorGainReductionMeter_ = new QProgressBar(meterCard);
   compressorGainReductionMeter_->setObjectName(QStringLiteral("audio-effects-compressor-meter"));
-  compressorGainReductionMeter_->setAccessibleName(QStringLiteral("Dinamik Kompresör Gain Reduction"));
+  compressorGainReductionMeter_->setAccessibleName(I18n::text(QStringLiteral("audio.compressor_gain_reduction")));
   compressorGainReductionMeter_->setRange(0, 240);
   compressorGainReductionMeter_->setValue(0);
   compressorGainReductionMeter_->setTextVisible(false);
@@ -1083,9 +1120,9 @@ void AudioEffectsPage::createCompressorPage() {
   meterLayout->addLayout(markers);
   controlsLayout->addWidget(meterCard);
 
-  auto *reset = new QPushButton(QStringLiteral("Sıfırla"), controls);
+  auto *reset = new QPushButton(I18n::text(QStringLiteral("common.reset")), controls);
   reset->setObjectName(QStringLiteral("audio-effects-reset"));
-  reset->setAccessibleName(QStringLiteral("Dinamik Kompresör Sıfırla"));
+  reset->setAccessibleName(I18n::text(QStringLiteral("audio.compressor_reset")));
   controlsLayout->addWidget(reset, 0, Qt::AlignLeft);
   controlsLayout->addStretch();
   layout->addWidget(controls, 1);
@@ -1144,12 +1181,12 @@ void AudioEffectsPage::createLimiterPage() {
   iconLayout->addWidget(glyph);
   auto *heading = new QVBoxLayout;
   heading->setSpacing(4);
-  heading->addWidget(label(QStringLiteral("Limiter"), header, QStringLiteral("audio-effects-limiter-title")));
-  heading->addWidget(label(QStringLiteral("Maksimum ses seviyesini sınırlar, clipping’i önler."), header,
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.limiter")), header, QStringLiteral("audio-effects-limiter-title")));
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.limiter_desc")), header,
                            QStringLiteral("audio-effects-limiter-subtitle")));
-  limiterToggle_ = new GlowToggleSwitch(QStringLiteral("Etkinleştir"), header);
+  limiterToggle_ = new GlowToggleSwitch(I18n::text(QStringLiteral("common.enable")), header);
   limiterToggle_->setObjectName(QStringLiteral("audio-effects-limiter-toggle"));
-  limiterToggle_->setAccessibleName(QStringLiteral("Limiter Etkinleştir"));
+  limiterToggle_->setAccessibleName(I18n::text(QStringLiteral("audio.limiter_enable")));
   moduleToggles_.insert(QStringLiteral("limiter"), limiterToggle_);
   headerLayout->addWidget(icon);
   headerLayout->addLayout(heading, 1);
@@ -1167,20 +1204,21 @@ void AudioEffectsPage::createLimiterPage() {
   auto *presetsLayout = new QVBoxLayout(presets);
   presetsLayout->setContentsMargins(17, 13, 17, 15);
   presetsLayout->setSpacing(10);
-  presetsLayout->addWidget(label(QStringLiteral("📁  Hazır Ayarlar"), presets,
+  presetsLayout->addWidget(label(I18n::text(QStringLiteral("audio.presets_heading")), presets,
                                  QStringLiteral("audio-effects-limiter-presets-title")));
   auto *presetButtons = new QHBoxLayout;
   presetButtons->setContentsMargins(0, 0, 0, 0);
   presetButtons->setSpacing(8);
   const struct { const char *id; const char *title; const char *symbol; } definitions[] = {
-      {"transparent", "Şeffaf", "◇"}, {"loud", "Yüksek", "✦"}, {"streaming", "Streaming", "◉"},
-      {"night", "Gece", "☾"}, {"safe", "Güvenli", "◎"},
+      {"transparent", "audio.preset_transparent", "◇"}, {"loud", "audio.preset_loud", "✦"}, {"streaming", "audio.preset_streaming", "◉"},
+      {"night", "audio.preset_night", "☾"}, {"safe", "audio.preset_safe", "◎"},
   };
   for (const auto &preset : definitions) {
     const QString id = QString::fromLatin1(preset.id);
-    auto *button = new QPushButton(QStringLiteral("%1  %2").arg(QString::fromUtf8(preset.symbol), QString::fromUtf8(preset.title)), presets);
+    auto *button = new QPushButton(presets);
+    dalinira::i18n::bindText(button, QStringLiteral("=%1  %2"), {QString::fromUtf8(preset.symbol), nameArg(preset.title)});
     button->setObjectName(QStringLiteral("audio-effects-limiter-preset"));
-    button->setAccessibleName(QStringLiteral("Limiter hazır ayarı: %1").arg(QString::fromUtf8(preset.title)));
+    dalinira::i18n::bindAccessibleName(button, QStringLiteral("audio.limiter_preset"), {nameArg(preset.title)});
     button->setProperty("presetId", id);
     button->setProperty("active", false);
     presetButtons->addWidget(button);
@@ -1218,10 +1256,10 @@ void AudioEffectsPage::createLimiterPage() {
     *dialTarget = dial;
     *valueTarget = value;
   };
-  addDial(QStringLiteral("Ceiling"), -120, 0, 1, &limiterCeilingDial_, &limiterCeilingValue_);
-  addDial(QStringLiteral("Release"), 10, 500, 1, &limiterReleaseDial_, &limiterReleaseValue_);
-  addDial(QStringLiteral("Lookahead"), 0, 20, 1, &limiterLookaheadDial_, &limiterLookaheadValue_);
-  addDial(QStringLiteral("Gain"), -12, 12, 1, &limiterGainDial_, &limiterGainValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_ceiling")), -120, 0, 1, &limiterCeilingDial_, &limiterCeilingValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_release")), 10, 500, 1, &limiterReleaseDial_, &limiterReleaseValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_lookahead")), 0, 20, 1, &limiterLookaheadDial_, &limiterLookaheadValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_gain")), -12, 12, 1, &limiterGainDial_, &limiterGainValue_);
   controlsLayout->addLayout(knobRow);
 
   auto *meterCard = new QFrame(controls);
@@ -1230,7 +1268,7 @@ void AudioEffectsPage::createLimiterPage() {
   meterLayout->setContentsMargins(17, 12, 17, 13);
   meterLayout->setSpacing(7);
   auto *meterHeading = new QHBoxLayout;
-  meterHeading->addWidget(label(QStringLiteral("Limiting Amount"), meterCard,
+  meterHeading->addWidget(label(I18n::text(QStringLiteral("audio.limiting_amount")), meterCard,
                                 QStringLiteral("audio-effects-limiter-meter-title")));
   meterHeading->addStretch();
   limiterReductionValue_ = label(QStringLiteral("0.0 dB"), meterCard,
@@ -1239,7 +1277,7 @@ void AudioEffectsPage::createLimiterPage() {
   meterLayout->addLayout(meterHeading);
   limiterReductionMeter_ = new QProgressBar(meterCard);
   limiterReductionMeter_->setObjectName(QStringLiteral("audio-effects-limiter-meter"));
-  limiterReductionMeter_->setAccessibleName(QStringLiteral("Limiter Limiting Amount"));
+  limiterReductionMeter_->setAccessibleName(I18n::text(QStringLiteral("audio.limiter_limiting_amount")));
   limiterReductionMeter_->setRange(0, 200);
   limiterReductionMeter_->setValue(0);
   limiterReductionMeter_->setTextVisible(false);
@@ -1258,9 +1296,9 @@ void AudioEffectsPage::createLimiterPage() {
   meterLayout->addLayout(markers);
   controlsLayout->addWidget(meterCard);
 
-  auto *reset = new QPushButton(QStringLiteral("Sıfırla"), controls);
+  auto *reset = new QPushButton(I18n::text(QStringLiteral("common.reset")), controls);
   reset->setObjectName(QStringLiteral("audio-effects-reset"));
-  reset->setAccessibleName(QStringLiteral("Limiter Sıfırla"));
+  reset->setAccessibleName(I18n::text(QStringLiteral("audio.limiter_reset")));
   controlsLayout->addWidget(reset, 0, Qt::AlignLeft);
   controlsLayout->addStretch();
   layout->addWidget(controls, 1);
@@ -1314,13 +1352,13 @@ void AudioEffectsPage::createBassEnhancerPage() {
   iconLayout->addWidget(glyph);
   auto *heading = new QVBoxLayout;
   heading->setSpacing(4);
-  heading->addWidget(label(QStringLiteral("Bas Güçlendirici"), header,
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.module_bass_booster")), header,
                            QStringLiteral("audio-effects-bass-enhancer-title")));
-  heading->addWidget(label(QStringLiteral("Düşük frekansları harmonik olarak zenginleştirir."), header,
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.bass_desc")), header,
                            QStringLiteral("audio-effects-bass-enhancer-subtitle")));
-  bassEnhancerToggle_ = new GlowToggleSwitch(QStringLiteral("Etkinleştir"), header);
+  bassEnhancerToggle_ = new GlowToggleSwitch(I18n::text(QStringLiteral("common.enable")), header);
   bassEnhancerToggle_->setObjectName(QStringLiteral("audio-effects-bass-enhancer-toggle"));
-  bassEnhancerToggle_->setAccessibleName(QStringLiteral("Bas Güçlendirici Etkinleştir"));
+  bassEnhancerToggle_->setAccessibleName(I18n::text(QStringLiteral("audio.bass_enable")));
   moduleToggles_.insert(QStringLiteral("bassboost"), bassEnhancerToggle_);
   headerLayout->addWidget(icon);
   headerLayout->addLayout(heading, 1);
@@ -1362,27 +1400,27 @@ void AudioEffectsPage::createBassEnhancerPage() {
   };
   // Integer QDial storage is scaled by ten so the legacy 17.5 dB Deep value
   // remains exact while direct user movement follows the old 1-unit steps.
-  addDial(QStringLiteral("Frequency"), 200, 1200, 10,
+  addDial(I18n::text(QStringLiteral("audio.param_frequency")), 200, 1200, 10,
           &bassEnhancerFrequencyDial_, &bassEnhancerFrequencyValue_);
-  addDial(QStringLiteral("Gain"), 0, 180, 10,
+  addDial(I18n::text(QStringLiteral("audio.param_gain")), 0, 180, 10,
           &bassEnhancerGainDial_, &bassEnhancerGainValue_);
-  addDial(QStringLiteral("Harmonics"), 0, 1000, 10,
+  addDial(I18n::text(QStringLiteral("audio.param_harmonics")), 0, 1000, 10,
           &bassEnhancerHarmonicsDial_, &bassEnhancerHarmonicsValue_);
-  addDial(QStringLiteral("Width"), 5, 30, 1,
+  addDial(I18n::text(QStringLiteral("audio.param_width")), 5, 30, 1,
           &bassEnhancerWidthDial_, &bassEnhancerWidthValue_);
-  addDial(QStringLiteral("Mix"), 0, 1000, 10,
+  addDial(I18n::text(QStringLiteral("audio.param_mix")), 0, 1000, 10,
           &bassEnhancerMixDial_, &bassEnhancerMixValue_);
   controlsLayout->addLayout(knobRow);
 
-  auto *deep = new QPushButton(QStringLiteral("◉  Deep"), controls);
+  auto *deep = new QPushButton(I18n::text(QStringLiteral("audio.bass_deep_button")), controls);
   deep->setObjectName(QStringLiteral("audio-effects-bass-enhancer-deep"));
-  deep->setAccessibleName(QStringLiteral("Bas Güçlendirici Deep"));
+  deep->setAccessibleName(I18n::text(QStringLiteral("audio.bass_deep")));
   deep->setProperty("active", false);
   controlsLayout->addWidget(deep, 0, Qt::AlignLeft);
 
-  auto *reset = new QPushButton(QStringLiteral("Sıfırla"), controls);
+  auto *reset = new QPushButton(I18n::text(QStringLiteral("common.reset")), controls);
   reset->setObjectName(QStringLiteral("audio-effects-reset"));
-  reset->setAccessibleName(QStringLiteral("Bas Güçlendirici Sıfırla"));
+  reset->setAccessibleName(I18n::text(QStringLiteral("audio.bass_reset")));
   controlsLayout->addWidget(reset, 0, Qt::AlignLeft);
   controlsLayout->addStretch();
   layout->addWidget(controls, 1);
@@ -1441,13 +1479,13 @@ void AudioEffectsPage::createAutoGainPage() {
   iconLayout->addWidget(glyph);
   auto *heading = new QVBoxLayout;
   heading->setSpacing(4);
-  heading->addWidget(label(QStringLiteral("Auto Gain / Normalize"), header,
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.auto_gain")), header,
                            QStringLiteral("audio-effects-auto-gain-title")));
-  heading->addWidget(label(QStringLiteral("Otomatik ses seviyesi normalizasyonu."), header,
+  heading->addWidget(label(I18n::text(QStringLiteral("audio.auto_gain_desc")), header,
                            QStringLiteral("audio-effects-auto-gain-subtitle")));
-  autoGainToggle_ = new GlowToggleSwitch(QStringLiteral("Etkinleştir"), header);
+  autoGainToggle_ = new GlowToggleSwitch(I18n::text(QStringLiteral("common.enable")), header);
   autoGainToggle_->setObjectName(QStringLiteral("audio-effects-auto-gain-toggle"));
-  autoGainToggle_->setAccessibleName(QStringLiteral("Auto Gain / Normalize Etkinleştir"));
+  autoGainToggle_->setAccessibleName(I18n::text(QStringLiteral("audio.auto_gain_enable")));
   moduleToggles_.insert(QStringLiteral("autogain"), autoGainToggle_);
   headerLayout->addWidget(icon);
   headerLayout->addLayout(heading, 1);
@@ -1487,8 +1525,8 @@ void AudioEffectsPage::createAutoGainPage() {
     *dialTarget = dial;
     *valueTarget = value;
   };
-  addDial(QStringLiteral("Target Level"), -240, 0, &autoGainTargetDial_, &autoGainTargetValue_);
-  addDial(QStringLiteral("Max Gain"), 0, 240, &autoGainMaxGainDial_, &autoGainMaxGainValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_target_level")), -240, 0, &autoGainTargetDial_, &autoGainTargetValue_);
+  addDial(I18n::text(QStringLiteral("audio.param_max_gain")), 0, 240, &autoGainMaxGainDial_, &autoGainMaxGainValue_);
   controlsLayout->addLayout(knobRow);
 
   auto *presets = new QFrame(controls);
@@ -1496,16 +1534,16 @@ void AudioEffectsPage::createAutoGainPage() {
   auto *presetLayout = new QVBoxLayout(presets);
   presetLayout->setContentsMargins(15, 13, 15, 15);
   presetLayout->setSpacing(10);
-  presetLayout->addWidget(label(QStringLiteral("Auto Gain Quick Presets"), presets,
+  presetLayout->addWidget(label(I18n::text(QStringLiteral("audio.auto_gain_quick_presets")), presets,
                                 QStringLiteral("audio-effects-auto-gain-presets-title")));
   auto *presetRow = new QHBoxLayout;
   presetRow->setSpacing(10);
   const std::array<std::pair<const char *, const char *>, 4> presetDefinitions{{
-      {"balanced", "Balanced"}, {"night", "Night Quiet"},
-      {"loud", "High Energy"}, {"speech", "Speech Clear"},
+      {"balanced", "audio.preset_balanced"}, {"night", "audio.preset_night_quiet"},
+      {"loud", "audio.preset_high_energy"}, {"speech", "audio.preset_speech_clear"},
   }};
   for (const auto &[id, title] : presetDefinitions) {
-    auto *button = new QPushButton(QString::fromLatin1(title), presets);
+    auto *button = new QPushButton(displayName(title), presets);  // catalog value: retranslated live
     button->setObjectName(QStringLiteral("audio-effects-auto-gain-preset"));
     button->setProperty("presetId", QString::fromLatin1(id));
     button->setProperty("active", false);
@@ -1517,9 +1555,9 @@ void AudioEffectsPage::createAutoGainPage() {
   presetLayout->addLayout(presetRow);
   controlsLayout->addWidget(presets);
 
-  auto *reset = new QPushButton(QStringLiteral("Sıfırla"), controls);
+  auto *reset = new QPushButton(I18n::text(QStringLiteral("common.reset")), controls);
   reset->setObjectName(QStringLiteral("audio-effects-reset"));
-  reset->setAccessibleName(QStringLiteral("Auto Gain / Normalize Sıfırla"));
+  reset->setAccessibleName(I18n::text(QStringLiteral("audio.auto_gain_reset")));
   controlsLayout->addWidget(reset, 0, Qt::AlignLeft);
   controlsLayout->addStretch();
   layout->addWidget(controls, 1);
@@ -1547,21 +1585,21 @@ void AudioEffectsPage::createPlaceholderPages() {
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(32, 28, 32, 28);
     auto *header = new QHBoxLayout;
-    auto *title = label(QString::fromUtf8(kModules[index].name), page, QStringLiteral("audio-effects-title"));
+    auto *title = label(displayName(kModules[index].name), page, QStringLiteral("audio-effects-title"));
     const QString moduleId = QString::fromLatin1(kModules[index].id);
-    auto *toggle = new GlowToggleSwitch(QStringLiteral("Etkinleştir"), page);
+    auto *toggle = new GlowToggleSwitch(I18n::text(QStringLiteral("common.enable")), page);
     toggle->setObjectName(QStringLiteral("audio-effects-module-toggle"));
-    toggle->setAccessibleName(QStringLiteral("%1 Etkinleştir").arg(QString::fromUtf8(kModules[index].name)));
+    dalinira::i18n::bindAccessibleName(toggle, QStringLiteral("audio.enable_module"), {nameArg(kModules[index].name)});
     toggle->setProperty("moduleId", moduleId);
     moduleToggles_.insert(moduleId, toggle);
-    auto *reset = new QPushButton(QStringLiteral("Sıfırla"), page);
+    auto *reset = new QPushButton(I18n::text(QStringLiteral("common.reset")), page);
     reset->setObjectName(QStringLiteral("audio-effects-reset"));
     header->addWidget(title);
     header->addStretch();
     header->addWidget(toggle, 0, Qt::AlignTop | Qt::AlignRight);
     layout->addLayout(header);
     layout->addWidget(reset, 0, Qt::AlignLeft);
-    auto *placeholder = label(QStringLiteral("Bu modül sonraki geliştirme aşamasında yalnızca DALI Web Ses Motoru için eklenecek."), page,
+    auto *placeholder = label(I18n::text(QStringLiteral("audio.module_coming_soon")), page,
                               QStringLiteral("audio-effects-placeholder"));
     layout->addWidget(placeholder);
     layout->addStretch();
@@ -1581,8 +1619,8 @@ void AudioEffectsPage::updateFromController() {
   const QSignalBlocker dialBlock(preampDial_);
   globalToggle_->setChecked(controller_->enabled());
   globalToggle_->setText(controller_->enabled()
-      ? QStringLiteral("Ses Efektleri  •  AÇIK")
-      : QStringLiteral("Ses Efektleri  •  KAPALI"));
+      ? I18n::text(QStringLiteral("audio.effects_on"))
+      : I18n::text(QStringLiteral("audio.effects_off")));
   for (auto toggle = moduleToggles_.cbegin(); toggle != moduleToggles_.cend(); ++toggle) {
     if (!toggle.value()) continue;
     const QSignalBlocker moduleBlock(toggle.value());
@@ -1621,9 +1659,9 @@ void AudioEffectsPage::updateFromController() {
     const QSignalBlocker balanceBlock(balanceSlider_);
     balanceSlider_->setValue(qRound(controller_->balance()));
     const double balance = controller_->balance();
-    balanceValue_->setText(qFuzzyIsNull(balance) ? QStringLiteral("Merkez (0%)")
-                                                : (balance < 0 ? QStringLiteral("Sol (%1%)").arg(qRound(balance))
-                                                               : QStringLiteral("Sağ (+%1%)").arg(qRound(balance))));
+    balanceValue_->setText(qFuzzyIsNull(balance) ? I18n::text(QStringLiteral("audio.balance_center"))
+                                                : (balance < 0 ? I18n::text(QStringLiteral("audio.balance_left")).arg(qRound(balance))
+                                                               : I18n::text(QStringLiteral("audio.balance_right")).arg(qRound(balance))));
   }
   const struct { QDial *dial; QLabel *value; double scaledValue; int scale; QString text; } reverbs[] = {
       {reverbRoomSizeDial_, reverbRoomSizeValue_, controller_->reverbRoomSizeMs(), 10,
@@ -1759,12 +1797,10 @@ void AudioEffectsPage::updateFromController() {
     button->update();
   }
   if (autoGainToggle_) {
-    const bool hardAutoGainFailure = status.detail.contains(QStringLiteral("DALI Web Audio hatası"), Qt::CaseInsensitive)
-        || status.detail.contains(QStringLiteral("modülü çalışma anında bulunamadı"), Qt::CaseInsensitive)
-        || status.detail.contains(QStringLiteral("grafiği hazırlanamadı"), Qt::CaseInsensitive);
+    const bool hardAutoGainFailure = status.hardFailure;
     autoGainToggle_->setEnabled(!hardAutoGainFailure);
-    autoGainToggle_->setText(hardAutoGainFailure ? QStringLiteral("Kullanılamıyor") : QStringLiteral("Etkinleştir"));
-    autoGainToggle_->setToolTip(hardAutoGainFailure ? status.detail : QString());
+    autoGainToggle_->setText(hardAutoGainFailure ? I18n::text(QStringLiteral("common.unavailable")) : I18n::text(QStringLiteral("common.enable")));
+    autoGainToggle_->setToolTip(hardAutoGainFailure ? localizedDetail(status) : QString());
   }
   QString rate;
   if (!status.sampleRates.isEmpty()) {
@@ -1773,11 +1809,11 @@ void AudioEffectsPage::updateFromController() {
     rate = labels.join(QStringLiteral(", "));
   }
   statusLabel_->setText(status.engineAvailable
-      ? QStringLiteral("Web DSP: %1 • Aktif: %2%3").arg(status.enabled ? QStringLiteral("Açık") : QStringLiteral("Bypass"))
+      ? I18n::text(QStringLiteral("audio.web_dsp_status")).arg(status.enabled ? I18n::text(QStringLiteral("common.on")) : I18n::text(QStringLiteral("audio.bypass")))
             .arg(status.attachedMediaCount).arg(rate.isEmpty() ? QString() : QStringLiteral(" • %1").arg(rate))
-      : QStringLiteral("Web DSP: Hazırlanıyor"));
+      : I18n::text(QStringLiteral("audio.web_dsp_preparing")));
   if (auto *detail = findChild<QLabel *>(QStringLiteral("audio-effects-output-detail"))) {
-    detail->setText(status.detail + (rate.isEmpty() ? QString() : QStringLiteral(" Çalışma örnekleme oranı: %1.").arg(rate)));
+    detail->setText(localizedDetail(status) + (rate.isEmpty() ? QString() : I18n::text(QStringLiteral("audio.sample_rate_suffix")).arg(rate)));
   }
   updateCompressorMeterPolling();
   updateLimiterMeterPolling();

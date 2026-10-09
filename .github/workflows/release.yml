@@ -8,71 +8,85 @@ on:
       release_ref:
         description: Existing v-prefixed release tag to build and publish
         required: true
-        default: v7.2.1
+        default: v8.0.0
 
 permissions:
   contents: write
 
 jobs:
-  linux-release:
-    name: Portable Linux release (Debian 12 baseline)
+  validate-tag:
+    name: Validate tag and version
     runs-on: ubuntu-latest
-    container: debian:12
     env:
       RELEASE_REF: ${{ inputs.release_ref || github.ref_name }}
     steps:
-      - name: Install release dependencies
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential ca-certificates cmake ffmpeg gh git ninja-build nodejs \
-            libssl-dev libpsl-dev pkg-config qt6-base-dev qt6-image-formats-plugins qt6-svg-dev \
-            qt6-webengine-dev xauth xvfb zstd
-
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_ref || github.ref_name }}
-
-      - name: Validate tag and version
+      - name: Tag matches every stated version
         run: |
           version="$(node -p "require('./package.json').version")"
           test "${RELEASE_REF}" = "v${version}"
+          scripts/check-release-metadata.sh
 
-      - name: Configure and build
-        run: |
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr \
-            -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser
-          cmake --build build --parallel 2
+  # Every package, built in its own distribution's container, the non-GUI
+  # test tier on the release build, and a fresh install of each package with
+  # the package manager alone (.github/workflows/packages.yml).
+  packages:
+    name: Packages
+    needs: validate-tag
+    uses: ./.github/workflows/packages.yml
+    with:
+      ref: ${{ inputs.release_ref || github.ref_name }}
+      run_tests: true
 
-      - name: Test
-        env:
-          QT_QPA_PLATFORM: xcb
-          QTWEBENGINE_DISABLE_SANDBOX: "1"
-          QTWEBENGINE_CHROMIUM_FLAGS: --no-sandbox --disable-gpu
-        run: |
-          xvfb-run -a ctest --test-dir build --output-on-failure \
-            -E '^browser-tab-attach-stress$'
+  publish:
+    name: Publish GitHub release
+    needs: packages
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_REF: ${{ inputs.release_ref || github.ref_name }}
+    steps:
+      - name: Checkout release notes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_ref || github.ref_name }}
 
-      - name: Assemble portable Linux archive
+      - name: Download the portable archive and the native packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: "{portable,package-debian12,package-ubuntu2404,package-fedora}"
+          path: dist
+          merge-multiple: true
+
+      - name: Check the release assets
         run: |
           version="${RELEASE_REF#v}"
-          stage="${GITHUB_WORKSPACE}/release-root"
-          DESTDIR="${stage}" cmake --install build
-          install -dm755 "${stage}/usr/bin"
-          ln -sf ../lib/dalinira-browser/dalinira-browser "${stage}/usr/bin/dalinira-browser"
-          tar --zstd -C "${stage}" -cf "dalinira-browser-${version}-linux-x86_64.tar.zst" usr
-          sha256sum "dalinira-browser-${version}-linux-x86_64.tar.zst" > SHA256SUMS
+          cd dist
+          ls -l
+          # One portable archive, two .deb, one .rpm; all named after this
+          # version. Arch packages go to the pacman repository instead
+          # (pacman-repo.yml), so they are not attached here.
+          test -f "dalinira-browser-${version}-linux-x86_64.tar.zst"
+          test "$(ls ./*.deb | wc -l)" -eq 2
+          test "$(ls ./*.rpm | wc -l)" -eq 1
+          test "$(ls | wc -l)" -eq 4
+          for asset in *; do
+            case "$asset" in *"${version}"*) ;; *) echo "unversioned asset $asset" >&2; exit 1 ;; esac
+          done
 
-      - name: Publish GitHub release
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version="${RELEASE_REF#v}"
+          cd dist
+          sha256sum "dalinira-browser-${version}-linux-x86_64.tar.zst" > SHA256SUMS
+          sha256sum ./*.deb ./*.rpm | sed 's#\./##' > SHA256SUMS-native-packages
           gh release create "${RELEASE_REF}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --title "DaliNira Browser ${RELEASE_REF#v}" \
-            --notes-file "docs/RELEASE_NOTES_v${RELEASE_REF#v}.md" \
-            "dalinira-browser-${RELEASE_REF#v}-linux-x86_64.tar.zst" \
-            SHA256SUMS
+            --title "DaliNira Browser ${version}" \
+            --notes-file "../docs/RELEASE_NOTES_v${version}.md" \
+            "dalinira-browser-${version}-linux-x86_64.tar.zst" SHA256SUMS \
+            ./*.deb ./*.rpm SHA256SUMS-native-packages

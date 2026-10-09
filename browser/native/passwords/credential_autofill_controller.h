@@ -38,6 +38,7 @@ class CredentialAutofillController final : public QObject {
 
   // Script factories (isolated ApplicationWorld)
   static QWebEngineScript candidateCaptureScript();
+  static QString webKitCandidateCaptureSource();
   static QString fillButtonScript(const QString &token);
   static QString domFillScript(const QString &origin, const QString &username, const QString &password,
                                const QUrl &expectedUrl = {}, const QString &documentToken = {});
@@ -52,7 +53,8 @@ class CredentialAutofillController final : public QObject {
 
   // Console bridge router
   // Returns true if the message was handled by credential autofill.
-  bool handleConsoleMessage(QWebEnginePage *page, const QString &message);
+  bool handleBridgeMessage(QWebEnginePage *page, const QString &message);
+  bool handleBridgePayload(QWebEnginePage *page, const QString &type, const QVariantMap &payload);
 
   // User-initiated fill actions
   void triggerFillForView(QWebEngineView *view);
@@ -169,6 +171,7 @@ class CredentialAutofillController final : public QObject {
     QString origin;
     QUrl url;
     QString recordId;
+    QString vaultId;
     quint64 navigationGeneration = 0;
   };
 
@@ -239,4 +242,16 @@ class CredentialAutofillController final : public QObject {
   QPointer<QWebEngineView> activeBubbleView_;
   QString activeBubbleCandidateKey_;
   bool isPruning_ = false;
+};
+
+class CredentialMessageBridge final : public QObject {
+  Q_OBJECT
+ public:
+  CredentialMessageBridge(QWebEnginePage *page, CredentialAutofillController *controller,
+                          QObject *parent = nullptr);
+ public slots:
+  void send(const QString &type, const QVariantMap &payload);
+ private:
+  QPointer<QWebEnginePage> page_;
+  QPointer<CredentialAutofillController> controller_;
 };

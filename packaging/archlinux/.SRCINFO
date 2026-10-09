@@ -1,6 +1,6 @@
 pkgbase = dalinira-browser
 	pkgdesc = Native Qt/C++ desktop browser with integrated privacy and media tools
-	pkgver = 7.2.0
+	pkgver = 8.0.0
 	pkgrel = 1
 	url = https://github.com/Muhammed-Dali/DaliNira-Browser
 	arch = x86_64
@@ -10,11 +10,19 @@ pkgbase = dalinira-browser
 	makedepends = ninja
 	makedepends = nodejs
 	depends = ffmpeg
+	depends = libpsl
+	depends = libsecret
 	depends = openssl
 	depends = qt6-base
 	depends = qt6-imageformats
 	depends = qt6-svg
 	depends = qt6-webengine
+	depends = webkit2gtk-4.1
+	depends = gst-plugins-base
+	depends = gst-plugins-good
+	depends = gst-plugins-bad
+	depends = gst-libav
+	optdepends = qt6-wayland: native Wayland windows for the Chromium engine (QT_QPA_PLATFORM=wayland)
 	provides = dalinira
 	provides = dalinira-webmedia
 	conflicts = dalinira
@@ -22,7 +30,7 @@ pkgbase = dalinira-browser
 	conflicts = dalinira-webmedia
 	replaces = dalinira-bin
 	replaces = dalinira-webmedia
-	source = dalinira-browser-7.2.0.tar.gz::https://github.com/Muhammed-Dali/DaliNira-Browser/archive/refs/tags/v7.2.0.tar.gz
+	source = dalinira-browser-8.0.0.tar.gz::https://github.com/Muhammed-Dali/DaliNira-Browser/archive/refs/tags/v8.0.0.tar.gz
 	sha256sums = SKIP
 
 pkgname = dalinira-browser

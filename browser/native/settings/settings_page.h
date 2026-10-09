@@ -7,10 +7,12 @@
 #include "browser_icons.h"
 
 #include <functional>
+#include <vector>
 
 class BrowserProfileService;
 class QComboBox;
 class QLineEdit;
+class QLabel;
 class QListWidget;
 class QStackedWidget;
 class PrivacyDetailSubpage;
@@ -52,15 +54,21 @@ class SettingsPage final : public QWidget {
     std::function<void()> refreshBookmarks;
     std::function<void()> refreshBookmarkBarVisibility;
     std::function<void()> refreshTabStyle;
+    std::function<void(const QString &)> setLayoutMode;
+    std::function<void(const QString &)> setTheme;
+    std::function<void()> reopenOnboarding;
     std::function<dalinira::TabPerformanceManager *()> performanceManager;
   };
 
   SettingsPage(BrowserProfileService *profileService, Hooks hooks, QWidget *parent = nullptr);
   void setCategory(Category category);
   void refreshPreferences();
+  void refreshAppearance();
 
  signals:
   void navigateRequested(const QUrl &url);
+  // A mailto: draft for the user's own mail client, never a tab navigation.
+  void emailRequested(const QUrl &url);
   void appearanceResetRequested();
 
  private:
@@ -93,12 +101,15 @@ class SettingsPage final : public QWidget {
   QListWidget *sidebar_ = nullptr;
   QStackedWidget *content_ = nullptr;
   QLineEdit *search_ = nullptr;
+  QLabel *title_ = nullptr;
   QComboBox *uiLangCombo_ = nullptr;
   QStackedWidget *privacyStack_ = nullptr;
   PrivacyDetailSubpage *privacySubpage_ = nullptr;
   std::function<void()> updatePrivacySubtitles_;
   std::function<void()> refreshHistory_;
   std::function<void()> refreshBookmarks_;
+  // Lists built from composed/runtime strings; re-run after a language switch.
+  std::vector<std::function<void()>> languageRefreshers_;
   QHash<Category, int> categoryIndexes_;
   QHash<int, QString> searchKeywords_;
   QHash<int, int> contentSidebarRows_;

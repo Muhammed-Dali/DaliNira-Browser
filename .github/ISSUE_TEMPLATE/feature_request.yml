@@ -3,6 +3,13 @@ description: Propose an improvement and explain the user problem
 title: "[Feature]: "
 labels: ["enhancement", "needs-triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement to DaliNira Browser.
+
+        **Privacy warning:** Do not submit passwords, cookies, tokens, private URLs, or personal data.
+
   - type: checkboxes
     id: checks
     attributes:
@@ -10,26 +17,56 @@ body:
       options:
         - label: I searched existing issues and did not find this request.
           required: true
+        - label: I did not include passwords, cookies, tokens, private URLs, or personal data.
+          required: true
+
   - type: textarea
-    id: problem
+    id: summary
     attributes:
-      label: Problem or use case
+      label: Feature summary
+      description: Briefly describe the requested feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case or problem
       description: What is difficult today, and who is affected?
     validations:
       required: true
+
   - type: textarea
-    id: proposal
+    id: proposed_behavior
     attributes:
-      label: Proposed improvement
-      description: Describe the desired behavior and user experience.
+      label: Proposed behavior
+      description: Describe how the feature should work from the user's perspective.
     validations:
       required: true
+
   - type: textarea
-    id: alternatives
+    id: improvement
     attributes:
-      label: Alternatives considered
+      label: Why this would improve DaliNira
+      description: Explain the expected benefit to users or the project.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine_relevance
+    attributes:
+      label: Engine relevance
+      description: Which browser engine or engines should this feature affect?
+      options:
+        - Both Chromium and WebKitGTK
+        - Chromium only
+        - WebKitGTK only
+        - Engine-independent / not sure
+    validations:
+      required: true
+
   - type: textarea
-    id: context
+    id: additional_context
     attributes:
       label: Additional context
-      description: Add mockups, examples, or related projects without confidential information.
+      description: Add redacted mockups, examples, or other non-sensitive context.

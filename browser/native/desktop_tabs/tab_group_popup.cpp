@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QVBoxLayout>
+#include "i18n/i18n.h"
 
 namespace dalinira::desktop_tabs {
 
@@ -202,7 +203,7 @@ void TabGroupPopup::setupUi() {
   // 1. Group Name Input
   nameEdit_ = new QLineEdit(this);
   nameEdit_->setObjectName(QStringLiteral("groupNameEdit"));
-  nameEdit_->setPlaceholderText(QStringLiteral("Bu gruba bir ad verin"));
+  nameEdit_->setPlaceholderText(I18n::text(QStringLiteral("tabgroup.name_placeholder")));
   mainLayout->addWidget(nameEdit_);
 
   connect(nameEdit_, &QLineEdit::textChanged, this, [this](const QString &text) {
@@ -254,7 +255,7 @@ void TabGroupPopup::setupUi() {
 
   // 3. Action: Grupta yeni sekme (Alt+Shift+C)
   auto *newTabBtn = createActionRow(this, createNewTabInGroupIcon(),
-                                    QStringLiteral("Grupta yeni sekme"),
+                                    I18n::text(QStringLiteral("tabgroup.new_tab_in_group")),
                                     QStringLiteral("Alt+Shift+C"));
   connect(newTabBtn, &QPushButton::clicked, this, [this] {
     const QUuid id = currentGroupId_;
@@ -265,7 +266,7 @@ void TabGroupPopup::setupUi() {
 
   // 4. Action: Grubu yeni pencereye taşı
   auto *moveWindowBtn = createActionRow(this, createMoveWindowIcon(),
-                                        QStringLiteral("Grubu yeni pencereye taşı"));
+                                        I18n::text(QStringLiteral("tabgroup.move_to_new_window")));
   connect(moveWindowBtn, &QPushButton::clicked, this, [this] {
     const QUuid id = currentGroupId_;
     close();
@@ -275,7 +276,7 @@ void TabGroupPopup::setupUi() {
 
   // 5. Action: Grubu kapat (Alt+Shift+W)
   auto *closeGroupBtn = createActionRow(this, createCloseGroupIcon(),
-                                        QStringLiteral("Grubu kapat"),
+                                        I18n::text(QStringLiteral("tabgroup.close_group")),
                                         QStringLiteral("Alt+Shift+W"));
   connect(closeGroupBtn, &QPushButton::clicked, this, [this] {
     const QUuid id = currentGroupId_;
@@ -291,7 +292,7 @@ void TabGroupPopup::setupUi() {
 
   // 6. Action: Grubu çöz
   auto *ungroupBtn = createActionRow(this, createUngroupIcon(),
-                                     QStringLiteral("Grubu çöz"));
+                                     I18n::text(QStringLiteral("tabgroup.ungroup")));
   connect(ungroupBtn, &QPushButton::clicked, this, [this] {
     const QUuid id = currentGroupId_;
     close();
@@ -301,7 +302,7 @@ void TabGroupPopup::setupUi() {
 
   // 7. Action: Grubu sil (opens confirmation dialog)
   auto *deleteGroupBtn = createActionRow(this, createDeleteGroupIcon(),
-                                         QStringLiteral("Grubu sil"),
+                                         I18n::text(QStringLiteral("tabgroup.delete_group")),
                                          QString(), true);
   connect(deleteGroupBtn, &QPushButton::clicked, this, [this] {
     showDeleteConfirmation();
@@ -315,7 +316,7 @@ void TabGroupPopup::setupUi() {
 
   // 8. Footer notice (matching Chrome reference)
   auto *footerLabel = new QLabel(
-      QStringLiteral("Sekme gruplarınız, oturum açılmış tüm cihazlarınızda otomatik olarak kaydedilip güncellenir. Sekmeler hakkında daha fazla bilgi"),
+      I18n::text(QStringLiteral("tabgroup.sync_notice")),
       this);
   footerLabel->setWordWrap(true);
   footerLabel->setStyleSheet(QStringLiteral("color: #9aa0a6; font-size: 11px; line-height: 14px; padding: 2px 4px;"));
@@ -416,12 +417,12 @@ void TabGroupPopup::showDeleteConfirmation() {
   layout->setContentsMargins(18, 18, 18, 18);
   layout->setSpacing(14);
 
-  auto *titleLabel = new QLabel(QStringLiteral("Sekme kapatılıp grup silinsin mi?"), &dialog);
+  auto *titleLabel = new QLabel(I18n::text(QStringLiteral("tabgroup.close_and_delete_title")), &dialog);
   titleLabel->setObjectName(QStringLiteral("title"));
   layout->addWidget(titleLabel);
 
   auto *bodyLabel = new QLabel(
-      QStringLiteral("Bu işlem gruptaki sekmeleri kapatır ve grup bilgisini siler."),
+      I18n::text(QStringLiteral("tabgroup.close_and_delete_desc")),
       &dialog);
   bodyLabel->setObjectName(QStringLiteral("body"));
   bodyLabel->setWordWrap(true);
@@ -430,13 +431,13 @@ void TabGroupPopup::showDeleteConfirmation() {
   auto *btnBox = new QHBoxLayout();
   btnBox->addStretch();
 
-  auto *cancelBtn = new QPushButton(QStringLiteral("İptal"), &dialog);
+  auto *cancelBtn = new QPushButton(I18n::text(QStringLiteral("common.cancel")), &dialog);
   cancelBtn->setObjectName(QStringLiteral("cancelBtn"));
   cancelBtn->setDefault(true);
   cancelBtn->setCursor(Qt::PointingHandCursor);
   btnBox->addWidget(cancelBtn);
 
-  auto *confirmDeleteBtn = new QPushButton(QStringLiteral("Grubu sil"), &dialog);
+  auto *confirmDeleteBtn = new QPushButton(I18n::text(QStringLiteral("tabgroup.delete_group")), &dialog);
   confirmDeleteBtn->setObjectName(QStringLiteral("deleteBtn"));
   confirmDeleteBtn->setCursor(Qt::PointingHandCursor);
   btnBox->addWidget(confirmDeleteBtn);

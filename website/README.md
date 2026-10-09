@@ -43,6 +43,22 @@ website/
 
 ---
 
+## Local preview
+
+Serve the directory over HTTP, the way GitHub Pages serves it:
+
+```bash
+scripts/preview-website.sh        # http://127.0.0.1:8000/  (/tr/, /ar/)
+```
+
+Do not preview by opening `website/index.html` as a file. Sandboxed browsers
+(Flatpak or Snap builds of Chrome, Firefox and others) receive only that one
+file through the desktop document portal, so `assets/` is missing and the page
+appears unstyled, without images. Every path in the site is relative, so the
+same files work under `http://127.0.0.1:8000/` and on GitHub Pages.
+
+---
+
 ## 3. Production Deployment: GitHub Pages
 
 The production site is published at `https://muhammed-dali.github.io/DaliNira-Browser/` by the repository's `website-pages.yml` workflow. The same deployment preserves the historical pacman repository files alongside the website.

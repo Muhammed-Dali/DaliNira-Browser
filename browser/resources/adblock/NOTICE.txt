@@ -1,12 +1,16 @@
-DaliNira DeliBlock includes bundled prebuilt DeliBlock ruleset JSON and scripting
-assets for local request filtering, cosmetic filtering, scriptlet execution, and
-developer inspection.
+DaliNira includes bundled prebuilt blocker ruleset JSON and scripting assets for
+local request filtering, cosmetic filtering, scriptlet execution, and developer
+inspection.
 
 Source snapshot:
-DeliBlock-compatible rulesets exported from a local reference checkout.
+uBlock Origin Lite-compatible rulesets exported from a local reference checkout.
+The exact generator/source commit for the pre-existing bulk snapshot is not
+recorded in this tree and requires human provenance review before redistribution.
 
 Included ruleset metadata:
 - ruleset-details.json
+- ruleset-attributions.json (immutable ID to official name, provider, source,
+  license status, and manual-review status)
 
 Included ruleset directories:
 - main/*.json
@@ -14,13 +18,15 @@ Included ruleset directories:
 - strictblock/*.json
 - scripting/generic/*.js
 - scripting/generichigh/*.css
-- scripting/specific/*.js
-- scripting/procedural/*.js
+- scripting/popup/*.js
+- scripting/specific/*.{js,json}
+- scripting/procedural/*.{js,json}
 - scripting/scriptlet/main/*.js
 - scripting/scriptlet/isolated/*.js
+- urlskip/*.json (packaged upstream data; not consumed by the native runtime)
 
 These rulesets originate from upstream filter-list build outputs adapted for
-DeliBlock. Keep this notice with the bundled resources and review upstream
+DaliNira. Keep this notice with the bundled resources and review upstream
 licenses before redistribution.
 
 uBlock Origin Lite generated assets:
@@ -30,11 +36,28 @@ uBlock Origin Lite generated assets:
 - Directly bundled content includes generated ruleset JSON, cosmetic filtering
   data, scriptlet bundles, and web-accessible resources under `rulesets/` and
   `web_accessible_resources/`.
+- `googletagmanager_gtm.js` is copied byte-for-byte from gorhill/uBlock commit
+  01092d95dbc7d91599a5ad017d5b98aba1118659, path
+  `src/web_accessible_resources/googletagmanager_gtm.js`, SHA-256
+  b60912f876edd2a2a4544dfad8ddd6e40d06c4e70cf7242b5deb86f0898faf20.
+  Its upstream GPLv3 notice is retained in the file.
 - `doubleclick_instream_ad_status.js` is also represented by the equivalent
   local, non-networking safe resource `window.google_ad_status = 1;`.
 - DaliNira's native request-filtering engine is a separate C++ implementation;
   this notice attributes the bundled third-party assets and does not define or
   replace DaliNira's main project license.
+- DaliNira does not embed or execute the uBlock Origin or uBO Lite browser
+  extension. Its native blocker consumes compatible, pre-generated ruleset and
+  cosmetic/scriptlet assets. The generated format and the underlying filter
+  list provider are distinct provenance layers.
+
+Filter-list attribution:
+- Official upstream list names remain visible in the Filter Lists UI.
+- Verified license data and upstream project/source links are recorded per
+  immutable ruleset ID in rulesets/ruleset-attributions.json.
+- Entries marked `reviewRequired: true` have no license conclusion recorded in
+  this snapshot. Their upstream project must be reviewed before redistribution;
+  the absence of a verified license is not permission to remove attribution.
 
 Adult-content domain protection:
 - Generated from the domain difference between StevenBlack unified hosts and
