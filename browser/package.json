@@ -4,6 +4,6 @@
   "private": true,
   "scripts": {
     "start": "node ../scripts/dev-linux.js",
-    "build": "cmake -S .. -B ../build -G Ninja && cmake --build ../build"
+    "build": "../scripts/build-dalinira.sh"
   }
 }

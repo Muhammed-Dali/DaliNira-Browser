@@ -30,6 +30,19 @@ for srcinfo in packaging/archlinux/.SRCINFO packaging/pacman/.SRCINFO packaging/
     fi
   done
 done
+# The private WebKitGTK runtime: the Arch source recipe builds the release
+# pinned in packaging/webkit-runtime/webkitgtk-runtime.env, with its checksum.
+# shellcheck source=../packaging/webkit-runtime/webkitgtk-runtime.env
+source packaging/webkit-runtime/webkitgtk-runtime.env
+if [ "$(sed -n 's/^_webkitver=//p' packaging/archlinux/PKGBUILD)" != "$WEBKITGTK_VERSION" ]; then
+  echo "packaging/archlinux/PKGBUILD: _webkitver differs from webkitgtk-runtime.env ($WEBKITGTK_VERSION)" >&2
+  status=1
+fi
+if ! grep -q "'${WEBKITGTK_SHA256}'" packaging/archlinux/PKGBUILD; then
+  echo "packaging/archlinux/PKGBUILD: the WebKitGTK checksum differs from webkitgtk-runtime.env" >&2
+  status=1
+fi
+
 # Packaged file names stay ASCII: makepkg's bsdtar cannot translate others
 # (e.g. a zero-width space) under every locale, and they are invisible.
 non_ascii="$(find browser/resources browser/assets i18n -print0 | LC_ALL=C grep -zP '[^\x20-\x7e]' | tr '\0' '\n' || true)"
@@ -75,6 +88,8 @@ while IFS= read -r contact_file; do
   [ -z "$contact_file" ] && continue
   case "$contact_file" in
     .github/workflows/aur-publish.yml|packaging/archlinux/PKGBUILD|packaging/aur/dalinira-bin/PKGBUILD|packaging/aur/dalinira/PKGBUILD|packaging/linux/cpack.cmake|packaging/pacman/PKGBUILD) ;;
+    # Authorship of DaliNira's WebKitGTK patches (their From: header).
+    packaging/webkit-runtime/patches/*.patch) ;;
     # Settings > About > Feedback > Send Email: the one in-app destination.
     browser/native/settings/feedback_links.cpp) ;;
     *)
@@ -94,6 +109,19 @@ while IFS= read -r sample_file; do
       ;;
   esac
 done < <(git grep -l -F -e "$sample_email" -- . || true)
+
+# The test-only system-WebKit switch must never reach a package or release
+# build. It is allowed in CMakeLists.txt, the CI test workflow and Markdown
+# documentation that explains it; recipes, scripts and release workflows fail.
+system_webkit_flag='DALINIRA_ALLOW_SYSTEM_WEBKIT_FOR_TESTS'
+system_webkit_matches="$(grep -rl --exclude='*.md' -F -e "$system_webkit_flag" -- \
+  packaging scripts .github/workflows/packages.yml .github/workflows/release.yml \
+  .github/workflows/aur-publish.yml .github/workflows/pacman-repo.yml 2>/dev/null | grep -v '^scripts/check-release-metadata\.sh$' || true)"
+if [ -n "$system_webkit_matches" ]; then
+  echo "$system_webkit_flag is test-only but appears in release/packaging files:" >&2
+  echo "$system_webkit_matches" >&2
+  status=1
+fi
 
 [ "$status" -eq 0 ] && echo "release metadata and contact email audit consistent: ${cmake_version}"
 exit "$status"

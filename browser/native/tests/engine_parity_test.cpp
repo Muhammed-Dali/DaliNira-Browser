@@ -29,7 +29,10 @@
 
 #include <QApplication>
 #include <QPointer>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QMenu>
+#include <QToolButton>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -42,6 +45,7 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QMap>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -69,6 +73,9 @@
 #include <QWebEngineScript>
 #include <QWebEngineView>
 #include <QWindow>
+#if defined(DALINIRA_TEST_QTEST)
+#include <QTest>
+#endif
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -109,6 +116,9 @@
 #include "onboarding/ready_step.h"
 #include "onboarding/search_privacy_step.h"
 #include "settings/settings_page.h"
+#include "core/keyboard_shortcut_service.h"
+#include "i18n/i18n.h"
+#include "i18n/language_manager.h"
 #include "session/session_store.h"
 #include "core/security_utils.h"
 #include "downloads/general_download_manager.h"
@@ -118,6 +128,7 @@
 #if defined(DALINIRA_BUILD_WEBKIT)
 #include "engine/webkit/webkit_backend.h"
 #include "engine/webkit/webkit_engine_profile.h"
+#include "engine/webkit/webkit_engine_view.h"
 #include <QtGui/qguiapplication_platform.h>
 #include <X11/Xlib.h>
 #if defined(DALINIRA_TEST_XTEST)
@@ -501,15 +512,18 @@ class LocalSite {
     } else if (path == QLatin1String("/media")) {
       body = html(QStringLiteral(
           "<!doctype html><title>Media</title><style>body{margin:0;background:#000}"
-          "video{width:480px;height:270px}</style>"
-          "<video id=v src='/clip.webm' muted autoplay playsinline></video>"
+          "video{width:480px;height:270px}#box:fullscreen video{width:100%;height:100%}</style>"
+          // A player container, as YouTube's: pages fullscreen it, not the <video>.
+          "<div id=box><video id=v src='/clip.webm' muted autoplay playsinline></video></div>"
           // Rewind before the 4 s clip ends: WebKitGTK 2.52.6 stalls for good
           // once a progressive clip wraps or replays from its end (upstream
           // bug, see webkit_media_test); this case is about fullscreen.
           "<script>v.addEventListener('timeupdate',()=>{if(v.currentTime>2.8)v.currentTime=0.2});"
           "window.__frames=0;(function tick(){window.__frames++;requestAnimationFrame(tick)})();</script>"
           "<button id=fs onclick=\"v.requestFullscreen().then(()=>window.__fs='ok',e=>window.__fs='err:'+e.name)\""
-          " style='position:fixed;left:0;top:300px;width:200px;height:60px'>fullscreen</button>"));
+          " style='position:fixed;left:0;top:300px;width:200px;height:60px'>fullscreen</button>"
+          "<button id=fsbox onclick=\"box.requestFullscreen().then(()=>window.__fs='ok',e=>window.__fs='err:'+e.name)\""
+          " style='position:fixed;left:0;top:370px;width:200px;height:60px'>player fullscreen</button>"));
     } else if (path == QLatin1String("/clip.webm")) {
       type = "video/webm";
       body = clip_;
@@ -1170,19 +1184,20 @@ bool playing(QWidget *page) {
   return advancing;
 }
 
-bool inPageFullscreen(QWidget *page) {
-  return text(page, QStringLiteral("String(document.fullscreenElement&&document.fullscreenElement.id)")) == QLatin1String("v");
+// `element`: the id of the element the page made fullscreen.
+bool inPageFullscreen(QWidget *page, const QString &element = QStringLiteral("v")) {
+  return text(page, QStringLiteral("String(document.fullscreenElement&&document.fullscreenElement.id)")) == element;
 }
 
 // The Fullscreen API needs a user activation. Tries the page script first,
 // then a real click on the page's fullscreen button (Chromium: input events
 // to its render widget, which are user input to the page).
-bool requestFullscreen(QWidget *page) {
-  evaluate(page, QStringLiteral("window.__fs='';document.getElementById('fs').click()"));
+bool requestFullscreen(QWidget *page, const QString &button = QStringLiteral("fs"), int buttonY = 330) {
+  evaluate(page, QStringLiteral("window.__fs='';document.getElementById('%1').click()").arg(button));
   if (waitUntil([&] { return text(page, QStringLiteral("window.__fs")) == QLatin1String("ok"); }, 2000)) return true;
   if (auto *webView = qobject_cast<QWebEngineView *>(page)) {
     QWidget *target = webView->focusProxy() ? webView->focusProxy() : webView;
-    const QPoint at(100, 330);
+    const QPoint at(100, buttonY);
     QMouseEvent press(QEvent::MouseButtonPress, at, target->mapToGlobal(at), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     QMouseEvent release(QEvent::MouseButtonRelease, at, target->mapToGlobal(at), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     QApplication::sendEvent(target, &press);
@@ -1215,29 +1230,46 @@ void runMediaCase(BrowserWindow &window, LocalSite &site, bool webkit) {
   result(QStringLiteral("media.control.shrink_playing"), playing(page));
 
   const QRect normalGeometry = window.geometry();
-  const auto enter = [&](const QString &name) {
-    CHECK(requestFullscreen(page));
+  // element: "v", the <video> itself (native controls' fullscreen button), or
+  // "box", its player container (YouTube's player).
+  const auto enter = [&](const QString &name, const QString &element = QStringLiteral("v")) {
+    if (element == QLatin1String("box")) CHECK(requestFullscreen(page, QStringLiteral("fsbox"), 400));
+    else CHECK(requestFullscreen(page));
     CHECK(waitUntil([&] { return window.isFullScreen(); }, 5000));
     CHECK(waitUntil([&] { return page->width() >= window.screen()->geometry().width() - 2; }, 5000));
-    result(name + QStringLiteral(".page_fullscreen"), inPageFullscreen(page));
+    result(name + QStringLiteral(".page_fullscreen"), inPageFullscreen(page, element));
     result(name + QStringLiteral(".chrome_hidden"), !omnibox->isVisible());
     result(name + QStringLiteral(".viewport_follows"),
            waitUntil([&] { return qAbs(evaluate(page, QStringLiteral("window.innerWidth")).toInt() - page->width()) <= 2; }, 5000));
-    result(name + QStringLiteral(".playing"), playing(page));
+    if (element == QLatin1String("v")) {
+      // WebKitGTK 2.54.1 (upstream regression, also in plain WebKitGTK on X11
+      // and Wayland): a <video> that is itself the fullscreen element stops
+      // advancing until fullscreen ends. Container fullscreen is unaffected
+      // and must keep playing (media.fs_container below).
+      knownDifference(name + QStringLiteral(".playing"), playing(page),
+                      QStringLiteral("WebKitGTK 2.54.1: <video> element fullscreen stops advancing (upstream)"));
+    } else {
+      result(name + QStringLiteral(".playing"), playing(page));
+    }
   };
-  const auto left = [&](const QString &name, bool maximized) {
+  const auto left = [&](const QString &name, bool maximized, QSize normalSize = QSize()) {
+    if (!normalSize.isValid()) normalSize = normalGeometry.size();
     CHECK(waitUntil([&] { return !window.isFullScreen(); }, 5000));
-    result(name + QStringLiteral(".page_left_fullscreen"), waitUntil([&] { return !inPageFullscreen(page); }, 3000));
+    result(name + QStringLiteral(".page_left_fullscreen"),
+           waitUntil([&] { return text(page, QStringLiteral("String(document.fullscreenElement)")) == QLatin1String("null"); }, 3000));
     result(name + QStringLiteral(".chrome_visible"), waitUntil([&] { return omnibox->isVisible(); }, 3000));
     if (maximized) result(name + QStringLiteral(".restored_maximized"), waitUntil([&] { return window.isMaximized(); }, 5000));
-    else result(name + QStringLiteral(".restored_size"), waitUntil([&] { return window.size() == normalGeometry.size(); }, 5000));
-    // WebKitGTK 2.52.6: a video that leaves element fullscreen stops
-    // advancing (readyState 2, not paused, rendering continues; a seek does
-    // not recover it, entering fullscreen again does). Upstream media
-    // pipeline, not the embedding: resizing alone, the fullscreen handshake
-    // and page rendering were ruled out.
-    knownDifference(name + QStringLiteral(".playing"), playing(page),
-                    QStringLiteral("WebKitGTK 2.52.6 video stalls after leaving element fullscreen"));
+    else {
+      const bool restored = waitUntil([&] { return window.size() == normalSize; }, 5000);
+      if (!restored) {
+        log(QStringLiteral("[DIAG] window %1x%2 after fullscreen, expected %3x%4")
+                .arg(window.width()).arg(window.height()).arg(normalSize.width()).arg(normalSize.height()));
+      }
+      result(name + QStringLiteral(".restored_size"), restored);
+    }
+    // Playback goes on once fullscreen ends, on both engines (WebKitGTK 2.52.6
+    // used to stall here; 2.54.1 resumes).
+    result(name + QStringLiteral(".playing"), playing(page));
     page->setFocus(Qt::MouseFocusReason);
     result(name + QStringLiteral(".page_focus"), waitUntil([&] {
       QWidget *focus = QApplication::focusWidget();
@@ -1264,6 +1296,19 @@ void runMediaCase(BrowserWindow &window, LocalSite &site, bool webkit) {
   left(QStringLiteral("media.fs3.from_maximized"), true);
   window.showNormal();
   CHECK(waitUntil([&] { return !window.isMaximized(); }, 5000));
+
+  // The player container fullscreen, as YouTube does: plays on both engines.
+  // Let the window settle back to its normal size first (it reports the
+  // maximized size for a moment after showNormal()).
+  if (!waitUntil([&] { return window.size() == normalGeometry.size(); }, 5000)) {
+    log(QStringLiteral("[DIAG] window %1x%2 after showNormal(), normal %3x%4")
+            .arg(window.width()).arg(window.height())
+            .arg(normalGeometry.width()).arg(normalGeometry.height()));
+  }
+  const QSize beforeContainer = window.size();
+  enter(QStringLiteral("media.fs_container"), QStringLiteral("box"));
+  evaluate(page, QStringLiteral("document.exitFullscreen()"));
+  left(QStringLiteral("media.fs_container.page_exit"), false, beforeContainer);
 
   // Closing the tab that is fullscreen gives the window back.
   window.addNewTab(QUrl(site.a() + QStringLiteral("/media")));
@@ -1322,8 +1367,15 @@ QString layoutState(BrowserWindow &window) {
   QStackedWidget *stack = pageStack(window);
   const bool strip = window.tabStrip() && window.tabStrip()->isVisible();
   if (!panel || !stack) return QStringLiteral("broken");
-  if (!panel->isVisible()) return strip ? QStringLiteral("classic") : QStringLiteral("no-tabs");
+  const auto *controller = window.layoutController();
+  const bool floating = controller && controller->isFloatingPanelEnabled();
+  // Auto-hide (docked layouts): "collapsed" (page full width) or "revealed"
+  // (over the page); the floating layout keeps its own names.
+  if (!panel->isVisible())
+    return strip ? QStringLiteral("classic") : floating ? QStringLiteral("floating-hidden") : QStringLiteral("collapsed");
   if (strip) return QStringLiteral("panel+strip");
+  if (!floating && controller && controller->sidePanelState() == dalinira::layout::SidePanelState::Revealed)
+    return QStringLiteral("revealed");
   const QRect p = panel->geometry();
   const QRect s = stack->geometry();
   if (p.right() < 0) return QStringLiteral("floating-hidden");
@@ -2122,11 +2174,9 @@ void runLayoutCase(BrowserWindow &window, BrowserProfileService &profileService,
   // Floating: the page fills the body; the panel slides in from the left edge
   // over the page, and away again.
   BrowserSidePanel *panel = sidePanel(window);
-  auto *pointerPoll = window.findChild<QTimer *>(QStringLiteral("floatingPanelPointerPoll"));
-  expect(QStringLiteral("layout.floating.pointer_poll"), pointerPoll && pointerPoll->isActive());
-  // From here the pointer is synthetic; the poll would follow the desktop's
-  // real pointer instead.
-  if (pointerPoll) pointerPoll->stop();
+  // Edge reveal is event-driven (Qt moves; GTK moves over a WebKit page): no poll.
+  expect(QStringLiteral("layout.floating.no_pointer_poll"),
+         !window.findChild<QTimer *>(QStringLiteral("floatingPanelPointerPoll")));
   expect(QStringLiteral("layout.floating.page_fills_body"),
          pageStack(window)->geometry() == bodyContainer(window)->rect());
   hoverBody(window, 3);
@@ -2146,9 +2196,8 @@ void runLayoutCase(BrowserWindow &window, BrowserProfileService &profileService,
   // Reduced motion: the same reveal is immediate.
   QSettings().setValue(QStringLiteral("ui/reduceMotion"), true);
   switchLayout(QStringLiteral("classic"), QStringLiteral("classic"));
-  expect(QStringLiteral("layout.classic.no_pointer_poll"), pointerPoll && !pointerPoll->isActive());
+  expect(QStringLiteral("layout.classic.no_pointer_poll"), !window.findChild<QTimer *>(QStringLiteral("floatingPanelPointerPoll")));
   switchLayout(QStringLiteral("floating_panel"), QStringLiteral("floating-hidden"));
-  if (pointerPoll) pointerPoll->stop();
   hoverBody(window, 3);
   expect(QStringLiteral("layout.reduced_motion.immediate"), panel->geometry().x() == 8);
   hoverBody(window, panel->width() + 120);
@@ -2162,7 +2211,7 @@ void runLayoutCase(BrowserWindow &window, BrowserProfileService &profileService,
     const QString prefix = QStringLiteral("theme.") + id;
     expect(prefix + QStringLiteral(".chrome"), lightChrome(window) == light);
     expect(prefix + QStringLiteral(".side_panel"), panel->styleSheet().contains(light ? QStringLiteral("#f3f6fa")
-                                                                                      : QStringLiteral("#121922")));
+                                                                                      : QStringLiteral("rgba(6, 8, 11")));
     expect(prefix + QStringLiteral(".page_intact"), pageIntact(window, live, site));
   };
   switchTheme(QStringLiteral("dark"), false);
@@ -2213,7 +2262,9 @@ void runLayoutCase(BrowserWindow &window, BrowserProfileService &profileService,
       destination->show();
       CHECK(window.transferTabTo(window.tabInfo(index).id, destination, 0));
     }
-    BrowserWindow *detached = nullptr;
+    // A window the panel detaches closes and deletes itself once its last
+    // tab moves back (BrowserWindow::createWindow), hence the guarded pointer.
+    QPointer<BrowserWindow> detached;
     CHECK(waitUntil([&] { return (detached = otherWindow()) && detached->tabCount() == 1; }, 5000));
     CHECK(waitUntil([&] { return detached->windowHandle() && detached->windowHandle()->isExposed(); }, 5000));
     settle(500);
@@ -2242,14 +2293,14 @@ void runLayoutCase(BrowserWindow &window, BrowserProfileService &profileService,
       CHECK(detached->transferTabTo(detached->tabInfo(0).id, &window, 0));
     }
     if (recreatesNativeView) {
-      CHECK(waitUntil([&] { return window.tabCount() >= 1 && !detached->isVisible(); }, 5000));
+      CHECK(waitUntil([&] { return window.tabCount() >= 1 && (!detached || !detached->isVisible()); }, 5000));
       QWidget *recreated = tabContent(window, 0);
       CHECK(recreated && waitUntil([&] {
         return !text(recreated, QStringLiteral("window.__id")).isEmpty();
       }, 5000));
       live = {recreated, text(recreated, QStringLiteral("window.__id"))};
     } else {
-      CHECK(waitUntil([&] { return indexOfPage(window, live.widget) == 0 && !detached->isVisible(); }, 5000));
+      CHECK(waitUntil([&] { return indexOfPage(window, live.widget) == 0 && (!detached || !detached->isVisible()); }, 5000));
     }
     settle(500);
     expect(prefix + QStringLiteral(".reattached.page_loaded"), pageLoadedOnce(window, live));
@@ -2260,7 +2311,7 @@ void runLayoutCase(BrowserWindow &window, BrowserProfileService &profileService,
     expect(prefix + QStringLiteral(".reattached.in_sync"), tabViewsInSync(window));
     expect(prefix + QStringLiteral(".reattached.title_follows"), titleFollows(window, prefix + QStringLiteral(" back")));
     expect(prefix + QStringLiteral(".reattached.page_active"), currentPage(window) == live.widget && live.widget->isVisible());
-    detached->deleteLater();
+    if (detached) detached->deleteLater();
     settle(300);
   };
   detachAndReattach(QStringLiteral("tabs.vertical"), true);
@@ -2467,6 +2518,749 @@ void runAuditCase(BrowserWindow &window, BrowserProfileService &profileService, 
 }
 
 // ---------------------------------------------------------------------------
+// Keyboard shortcuts: one shared registry, edited in Settings, applied to the
+// window's QShortcuts at once and reaching them from either engine's page.
+// ---------------------------------------------------------------------------
+
+using dalinira::KeyboardShortcutService;
+
+QPushButton *shortcutControl(QWidget *root, const QString &name, const QString &actionId) {
+  for (QPushButton *button : root->findChildren<QPushButton *>(name))
+    if (button->property("shortcutAction").toString() == actionId) return button;
+  return nullptr;
+}
+
+int shortcutOwners(BrowserWindow &window, const QKeySequence &key) {
+  int owners = 0;
+  for (QShortcut *shortcut : window.findChildren<QShortcut *>())
+    if (shortcut->isEnabled() && shortcut->keys().contains(key)) ++owners;
+  return owners;
+}
+
+// Answers the next DaliNira confirmation named `name` (a QMessageBox run with
+// exec()) by pressing its "-accept" or "-cancel" button; returns whether it
+// appeared. Arm it before the action that opens the dialog.
+struct DialogAnswer {
+  bool seen = false;
+};
+std::shared_ptr<DialogAnswer> answerDialog(const QString &name, const QString &choice) {
+  auto answer = std::make_shared<DialogAnswer>();
+  auto *timer = new QTimer(qApp);
+  timer->setInterval(50);
+  auto *elapsed = new QElapsedTimer;
+  elapsed->start();
+  QObject::connect(timer, &QTimer::timeout, timer, [timer, elapsed, answer, name, choice] {
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+      if (widget->objectName() != name || !widget->isVisible()) continue;
+      if (auto *button = widget->findChild<QPushButton *>(name + QLatin1Char('-') + choice)) {
+        answer->seen = true;
+        timer->stop();
+        timer->deleteLater();
+        delete elapsed;
+        button->click();
+        return;
+      }
+    }
+    if (elapsed->elapsed() > 10000) {
+      timer->stop();
+      timer->deleteLater();
+      delete elapsed;
+    }
+  });
+  timer->start();
+  return answer;
+}
+
+void sendKey(QWidget *target, int key, Qt::KeyboardModifiers modifiers) {
+  QKeyEvent press(QEvent::KeyPress, key, modifiers);
+  QApplication::sendEvent(target, &press);
+  QKeyEvent release(QEvent::KeyRelease, key, modifiers);
+  QApplication::sendEvent(target, &release);
+}
+
+// Starts capture on a row's shortcut control and records one combination.
+void captureShortcut(QPushButton *edit, int key, Qt::KeyboardModifiers modifiers) {
+  edit->click();
+  sendKey(edit, key, modifiers);
+  settle(50);
+}
+
+#if defined(DALINIRA_TEST_QTEST)
+// A real Qt key event (shortcut override, then the shortcut map), as typing
+// into `target` delivers it. Window shortcuts need the window to be active.
+bool qtKeyPath(BrowserWindow &window, QWidget *target, int key, Qt::KeyboardModifiers modifiers) {
+  window.activateWindow();
+  if (!waitUntil([&] { return window.isActiveWindow(); }, 2000)) return false;
+  QTest::keyClick(target, static_cast<Qt::Key>(key), modifiers);
+  return true;
+}
+#endif
+
+// DALINIRA_SHORTCUTS_SHOT_DIR: renders the Keyboard Shortcuts section in
+// process (widget grab, no screen capture) for a visual review.
+void shotSection(QWidget *section, const QString &name, bool webkit) {
+  const QString dir = qEnvironmentVariable("DALINIRA_SHORTCUTS_SHOT_DIR");
+  if (dir.isEmpty() || !section) return;
+  settle(150);
+  const QString out = QDir(dir).filePath(QStringLiteral("%1-%2.png").arg(name, webkit ? QStringLiteral("webkit") : QStringLiteral("chromium")));
+  section->grab().save(out);
+  log(QStringLiteral("[SHOT] %1").arg(out));
+}
+
+void runShortcutsCase(BrowserWindow &window, bool webkit) {
+  KeyboardShortcutService &service = KeyboardShortcutService::instance();
+  service.resetAll();
+  const QKeySequence ctrlT(Qt::CTRL | Qt::Key_T);
+  const QKeySequence ctrlW(Qt::CTRL | Qt::Key_W);
+  const QKeySequence custom(Qt::CTRL | Qt::SHIFT | Qt::Key_Y);
+  const QString newTabId = QStringLiteral("tabs.new");
+
+  // Every registered action is a real window action with exactly its keys.
+  bool everyActionBound = true;
+  for (const auto &definition : KeyboardShortcutService::registry()) {
+    QShortcut *shortcut = window.shortcutForAction(definition.id);
+    if (!shortcut || shortcut->keys() != service.shortcuts(definition.id)) {
+      log(QStringLiteral("action without its binding: %1").arg(definition.id));
+      everyActionBound = false;
+    }
+  }
+  expect(QStringLiteral("shortcuts.every_action_bound"), everyActionBound);
+  expect(QStringLiteral("shortcuts.single_handler_per_key"), shortcutOwners(window, ctrlT) == 1);
+  bool editingKeysFree = true;
+  for (Qt::Key key : {Qt::Key_C, Qt::Key_V, Qt::Key_X, Qt::Key_A, Qt::Key_Z})
+    editingKeysFree = editingKeysFree && shortcutOwners(window, QKeySequence(Qt::CTRL | key)) == 0;
+  expect(QStringLiteral("shortcuts.editing_keys_unbound"), editingKeysFree);
+  const int shortcutObjects = window.findChildren<QShortcut *>().size();
+
+  // The shared New Tab action through its default binding; the workspace's
+  // engine decides what the tab is.
+  QShortcut *newTab = window.shortcutForAction(newTabId);
+  CHECK(newTab);
+  int before = window.tabCount();
+  QMetaObject::invokeMethod(newTab, "activated", Qt::DirectConnection);
+  expect(QStringLiteral("shortcuts.new_tab_action"), waitUntil([&] { return window.tabCount() == before + 1; }, 5000));
+  settle(300);
+  expect(QStringLiteral("shortcuts.new_tab_once"), window.tabCount() == before + 1);
+  const int webTab = currentIndex(window);
+  const BrowserTabInfo &created = window.tabInfo(webTab);
+  expect(QStringLiteral("shortcuts.new_tab_uses_workspace_engine"),
+         webkit ? (created.engineView && created.engineView->engineType() == EngineType::WebKit)
+                : (created.view != nullptr || (created.engineView && created.engineView->engineType() == EngineType::Chromium)));
+  settle(500);
+
+  // Settings → Keyboard Shortcuts.
+  window.showSettings(SettingsPage::Category::Shortcuts);
+  auto *settings = internalPage<SettingsPage>(window, QStringLiteral("settings"));
+  CHECK(settings);
+  QPushButton *edit = shortcutControl(settings, QStringLiteral("settings-shortcut-edit"), newTabId);
+  QPushButton *reset = shortcutControl(settings, QStringLiteral("settings-shortcut-reset"), newTabId);
+  CHECK(edit && reset);
+  // The row (label | pill) and its inline message, as on Zen's page.
+  QWidget *newTabRow = edit;
+  while (newTabRow && newTabRow->objectName() != QLatin1String("settings-shortcut-row")) newTabRow = newTabRow->parentWidget();
+  CHECK(newTabRow);
+  auto *message = newTabRow->findChild<QLabel *>(QStringLiteral("settings-shortcut-message"));
+  auto *rowTitle = newTabRow->findChild<QLabel *>(QStringLiteral("settings-shortcut-label"));
+  CHECK(message && rowTitle);
+  // Flat groups with a divider, no cards; the page names every group.
+  int groupHeaders = 0;
+  for (QLabel *header : settings->findChildren<QLabel *>(QStringLiteral("settings-shortcut-group")))
+    if (header->isVisible()) ++groupHeaders;
+  QWidget *section = newTabRow;
+  while (section && section->objectName() != QLatin1String("settings-section")) section = section->parentWidget();
+  CHECK(section);
+  expect(QStringLiteral("shortcuts.zen_layout"), groupHeaders == KeyboardShortcutService::categories().size()
+         && section->findChildren<QFrame *>(QStringLiteral("settings-shortcut-divider")).size() == groupHeaders
+         && section->findChildren<QFrame *>(QStringLiteral("settings-card")).isEmpty());
+  shotSection(section, QStringLiteral("shortcuts-default"), webkit);
+  CHECK(waitUntil([&] { return edit->isVisible(); }, 3000));
+  expect(QStringLiteral("shortcuts.settings_page_opens"), edit->isVisible() && !reset->isVisible());
+  expect(QStringLiteral("shortcuts.settings_shows_default"),
+         edit->text() == KeyboardShortcutService::displayText(ctrlT) && edit->accessibleName().contains(edit->text()));
+  int rows = 0;
+  for (const auto &definition : KeyboardShortcutService::registry())
+    if (shortcutControl(settings, QStringLiteral("settings-shortcut-edit"), definition.id)) ++rows;
+  expect(QStringLiteral("shortcuts.settings_lists_every_action"), rows == KeyboardShortcutService::registry().size());
+
+  // Capture: Enter starts it, Esc cancels, a lone modifier keeps waiting, and
+  // plain or editing keys are refused with a message.
+  edit->setFocus();
+  sendKey(edit, Qt::Key_Return, Qt::NoModifier);
+  const bool enterStarts = edit->property("capturing").toBool();
+  sendKey(edit, Qt::Key_Escape, Qt::NoModifier);
+  expect(QStringLiteral("shortcuts.enter_starts_esc_cancels"),
+         enterStarts && !edit->property("capturing").toBool() && service.shortcuts(newTabId) == QList<QKeySequence>{ctrlT});
+  edit->click();
+  sendKey(edit, Qt::Key_Control, Qt::ControlModifier);
+  expect(QStringLiteral("shortcuts.modifier_only_waits"), edit->property("capturing").toBool());
+  shotSection(newTabRow, QStringLiteral("shortcuts-recording"), webkit);
+  sendKey(edit, Qt::Key_K, Qt::NoModifier);
+  expect(QStringLiteral("shortcuts.plain_key_refused"), !edit->property("capturing").toBool()
+         && message->isVisible() && message->property("error").toBool() && service.shortcuts(newTabId) == QList<QKeySequence>{ctrlT});
+  captureShortcut(edit, Qt::Key_C, Qt::ControlModifier);
+  expect(QStringLiteral("shortcuts.editing_key_refused"), message->property("error").toBool()
+         && service.shortcuts(newTabId) == QList<QKeySequence>{ctrlT});
+  // Ctrl+Alt is AltGr on many layouts (Turkish Ctrl+Alt+Q types "@").
+  captureShortcut(edit, Qt::Key_Q, Qt::ControlModifier | Qt::AltModifier);
+  expect(QStringLiteral("shortcuts.altgr_refused"), message->property("error").toBool()
+         && message->text() == I18n::text(QStringLiteral("shortcuts.error_altgr"))
+         && service.shortcuts(newTabId) == QList<QKeySequence>{ctrlT});
+  shotSection(newTabRow, QStringLiteral("shortcuts-error"), webkit);
+  // A held key repeats; a repeat never records a combination.
+  edit->click();
+  QKeyEvent repeat(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier, QString(), /*autorep=*/true);
+  QApplication::sendEvent(edit, &repeat);
+  expect(QStringLiteral("shortcuts.autorepeat_ignored"), edit->property("capturing").toBool()
+         && service.shortcuts(newTabId) == QList<QKeySequence>{ctrlT});
+  sendKey(edit, Qt::Key_Escape, Qt::NoModifier);
+  // Shift that only selected a symbol is not part of the binding.
+  QPushButton *duplicate = shortcutControl(settings, QStringLiteral("settings-shortcut-edit"), QStringLiteral("tabs.duplicate"));
+  CHECK(duplicate);
+  captureShortcut(duplicate, Qt::Key_Underscore, Qt::ControlModifier | Qt::ShiftModifier);
+  expect(QStringLiteral("shortcuts.shift_symbol_recorded_as_symbol"),
+         service.shortcuts(QStringLiteral("tabs.duplicate")) == QList<QKeySequence>{QKeySequence(Qt::CTRL | Qt::Key_Underscore)}
+             && duplicate->text() == QStringLiteral("Ctrl+_"));
+  captureShortcut(duplicate, Qt::Key_Backspace, Qt::NoModifier);
+
+  // A new binding applies at once; the old one stops; still one handler.
+  captureShortcut(edit, Qt::Key_Y, Qt::ControlModifier | Qt::ShiftModifier);
+  expect(QStringLiteral("shortcuts.assigned"), service.shortcuts(newTabId) == QList<QKeySequence>{custom});
+  expect(QStringLiteral("shortcuts.applied_immediately"), newTab->keys() == QList<QKeySequence>{custom});
+  expect(QStringLiteral("shortcuts.old_key_released"), shortcutOwners(window, ctrlT) == 0 && shortcutOwners(window, custom) == 1);
+  expect(QStringLiteral("shortcuts.row_marked_custom"), edit->property("customized").toBool() && reset->isVisible()
+         && edit->text() == KeyboardShortcutService::displayText(custom));
+  // Friendly, stable key names in every shortcut UI: the row, menu hints and
+  // toolbar tooltips (never the desktop's "Kontrol+Üst Karakter").
+  const QString friendly = QString::fromUtf8("Ctrl+⇧+Y");
+  auto *backButton = window.findChild<QToolButton *>(QStringLiteral("backBtn"));
+  expect(QStringLiteral("shortcuts.friendly_key_names"), edit->text() == friendly
+         && BrowserWindow::shortcutMenuHint(newTabId) == QStringLiteral("\t") + friendly
+         && (!backButton || backButton->toolTip().contains(QString::fromUtf8("Alt+←"))));
+  shotSection(section, QStringLiteral("shortcuts-custom"), webkit);
+  expect(QStringLiteral("shortcuts.no_handler_growth"), window.findChildren<QShortcut *>().size() == shortcutObjects);
+
+  // The page's key path. WebKit: the GTK key-press handler of the page;
+  // Chromium: Qt's shortcut map behind QtWebEngine's ShortcutOverride.
+#if defined(DALINIRA_BUILD_WEBKIT)
+  if (webkit) {
+    auto *page = qobject_cast<dalinira::engine::WebKitEngineView *>(window.tabInfo(webTab).engineView.data());
+    CHECK(page);
+    before = window.tabCount();
+    const bool newKey = page->dispatchBrowserShortcutForTesting(GDK_KEY_Y, GDK_CONTROL_MASK | GDK_SHIFT_MASK)
+        && waitUntil([&] { return window.tabCount() == before + 1; }, 5000);
+    settle(300);
+    expect(QStringLiteral("shortcuts.page_key_path_new_binding"), newKey && window.tabCount() == before + 1);
+    expect(QStringLiteral("shortcuts.page_key_path_old_binding_ignored"),
+           !page->dispatchBrowserShortcutForTesting(GDK_KEY_t, GDK_CONTROL_MASK));
+    expect(QStringLiteral("shortcuts.page_keeps_editing_keys"),
+           !page->dispatchBrowserShortcutForTesting(GDK_KEY_c, GDK_CONTROL_MASK)
+               && !page->dispatchBrowserShortcutForTesting(GDK_KEY_a, GDK_CONTROL_MASK));
+    // Ctrl+Shift+= types "+" through GTK: it reaches the default "Ctrl++"
+    // zoom binding, as Qt's shortcut map does for typed keys.
+    // Zoom acts on the current tab: make it the page that receives the key.
+    window.switchTab(webTab);
+    const qreal zoom = page->zoomFactor();
+    page->dispatchBrowserShortcutForTesting(GDK_KEY_plus, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+    waitUntil([&] { return page->zoomFactor() > zoom; }, 2000);
+    result(QStringLiteral("shortcuts.page_zoom_in_binding"), page->zoomFactor() > zoom);
+    page->setZoomFactor(zoom);
+  }
+#endif
+#if defined(DALINIRA_TEST_QTEST)
+  if (!webkit) {
+    QWidget *page = tabContent(window, webTab);
+    QWidget *target = page && page->focusProxy() ? page->focusProxy() : page;
+    CHECK(target);
+    window.switchTab(webTab);
+    before = window.tabCount();
+    if (qtKeyPath(window, target, Qt::Key_Y, Qt::ControlModifier | Qt::ShiftModifier)) {
+      const bool newKey = waitUntil([&] { return window.tabCount() == before + 1; }, 5000);
+      settle(300);
+      expect(QStringLiteral("shortcuts.page_key_path_new_binding"), newKey && window.tabCount() == before + 1);
+      const int afterNew = window.tabCount();
+      window.switchTab(webTab);
+      qtKeyPath(window, target, Qt::Key_T, Qt::ControlModifier);
+      settle(300);
+      expect(QStringLiteral("shortcuts.page_key_path_old_binding_ignored"), window.tabCount() == afterNew);
+    } else {
+      knownDifference(QStringLiteral("shortcuts.page_key_path_new_binding"), false,
+                      QStringLiteral("the desktop kept another window active"));
+      knownDifference(QStringLiteral("shortcuts.page_key_path_old_binding_ignored"), false,
+                      QStringLiteral("the desktop kept another window active"));
+    }
+    // QtWebEngine keeps editing commands for the page; no browser shortcut
+    // could take them in any case.
+    expect(QStringLiteral("shortcuts.page_keeps_editing_keys"),
+           shortcutOwners(window, QKeySequence(Qt::CTRL | Qt::Key_C)) == 0
+               && shortcutOwners(window, QKeySequence(Qt::CTRL | Qt::Key_A)) == 0);
+    const qreal zoom = window.currentView() ? window.currentView()->zoomFactor() : 1.0;
+    if (qtKeyPath(window, target, Qt::Key_Plus, Qt::ControlModifier)) {
+      waitUntil([&] { return window.currentView() && window.currentView()->zoomFactor() > zoom; }, 2000);
+      result(QStringLiteral("shortcuts.page_zoom_in_binding"),
+             window.currentView() && window.currentView()->zoomFactor() > zoom);
+    } else {
+      knownDifference(QStringLiteral("shortcuts.page_zoom_in_binding"), false,
+                      QStringLiteral("the desktop kept another window active"));
+    }
+    if (window.currentView()) window.currentView()->setZoomFactor(zoom);
+  }
+#else
+  if (!webkit) {
+    for (const char *name : {"shortcuts.page_key_path_new_binding", "shortcuts.page_key_path_old_binding_ignored",
+                             "shortcuts.page_zoom_in_binding"})
+      knownDifference(QString::fromLatin1(name), false, QStringLiteral("built without QtTest"));
+    expect(QStringLiteral("shortcuts.page_keeps_editing_keys"),
+           shortcutOwners(window, QKeySequence(Qt::CTRL | Qt::Key_C)) == 0
+               && shortcutOwners(window, QKeySequence(Qt::CTRL | Qt::Key_A)) == 0);
+  }
+#endif
+
+  // The address bar keeps its own editing keys.
+  auto *omnibox = window.findChild<QLineEdit *>(QStringLiteral("omnibox"));
+  CHECK(omnibox);
+  omnibox->setText(QStringLiteral("dalinira shortcut check"));
+  omnibox->deselect();
+#if defined(DALINIRA_TEST_QTEST)
+  QTest::keyClick(omnibox, Qt::Key_A, Qt::ControlModifier);
+#else
+  sendKey(omnibox, Qt::Key_A, Qt::ControlModifier);
+#endif
+  expect(QStringLiteral("shortcuts.address_bar_select_all"), omnibox->selectedText() == omnibox->text());
+  omnibox->clear();
+
+  // Back to Settings for the conflict, reset and clear flows.
+  window.showSettings(SettingsPage::Category::Shortcuts);
+  CHECK(waitUntil([&] { return edit->isVisible(); }, 3000));
+  auto cancelled = answerDialog(QStringLiteral("settings-shortcut-conflict"), QStringLiteral("cancel"));
+  captureShortcut(edit, Qt::Key_W, Qt::ControlModifier);
+  expect(QStringLiteral("shortcuts.conflict_dialog_shown"), cancelled->seen);
+  expect(QStringLiteral("shortcuts.conflict_cancel_changes_nothing"),
+         service.shortcuts(newTabId) == QList<QKeySequence>{custom}
+             && service.shortcuts(QStringLiteral("tabs.close")) == QList<QKeySequence>{ctrlW});
+  auto reassigned = answerDialog(QStringLiteral("settings-shortcut-conflict"), QStringLiteral("accept"));
+  captureShortcut(edit, Qt::Key_W, Qt::ControlModifier);
+  QShortcut *closeTab = window.shortcutForAction(QStringLiteral("tabs.close"));
+  expect(QStringLiteral("shortcuts.conflict_reassign_moves_key"), reassigned->seen
+         && service.shortcuts(newTabId) == QList<QKeySequence>{ctrlW}
+         && service.shortcuts(QStringLiteral("tabs.close")).isEmpty()
+         && closeTab && !closeTab->isEnabled() && shortcutOwners(window, ctrlW) == 1);
+  log(QStringLiteral("inline message after reassign: %1").arg(message->text()));
+
+  // Reset one: tabs.close wants Ctrl+W back from tabs.new (confirmed).
+  QPushButton *resetClose = shortcutControl(settings, QStringLiteral("settings-shortcut-reset"), QStringLiteral("tabs.close"));
+  CHECK(resetClose);
+  auto restored = answerDialog(QStringLiteral("settings-shortcut-reset-conflict"), QStringLiteral("accept"));
+  resetClose->click();
+  settle(50);
+  expect(QStringLiteral("shortcuts.reset_one_takes_default_back"), restored->seen
+         && service.shortcuts(QStringLiteral("tabs.close")) == QList<QKeySequence>{ctrlW}
+         && service.shortcuts(newTabId).isEmpty() && closeTab->isEnabled());
+  reset->click();
+  settle(50);
+  expect(QStringLiteral("shortcuts.reset_one"), service.shortcuts(newTabId) == QList<QKeySequence>{ctrlT}
+         && !service.isCustomized(newTabId) && newTab->keys() == QList<QKeySequence>{ctrlT} && !reset->isVisible());
+
+  // Backspace removes a shortcut.
+  QPushButton *fullscreen = shortcutControl(settings, QStringLiteral("settings-shortcut-edit"), QStringLiteral("window.fullscreen"));
+  CHECK(fullscreen);
+  captureShortcut(fullscreen, Qt::Key_Backspace, Qt::NoModifier);
+  expect(QStringLiteral("shortcuts.backspace_clears"), service.shortcuts(QStringLiteral("window.fullscreen")).isEmpty()
+         && shortcutOwners(window, QKeySequence(Qt::Key_F11)) == 0
+         && fullscreen->text() == I18n::text(QStringLiteral("shortcuts.not_set")));
+
+  // Persisted in the profile: a fresh reader (a restart) sees the same keys.
+  captureShortcut(edit, Qt::Key_Y, Qt::ControlModifier | Qt::ShiftModifier);
+  {
+    KeyboardShortcutService restarted;
+    expect(QStringLiteral("shortcuts.persisted_in_profile"),
+           restarted.shortcuts(newTabId) == QList<QKeySequence>{custom}
+               && restarted.shortcuts(QStringLiteral("window.fullscreen")).isEmpty());
+  }
+
+  // Arabic: translated labels, chrome stays left-to-right and usable.
+  auto &languages = dalinira::i18n::LanguageManager::instance();
+  const QString previousLanguage = languages.languagePreference();
+  languages.setLanguagePreference(QStringLiteral("ar"));
+  settle(300);
+  const QRect editInRow(edit->mapTo(newTabRow, QPoint(0, 0)), edit->size());
+  expect(QStringLiteral("shortcuts.arabic_labels"),
+         rowTitle->text() == languages.translateIn(QStringLiteral("ar"), QStringLiteral("shortcuts.action.tabs_new"))
+             && edit->text() == KeyboardShortcutService::displayText(custom)
+             && edit->accessibleName().contains(rowTitle->text()));
+  expect(QStringLiteral("shortcuts.arabic_layout_usable"), settings->layoutDirection() == Qt::LeftToRight
+         && edit->isVisible() && newTabRow->rect().contains(editInRow) && rowTitle->width() > 0
+         && rowTitle->geometry().right() < editInRow.left());
+  shotSection(section, QStringLiteral("shortcuts-arabic"), webkit);
+  languages.setLanguagePreference(previousLanguage);
+  settle(200);
+
+  // Reset all asks first; Cancel keeps the custom keys.
+  auto *resetAll = settings->findChild<QPushButton *>(QStringLiteral("settings-shortcuts-reset-all"));
+  CHECK(resetAll && resetAll->isEnabled());
+  auto keep = answerDialog(QStringLiteral("settings-shortcuts-reset-all-confirm"), QStringLiteral("cancel"));
+  resetAll->click();
+  settle(50);
+  expect(QStringLiteral("shortcuts.reset_all_needs_confirmation"), keep->seen && service.customizedCount() == 2);
+  auto confirmAll = answerDialog(QStringLiteral("settings-shortcuts-reset-all-confirm"), QStringLiteral("accept"));
+  resetAll->click();
+  settle(50);
+  bool defaultsBound = true;
+  for (const auto &definition : KeyboardShortcutService::registry()) {
+    QShortcut *shortcut = window.shortcutForAction(definition.id);
+    defaultsBound = defaultsBound && shortcut && shortcut->keys() == definition.defaults;
+  }
+  expect(QStringLiteral("shortcuts.reset_all"), confirmAll->seen && service.customizedCount() == 0 && defaultsBound
+         && !resetAll->isEnabled() && window.findChildren<QShortcut *>().size() == shortcutObjects);
+  CHECK(!g_expectFailed);
+}
+
+// ---------------------------------------------------------------------------
+// Auto-hiding side tabs (Zen-style): the same window-layer states on both
+// engines. The pointer is synthetic (as in the layout case); the real pointer
+// is driven only with DALINIRA_TEST_REAL_POINTER=1 and an active test window.
+// ---------------------------------------------------------------------------
+
+#if defined(DALINIRA_TEST_XTEST)
+void moveRealPointer(const QPoint &global) {
+  auto *x11 = qApp->nativeInterface<QNativeInterface::QX11Application>();
+  if (!x11 || !x11->display()) return;
+  XTestFakeMotionEvent(x11->display(), DefaultScreen(x11->display()), global.x(), global.y(), CurrentTime);
+  XSync(x11->display(), False);
+}
+#endif
+
+void runSidePanelCase(BrowserWindow &window, LocalSite &site, bool webkit) {
+  using dalinira::layout::BrowserLayoutMode;
+  using dalinira::layout::SidePanelState;
+  auto *controller = window.layoutController();
+  BrowserSidePanel *panel = sidePanel(window);
+  QWidget *body = bodyContainer(window);
+  QStackedWidget *stack = pageStack(window);
+  CHECK(controller && panel && body && stack);
+  const auto state = [&] { return dalinira::layout::sidePanelStateName(controller->sidePanelState()); };
+  const auto waitState = [&](const QString &wanted, int ms = 3000) {
+    return waitUntil([&] { return state() == wanted; }, ms);
+  };
+  const int hideWait = dalinira::layout::BrowserLayoutController::kHideDelayMs + 250;
+  // DALINIRA_SIDEPANEL_SHOT_DIR: window grabs (in process) for a visual review.
+  const auto shot = [&](const QString &name) {
+    const QString dir = qEnvironmentVariable("DALINIRA_SIDEPANEL_SHOT_DIR");
+    if (dir.isEmpty()) return;
+    settle(400);
+    window.grab().save(QDir(dir).filePath(name + (webkit ? QStringLiteral("-webkit.png") : QStringLiteral("-chromium.png"))));
+  };
+  if (!qEnvironmentVariable("DALINIRA_SIDEPANEL_SHOT_DIR").isEmpty()) {
+    window.applyLayoutMode(BrowserLayoutMode::FloatingSidebar);
+    shot(QStringLiteral("0-floating-newtab"));
+    hoverBody(window, 2);
+    shot(QStringLiteral("1-floating-newtab-revealed"));
+    hoverBody(window, body->width() / 2);
+  }
+
+  // Setting on, left side tabs, the New Tab page: open, docked.
+  BrowserWindow::applySidePanelAutoHideToAllWindows(true);
+  window.applyLayoutMode(BrowserLayoutMode::VerticalTabsLeft);
+  settle(300);
+  shot(QStringLiteral("2-left-newtab-docked"));
+  if (!qEnvironmentVariable("DALINIRA_SIDEPANEL_SHOT_DIR").isEmpty()) {
+    // As a user who picked Flow with the violet gradient (the page's own
+    // settings), then the panel's glass over it.
+    evaluate(pageWidget(window, currentIndex(window)),
+             QStringLiteral("p.theme='flow';p.backgroundSource='gradient-violet';p.backgroundVisible=true;render();'ok'"));
+    window.syncNewTabViews();
+    settle(600);
+    shot(QStringLiteral("6-left-newtab-violet-glass"));
+  }
+  // No control shows twice: navigation and the main menu live in the panel's
+  // top bar; the panel no longer repeats the toolbar's downloads/passwords.
+  const auto inPanel = [&](const char *name) {
+    auto *button = window.findChild<QToolButton *>(QString::fromLatin1(name));
+    return button && panel->isAncestorOf(button);
+  };
+  QWidget *navBar = window.findChild<QWidget *>(QStringLiteral("navBar"));
+  CHECK(navBar);
+  int navNavigation = 0;
+  for (const char *name : {"backBtn", "forwardBtn", "reloadBtn", "bookmark-button", "mainMenuButton"})
+    if (auto *button = window.findChild<QToolButton *>(QString::fromLatin1(name)); button && navBar->isAncestorOf(button))
+      ++navNavigation;
+  expect(QStringLiteral("sidepanel.controls_in_panel_top"),
+         inPanel("backBtn") && inPanel("forwardBtn") && inPanel("reloadBtn") && inPanel("bookmark-button") &&
+             inPanel("mainMenuButton") && navNavigation == 0 &&
+             child<QWidget>(panel, QStringLiteral("sidePanelTopBar"))->isAncestorOf(window.findChild<QToolButton *>(QStringLiteral("backBtn"))));
+  expect(QStringLiteral("sidepanel.no_duplicate_tools"),
+         !child<QToolButton>(panel, QStringLiteral("sidePanelDownloadsBtn")) &&
+             !child<QToolButton>(panel, QStringLiteral("sidePanelPasswordsBtn")) &&
+             !child<QWidget>(panel, QStringLiteral("sidePanelHeaderTitle")));
+  expect(QStringLiteral("sidepanel.panel_painted_dark"), panel->testAttribute(Qt::WA_StyledBackground) &&
+         panel->styleSheet().contains(QStringLiteral("rgba(6, 8, 11")));
+  // The docked panel's glass carries the New Tab page's own background (its
+  // computed CSS, read the same way on both engines).
+  expect(QStringLiteral("sidepanel.newtab_backdrop"), waitUntil([&] {
+    const auto &backdrop = panel->newTabBackdrop();
+    return backdrop.valid && !backdrop.cssImage.isEmpty() && backdrop.baseColor.isValid();
+  }, 5000));
+  log(QStringLiteral("New Tab backdrop: %1 / %2").arg(panel->newTabBackdrop().cssImage.left(90), panel->newTabBackdrop().imagePath));
+  expect(QStringLiteral("sidepanel.newtab_open"),
+         window.isCurrentTabNewTab() && state() == QLatin1String("docked") && layoutState(window) == QLatin1String("left"));
+
+  // A website: collapses once loaded; the page takes the full width.
+  window.navigateCurrentTab(QUrl(site.a() + QStringLiteral("/layout")));
+  CHECK(tabReady(window, currentIndex(window), QStringLiteral("Layout")));
+  const int siteIndex = currentIndex(window);
+  LivePage live{pageWidget(window, siteIndex), text(pageWidget(window, siteIndex), QStringLiteral("window.__id"))};
+  // Collapsed, and its slide out (kSlideMs) finished: hidden, not just moving.
+  expect(QStringLiteral("sidepanel.website_collapses"), waitState(QStringLiteral("collapsed")) &&
+         waitUntil([&] { return !panel->isVisible(); }, 2000) && layoutState(window) == QLatin1String("collapsed"));
+  settle(200);
+  shot(QStringLiteral("3-left-website-collapsed"));
+  expect(QStringLiteral("sidepanel.page_fills_body"), stack->geometry() == body->rect());
+  expect(QStringLiteral("sidepanel.website_no_backdrop"), !panel->newTabBackdrop().valid);
+
+  // Ordinary page movement does not reveal; the left edge does, over the
+  // page, without relayout and without taking focus from the address bar.
+  hoverBody(window, body->width() / 2);
+  hoverBody(window, 40);
+  expect(QStringLiteral("sidepanel.page_movement_ignored"), state() == QLatin1String("collapsed"));
+  auto *omnibox = window.findChild<QLineEdit *>(QStringLiteral("omnibox"));
+  CHECK(omnibox);
+  omnibox->setFocus();
+  settle(100);
+  QWidget *focusBefore = window.focusWidget();
+  const QRect pageBefore = stack->geometry();
+  hoverBody(window, 2);
+  settle(350);
+  expect(QStringLiteral("sidepanel.edge_reveals"), state() == QLatin1String("revealed") && panel->isVisible() &&
+         panel->geometry().left() == 0 && panelStacking(panel, stack, body) == QLatin1String("over"));
+  shot(QStringLiteral("4-left-website-revealed"));
+  expect(QStringLiteral("sidepanel.page_not_relaid_out"), stack->geometry() == pageBefore && pageIntact(window, live, site));
+  expect(QStringLiteral("sidepanel.no_focus_steal"), window.focusWidget() == focusBefore);
+  expect(QStringLiteral("sidepanel.active_tab_shown"),
+         child<QListWidget>(panel, QStringLiteral("sidePanelTabList"))->currentRow() == siteIndex);
+
+  // The engine's own pointer path over the page: WebKit forwards GTK motion
+  // (its page is a native window), Chromium's page gets Qt mouse moves.
+  hoverBody(window, panel->width() + 200);
+  settle(hideWait);
+  CHECK(state() == QLatin1String("collapsed"));
+  QWidget *pageView = pageWidget(window, siteIndex);
+  bool pageMotionDelivered = false;
+#if defined(DALINIRA_BUILD_WEBKIT)
+  if (auto *webkitPage = qobject_cast<dalinira::engine::WebKitEngineView *>(pageView))
+    pageMotionDelivered = webkitPage->synthesizePagePointerForTesting(QPoint(400, 200)) &&
+                          webkitPage->synthesizePagePointerForTesting(QPoint(2, 200));
+#endif
+  if (!webkit && pageView) {
+    QWidget *target = pageView->focusProxy() ? pageView->focusProxy() : pageView;
+    for (const QPoint &local : {QPoint(400, 200), QPoint(2, 200)}) {
+      QMouseEvent move(QEvent::MouseMove, QPointF(local), QPointF(target->mapToGlobal(local)), Qt::NoButton,
+                       Qt::NoButton, Qt::NoModifier);
+      QApplication::sendEvent(target, &move);
+    }
+    pageMotionDelivered = true;
+  }
+  settle(350);
+  expect(QStringLiteral("sidepanel.page_pointer_path_reveals"), pageMotionDelivered && state() == QLatin1String("revealed"));
+#if defined(DALINIRA_BUILD_WEBKIT)
+  if (auto *webkitPage = qobject_cast<dalinira::engine::WebKitEngineView *>(pageView))
+    webkitPage->synthesizePagePointerForTesting(QPoint(500, 200));
+#endif
+  if (!webkit) hoverBody(window, panel->width() + 200);
+  settle(350);
+  expect(QStringLiteral("sidepanel.page_pointer_path_hides"), state() == QLatin1String("collapsed"));
+  hoverBody(window, 2);
+  settle(350);
+  CHECK(state() == QLatin1String("revealed"));
+
+  // Grazing past its border keeps it for the delay; then it hides.
+  hoverBody(window, panel->width() + 10);
+  settle(100);
+  const bool grazeKept = state() == QLatin1String("revealed");
+  settle(hideWait);
+  expect(QStringLiteral("sidepanel.hides_after_delay"), grazeKept && state() == QLatin1String("collapsed"));
+
+  // Tab controls in the revealed panel.
+  auto *list = child<QListWidget>(panel, QStringLiteral("sidePanelTabList"));
+  auto *newTabButton = child<QToolButton>(panel, QStringLiteral("sidePanelNewTabButton"));
+  CHECK(list && newTabButton);
+  hoverBody(window, 2);
+  settle(250);
+  int before = window.tabCount();
+  newTabButton->click();
+  CHECK(waitUntil([&] { return window.tabCount() == before + 1; }, 5000));
+  settle(400);
+  expect(QStringLiteral("sidepanel.new_tab_button_opens_docked"),
+         window.isCurrentTabNewTab() && waitState(QStringLiteral("docked")));
+  const int newTabIndex = currentIndex(window);
+  list->setCurrentRow(siteIndex);  // a click on the website's tab
+  settle(400);
+  expect(QStringLiteral("sidepanel.click_switches_tab"), currentIndex(window) == siteIndex &&
+         state() != QLatin1String("docked"));
+  hoverBody(window, body->width() / 2);
+  settle(hideWait);
+  // Middle-click closes the New Tab row.
+  hoverBody(window, 2);
+  settle(250);
+  const QRect row = list->visualItemRect(list->item(newTabIndex));
+  QMouseEvent middle(QEvent::MouseButtonPress, QPointF(row.center()), QPointF(list->viewport()->mapToGlobal(row.center())),
+                     Qt::MiddleButton, Qt::MiddleButton, Qt::NoModifier);
+  QApplication::sendEvent(list->viewport(), &middle);
+  QMouseEvent middleUp(QEvent::MouseButtonRelease, QPointF(row.center()), QPointF(list->viewport()->mapToGlobal(row.center())),
+                       Qt::MiddleButton, Qt::NoButton, Qt::NoModifier);
+  QApplication::sendEvent(list->viewport(), &middleUp);
+  expect(QStringLiteral("sidepanel.middle_click_closes"), waitUntil([&] { return window.tabCount() == before; }, 5000));
+
+  // The shared tab context menu; the panel stays while it is open.
+  hoverBody(window, 2);
+  settle(250);
+  bool menuShown = false;
+  bool keptWithMenu = false;
+  QTimer::singleShot(400, qApp, [&] {
+    if (auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget())) {
+      menuShown = true;
+      hoverBody(window, body->width() / 2);
+      settle(hideWait);
+      keptWithMenu = state() == QLatin1String("revealed");
+      menu->close();
+    }
+  });
+  const QRect siteRow = list->visualItemRect(list->item(siteIndex));
+  QMetaObject::invokeMethod(list, "customContextMenuRequested", Qt::DirectConnection, Q_ARG(QPoint, siteRow.center()));
+  settle(200);
+  expect(QStringLiteral("sidepanel.context_menu_keeps_open"), menuShown && keptWithMenu);
+  hoverBody(window, body->width() / 2);
+  settle(hideWait);
+
+  // A tab drag keeps it open; afterwards it hides again.
+  hoverBody(window, 2);
+  settle(250);
+  emit panel->tabDragActiveChanged(true);
+  hoverBody(window, body->width() / 2);
+  settle(hideWait);
+  const bool keptWhileDragging = state() == QLatin1String("revealed");
+  emit panel->tabDragActiveChanged(false);
+  hoverBody(window, body->width() / 2);
+  settle(hideWait);
+  expect(QStringLiteral("sidepanel.drag_keeps_open"), keptWhileDragging && state() == QLatin1String("collapsed"));
+
+  // The panel's pin toggle: pinned stays open, again returns to auto-hide.
+  auto *pin = child<QToolButton>(panel, QStringLiteral("sidePanelPinButton"));
+  CHECK(pin);
+  pin->click();
+  settle(250);
+  const bool pinnedOpen = state() == QLatin1String("docked") && pin->isChecked() &&
+                          !dalinira::layout::sidePanelAutoHideEnabled(BrowserLayoutMode::VerticalTabsLeft);
+  hoverBody(window, body->width() / 2);
+  settle(hideWait);
+  const bool stayedPinned = state() == QLatin1String("docked");
+  pin->click();
+  settle(250);
+  expect(QStringLiteral("sidepanel.pin_toggle"), pinnedOpen && stayedPinned && !pin->isChecked() &&
+         waitState(QStringLiteral("collapsed")) && dalinira::layout::sidePanelAutoHideEnabled(BrowserLayoutMode::VerticalTabsLeft));
+
+  // Floating layout: on New Tab part of the window, on websites hidden and
+  // revealed from the edge as an inset card.
+  window.applyLayoutMode(BrowserLayoutMode::FloatingSidebar);
+  settle(250);
+  hoverBody(window, 2);
+  settle(350);
+  shot(QStringLiteral("5-floating-website-revealed"));
+  expect(QStringLiteral("sidepanel.floating_reveal_card"), state() == QLatin1String("revealed") &&
+         panel->property("floatingCard").toBool() && panel->geometry().left() == 8 &&
+         panelStacking(panel, stack, body) == QLatin1String("over"));
+  hoverBody(window, body->width() / 2);
+  settle(250);
+  before = window.tabCount();
+  window.triggerBrowserAction(QStringLiteral("tabs.new"));
+  CHECK(waitUntil([&] { return window.tabCount() == before + 1; }, 5000));
+  settle(400);
+  expect(QStringLiteral("sidepanel.floating_newtab_docked"), window.isCurrentTabNewTab() && state() == QLatin1String("docked") &&
+         panel->isVisible() && panel->geometry().right() < stack->geometry().left());
+  window.closeTab(currentIndex(window));
+  window.switchTab(siteIndex);
+  settle(400);
+  expect(QStringLiteral("sidepanel.floating_website_hidden"), state() != QLatin1String("docked"));
+  hoverBody(window, body->width() / 2);
+  settle(hideWait);
+  window.applyLayoutMode(BrowserLayoutMode::VerticalTabsLeft);
+  settle(250);
+
+  // "Keep side tabs open" (keyboard-shortcut action): the same pin toggle.
+  CHECK(window.triggerBrowserAction(QStringLiteral("sidepanel.toggle")));
+  const bool keptOpen = state() == QLatin1String("docked");
+  CHECK(window.triggerBrowserAction(QStringLiteral("sidepanel.toggle")));
+  expect(QStringLiteral("sidepanel.keep_open_action"), keptOpen && waitState(QStringLiteral("collapsed")));
+
+  // Right side: the right edge reveals it, flush with the right border.
+  window.applyLayoutMode(BrowserLayoutMode::VerticalTabsRight);
+  settle(300);
+  hoverBody(window, 2);
+  const bool leftEdgeIgnored = state() == QLatin1String("collapsed");
+  hoverBody(window, body->width() - 3);
+  settle(350);
+  expect(QStringLiteral("sidepanel.right_edge_reveals"), leftEdgeIgnored && state() == QLatin1String("revealed") &&
+         panel->geometry().right() == body->width() - 1 && panelStacking(panel, stack, body) == QLatin1String("over"));
+  hoverBody(window, body->width() / 3);
+  settle(250);
+  expect(QStringLiteral("sidepanel.right_hides"), state() == QLatin1String("collapsed"));
+
+  // Fullscreen (the window layer's state; no real fullscreen in this tier).
+  controller->setFullScreen(true);
+  hoverBody(window, body->width() - 3);
+  settle(250);
+  expect(QStringLiteral("sidepanel.fullscreen_stays_hidden"), state() == QLatin1String("collapsed") && !panel->isVisible());
+  controller->setFullScreen(false);
+
+  // The real pointer (opt-in): Qt events for Chromium, the 10 Hz poll over
+  // WebKit's native page.
+#if defined(DALINIRA_TEST_XTEST)
+  if (qEnvironmentVariableIntValue("DALINIRA_TEST_REAL_POINTER") == 1) {
+    window.activateWindow();
+    const bool active = waitUntil([&] { return window.isActiveWindow(); }, 2000);
+    const QPoint original = QCursor::pos();
+    bool revealed = false;
+    bool hidden = false;
+    if (active) {
+      moveRealPointer(body->mapToGlobal(QPoint(body->width() - 2, body->height() / 2)));
+      revealed = waitState(QStringLiteral("revealed"), 2000);
+      moveRealPointer(body->mapToGlobal(QPoint(body->width() / 3, body->height() / 2)));
+      hidden = waitState(QStringLiteral("collapsed"), 2000);
+      moveRealPointer(original);
+    }
+    result(QStringLiteral("sidepanel.real_pointer_reveal"), active && revealed);
+    result(QStringLiteral("sidepanel.real_pointer_hide"), active && hidden);
+  }
+#endif
+
+  // The setting in Settings → Appearance: off applies at once.
+  window.showSettings(SettingsPage::Category::Appearance);
+  auto *settingsPage = internalPage<SettingsPage>(window, QStringLiteral("settings"));
+  auto *toggle = child<QCheckBox>(settingsPage, QStringLiteral("settings-side-panel-auto-hide"));
+  CHECK(toggle);
+  expect(QStringLiteral("sidepanel.setting_shown"), toggle->isChecked() && toggle->isEnabled());
+  toggle->click();
+  settle(300);
+  window.switchTab(siteIndex);
+  settle(300);
+  expect(QStringLiteral("sidepanel.setting_off_docked"), !toggle->isChecked() &&
+         !dalinira::layout::sidePanelAutoHideEnabled(BrowserLayoutMode::VerticalTabsRight) && state() == QLatin1String("docked") &&
+         layoutState(window) == QLatin1String("right"));
+  // Classic tabs never get a side panel from the setting.
+  BrowserWindow::applySidePanelAutoHideToAllWindows(true);
+  window.applyLayoutMode(BrowserLayoutMode::Classic);
+  settle(300);
+  hoverBody(window, 2);
+  int classicNavigation = 0;
+  for (const char *name : {"backBtn", "forwardBtn", "reloadBtn", "bookmark-button", "mainMenuButton"})
+    if (auto *button = window.findChild<QToolButton *>(QString::fromLatin1(name));
+        button && navBar->isAncestorOf(button) && button->isVisible())
+      ++classicNavigation;
+  expect(QStringLiteral("sidepanel.classic_untouched"), state() == QLatin1String("none") &&
+         layoutState(window) == QLatin1String("classic") && !panel->isVisible() && classicNavigation == 5);
+  BrowserWindow::applySidePanelAutoHideToAllWindows(false);
+  CHECK(!g_expectFailed);
+}
+
+// ---------------------------------------------------------------------------
 // Phase (one engine) and driver
 // ---------------------------------------------------------------------------
 
@@ -2587,6 +3381,8 @@ int runPhase(const QString &testCase, const QString &engine, int argc, char *arg
   else if (testCase == QLatin1String("about")) runAboutLinksCase(*window, webkit);
   else if (testCase == QLatin1String("translate")) runTranslationPopupCase(*window, site, webkit);
   else if (testCase == QLatin1String("find")) runFindInPageCase(*window, site, webkit);
+  else if (testCase == QLatin1String("shortcuts")) runShortcutsCase(*window, webkit);
+  else if (testCase == QLatin1String("sidepanel")) runSidePanelCase(*window, site, webkit);
   else if (testCase == QLatin1String("screenshots")) runScreenshotsCase(*window, profileService, site, webkit);
   else CHECK(false && "unknown case");
 
@@ -2743,6 +3539,6 @@ int main(int argc, char *argv[]) {
     if (arg == "--phase" && i + 2 < argc)
       return runPhase(QString::fromLocal8Bit(argv[i + 1]), QString::fromLocal8Bit(argv[i + 2]), argc, argv);
   }
-  std::cout << "usage: --gui popup|scripts|media|layout|privacy|network|fingerprint|audit|about|translate|find" << std::endl;
+  std::cout << "usage: --gui popup|scripts|media|layout|privacy|network|fingerprint|audit|about|translate|find|shortcuts|sidepanel" << std::endl;
   return 2;
 }

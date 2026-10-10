@@ -5,8 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 const rootDir = path.resolve(__dirname, '..');
-const buildDir = path.join(rootDir, 'build');
-const cachePath = path.join(buildDir, 'CMakeCache.txt');
+const buildDir = path.join(rootDir, 'build-dalinira');
 
 const run = (cmd, args) => {
   console.log(`[BUILD] ${cmd} ${args.join(' ')}`);
@@ -17,21 +16,9 @@ const run = (cmd, args) => {
   }
 };
 
-// 1. CMake configure & build. CMake caches absolute paths, so a renamed or
-// moved build directory must be refreshed before it can be reused.
-let configureArgs = ['-S', '.', '-B', 'build', '-G', 'Ninja'];
-if (fs.existsSync(cachePath)) {
-  const cache = fs.readFileSync(cachePath, 'utf8');
-  const cachedBuildDir = cache.match(/^CMAKE_CACHEFILE_DIR:INTERNAL=(.*)$/m)?.[1];
-  const cachedSourceDir = cache.match(/^CMAKE_HOME_DIRECTORY:INTERNAL=(.*)$/m)?.[1];
-  if ((cachedBuildDir && path.resolve(cachedBuildDir) !== buildDir) ||
-      (cachedSourceDir && path.resolve(cachedSourceDir) !== rootDir)) {
-    console.log('[BUILD] Taşınmış CMake önbelleği algılandı; build metadata yenileniyor.');
-    configureArgs = ['--fresh', ...configureArgs];
-  }
-}
-run('cmake', configureArgs);
-run('cmake', ['--build', 'build', '--target', 'dalinira-browser']);
+// 1. The authoritative build always checks WebKitGTK before compiling the
+// single Chromium + WebKit DaliNira application.
+run(path.join(rootDir, 'scripts', 'build-dalinira.sh'), []);
 
 // 2. Linux Wayland / XCB display environment setup
 const env = { ...process.env };

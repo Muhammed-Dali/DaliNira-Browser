@@ -7,28 +7,31 @@ suite must not depend on public internet services or a real user profile.
 ## Build and run
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)
-ctest --test-dir build --output-on-failure
+./scripts/build-dalinira.sh
+ctest --test-dir build-dalinira --output-on-failure
 ```
+
+The unified build always checks/builds the private WebKitGTK runtime before the
+dual-engine application. Do not substitute an engine-specific build based on
+which tests or source files appear to have changed.
 
 Run a subsystem by test-name regex or label:
 
 ```bash
-ctest --test-dir build -R 'password|credential-vault' --output-on-failure
-ctest --test-dir build -R 'tab|step5' --output-on-failure
-ctest --test-dir build -L security --output-on-failure
-ctest --test-dir build -L webengine --output-on-failure
+ctest --test-dir build-dalinira -R 'password|credential-vault' --output-on-failure
+ctest --test-dir build-dalinira -R 'tab|step5' --output-on-failure
+ctest --test-dir build-dalinira -L security --output-on-failure
+ctest --test-dir build-dalinira -L webengine --output-on-failure
 ```
 
 A test executable can also be run directly for its per-case diagnostics:
 
 ```bash
-./build/dalinira-browser-password-autofill-test
-./build/dalinira-browser-step5-test
+./build-dalinira/dalinira-browser-password-autofill-test
+./build-dalinira/dalinira-browser-step5-test
 ```
 
-Do not encode the current suite count in scripts; use `ctest --test-dir build
+Do not encode the current suite count in scripts; use `ctest --test-dir build-dalinira
 -N` when an inventory is needed.
 
 ## GUI and WebKit tests
@@ -38,11 +41,37 @@ desktop:
 
 | Tier | How to run | What it does |
 |---|---|---|
-| Unit / integration | `ctest --test-dir build` | Invisible (offscreen or no windows) and light. |
+| Unit / integration | `ctest --test-dir build-dalinira` | Invisible (offscreen or no windows) and light. |
 | GUI (label `gui`) | `scripts/safe-gui-test.sh [TEST...]` | Real windows on the desktop display, one test at a time. |
-| Manual | `scripts/safe-gui-test.sh --manual TEST` | Window-manager cases: several simultaneous windows, create/destroy sequences, fullscreen. |
+| Manual | `scripts/safe-gui-test.sh --manual TEST` | Window-manager cases: media fullscreen enter/exit. Not a release gate. |
 | Live sites | `scripts/safe-gui-test.sh --live TEST` | DuckDuckGo / YouTube. |
 | Memory profile | `scripts/safe-gui-test.sh --memory-profile chromium\|webkit` | The developer memory profiler. |
+
+Every tier runs against the private patched WebKitGTK runtime that
+`./scripts/build-dalinira.sh` builds. The only exception is CI's push/PR job
+(`.github/workflows/ci.yml`): building WebKitGTK there on every push is not
+affordable, so it configures with the test-only
+`-DDALINIRA_ALLOW_SYSTEM_WEBKIT_FOR_TESTS=ON` and compiles the WebKit backend
+against the system WebKitGTK. That flag is OFF by default, cannot be combined
+with a package SDK, makes `cmake --install` and CPack fail, and is rejected by
+`scripts/check-release-metadata.sh` in any packaging or release file. Results
+from such a build say nothing about the shipped runtime.
+
+Never show several bare WebKit views as separate top-level windows at
+once. A former manual case of `browser-webkit-backend` did that with three
+windows. It hung every time in an endless XEmbed focus exchange: a view in
+an inactive top-level window keeps answering the GTK plug's focus request
+with a grab that cannot take effect. The test process spun and grew, and
+twice the desktop stopped mapping windows until a hard reset. The case was
+removed on 2026-10-08. DaliNira itself never shows a WebKit view as a
+top-level window. `browser-webkit-lifecycle` covers real multi-window use:
+a second BrowserWindow opened as New Window does, next to the first. Both
+browse, then the second is closed.
+
+The WebKitGTK 2.54.1 crash investigation is finished. Its stress
+reproducer was deleted; only the record and the validated patch remain in
+`docs/research/webkit-exit-crash/`. No test tier, CI job, package check or
+release step runs a stress loop.
 
 A plain `ctest` reports GUI-tier tests as "Skipped". They run through
 `scripts/gui-test-gate.sh`, which only starts them with `DALINIRA_GUI_TESTS=1`.
@@ -58,13 +87,29 @@ CI sets that variable on its virtual display; on a desktop, use
 - samples CPU, PSS/private memory, WebKit process and window counts, GPU
   engine time (DRM fdinfo), memory pressure and systemd-coredump once per
   second (`scripts/gui-test-monitor.py`). It writes the samples to
-  `build/gui-test-logs/`, prints the peaks, and stops the test at a limit:
+  `build-dalinira/gui-test-logs/`, prints the peaks, and stops the test at a limit:
   more than one view's web processes, under 1.5 GB available memory, over
   3 GB PSS, or memory pressure above 20%. A test that legitimately opens
   several WebKit tabs declares its own budget in its ctest `ENVIRONMENT`
   (`DALINIRA_GUI_MAX_WEB_PROCESSES`, e.g. `browser-tab-memory-ux`);
 - stops at the first failure, crash, kernel GPU/driver error or KWin stall
   report ("main thread was hanging").
+
+`browser-webkit-lifecycle` is the short WebKit lifecycle regression check,
+run in the GUI tier and before a release. In a few seconds, through the real
+`BrowserWindow`, it covers:
+
+- opening and closing tabs;
+- a hidden background tab;
+- tab sleep and wake;
+- a second window, opened as New Window does, browsing next to the first;
+  closing it ends its tabs' web processes;
+- closing the window;
+- shutting down the engine.
+
+Any lost web process fails it, and so does a WebKit process left behind.
+It covers the lifecycle where WebKitGTK 2.54.1 crashed, which the private
+runtime's patch fixes (`packaging/webkit-runtime/`).
 
 The WebKit GUI tests (`browser-webkit-backend`, `browser-webkit-media`) use
 `browser/native/tests/webkit_gui_harness.h`:
@@ -80,8 +125,12 @@ The engine-neutral logic they depend on is in `browser-webkit-engine-logic`,
 which runs in the default tier.
 
 On a memory-limited workstation, also cap build parallelism (for example
-`cmake --build build -j4`): each C++ compile job of this project can take
-1–2 GB.
+`cmake --build build-dalinira -j3`): each C++ compile job of this project can take
+1–2 GB. With LTO, or with WebKitGTK itself (`packaging/webkit-runtime`), it
+can take more. On a 16 GB desktop that already uses ~7 GB, `-j8` exhausted
+memory, and zram swap delayed any OOM kill until the machine froze. A
+memory-capped scope fails the build instead of freezing the desktop:
+`systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0 cmake --build build-dalinira -j3`.
 
 ## Test categories
 
@@ -166,7 +215,7 @@ direct WebEngine test invocation, the usual local equivalent is:
 QT_QPA_PLATFORM=offscreen \
 QTWEBENGINE_DISABLE_SANDBOX=1 \
 QTWEBENGINE_CHROMIUM_FLAGS='--no-sandbox --disable-gpu' \
-./build/dalinira-browser-step5-test
+./build-dalinira/dalinira-browser-step5-test
 ```
 
 Disabling Chromium's sandbox is for isolated test processes in containerized

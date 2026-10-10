@@ -201,6 +201,13 @@ int main(int argc, char **argv) {
        {QStringLiteral("settings.history.recent_card"), QStringLiteral("settings.history.search_placeholder")}},
       {Category::Accessibility, "settings.category.accessibility",
        {QStringLiteral("settings.accessibility.placeholder_title")}},
+      // Labels set by key: "shortcuts.action.zoom_in" shares its Turkish text
+      // with "menu.zoom", so a text-based lookup would pick the wrong key.
+      {Category::Shortcuts, "settings.category.shortcuts",
+       {QStringLiteral("shortcuts.reset_all_button"), QStringLiteral("shortcuts.instructions"),
+        QStringLiteral("shortcuts.category.windows_tabs"), QStringLiteral("shortcuts.category.media_display"),
+        QStringLiteral("shortcuts.action.tabs_new"), QStringLiteral("shortcuts.action.tabs_select_1"),
+        QStringLiteral("shortcuts.action.zoom_in")}},
       {Category::System, "settings.category.system",
        {QStringLiteral("settings.system.engine_card"), QStringLiteral("settings.system.apply_restart")}},
       {Category::Listening, "settings.category.listening",

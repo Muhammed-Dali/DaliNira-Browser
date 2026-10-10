@@ -53,10 +53,10 @@ jobs:
         with:
           ref: ${{ inputs.release_ref || github.ref_name }}
 
-      - name: Download the portable archive and the native packages
+      - name: Download the portable archive, the native packages and the WebKit runtime assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: "{portable,package-debian12,package-ubuntu2404,package-fedora}"
+          pattern: "{portable,package-debian12,package-ubuntu2404,package-fedora,webkit-runtime-arch,webkit-source}"
           path: dist
           merge-multiple: true
 
@@ -65,13 +65,18 @@ jobs:
           version="${RELEASE_REF#v}"
           cd dist
           ls -l
-          # One portable archive, two .deb, one .rpm; all named after this
-          # version. Arch packages go to the pacman repository instead
-          # (pacman-repo.yml), so they are not attached here.
+          # One portable archive, two .deb, one .rpm, the Arch-built private
+          # WebKit runtime (the Arch binary packages download it) and that
+          # runtime's corresponding source (upstream WebKitGTK tarball,
+          # DaliNira's patches and build recipe: packaging/webkit-runtime/SOURCE.md);
+          # all named after this version. Arch packages go to the pacman
+          # repository instead (pacman-repo.yml), so they are not attached here.
           test -f "dalinira-browser-${version}-linux-x86_64.tar.zst"
+          test -f "dalinira-webkit-runtime-${version}-arch-x86_64.tar.zst"
+          test -f "dalinira-webkit-runtime-source-${version}.tar"
           test "$(ls ./*.deb | wc -l)" -eq 2
           test "$(ls ./*.rpm | wc -l)" -eq 1
-          test "$(ls | wc -l)" -eq 4
+          test "$(ls | wc -l)" -eq 6
           for asset in *; do
             case "$asset" in *"${version}"*) ;; *) echo "unversioned asset $asset" >&2; exit 1 ;; esac
           done
@@ -82,11 +87,15 @@ jobs:
         run: |
           version="${RELEASE_REF#v}"
           cd dist
-          sha256sum "dalinira-browser-${version}-linux-x86_64.tar.zst" > SHA256SUMS
+          sha256sum "dalinira-browser-${version}-linux-x86_64.tar.zst" \
+            "dalinira-webkit-runtime-${version}-arch-x86_64.tar.zst" \
+            "dalinira-webkit-runtime-source-${version}.tar" > SHA256SUMS
           sha256sum ./*.deb ./*.rpm | sed 's#\./##' > SHA256SUMS-native-packages
           gh release create "${RELEASE_REF}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "DaliNira Browser ${version}" \
             --notes-file "../docs/RELEASE_NOTES_v${version}.md" \
-            "dalinira-browser-${version}-linux-x86_64.tar.zst" SHA256SUMS \
+            "dalinira-browser-${version}-linux-x86_64.tar.zst" \
+            "dalinira-webkit-runtime-${version}-arch-x86_64.tar.zst" \
+            "dalinira-webkit-runtime-source-${version}.tar" SHA256SUMS \
             ./*.deb ./*.rpm SHA256SUMS-native-packages

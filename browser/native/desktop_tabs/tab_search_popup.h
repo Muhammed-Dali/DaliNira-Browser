@@ -44,6 +44,8 @@ class TabSearchPopup : public QWidget {
   ~TabSearchPopup() override = default;
 
   void showBelow(QWidget *anchorWidget);
+  // The configured "Search tabs" shortcut (KeyboardShortcutService); hidden when empty.
+  void setShortcutHint(const QString &text);
 
  protected:
   bool eventFilter(QObject *watched, QEvent *event) override;

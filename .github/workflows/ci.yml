@@ -96,7 +96,11 @@ jobs:
           submodules: false
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDALINIRA_PHASE22D_TEST_TIMEOUT=${{ matrix.package_family == 'pacman' && '180' || '120' }}
+        # Test-only: CI cannot build the private WebKitGTK runtime for every
+        # push, so this job compiles WebKit against the system WebKitGTK.
+        # Such a build cannot be installed or packaged (CMakeLists.txt);
+        # packages.yml always builds against the private runtime SDK.
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDALINIRA_ALLOW_SYSTEM_WEBKIT_FOR_TESTS=ON -DDALINIRA_PHASE22D_TEST_TIMEOUT=${{ matrix.package_family == 'pacman' && '180' || '120' }}
 
       - name: Build
         run: cmake --build build --parallel 2

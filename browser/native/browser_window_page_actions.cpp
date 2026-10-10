@@ -1,4 +1,5 @@
 #include "browser_window.h"
+#include "layout/browser_layout_controller.h"
 #include "browser_window_internal.h"
 #include "core/browser_icons.h"
 #include "desktop_tabs/tab_strip_widget.h"
@@ -312,6 +313,7 @@ void BrowserWindow::toggleBrowserFullScreen() {
     isWebFullScreen_ = false;
     if (topBar_) topBar_->show();
     if (navBar_) navBar_->show();
+    if (layoutController_) layoutController_->setFullScreen(false);
     showNormal();
     if (windowStateBeforeFullScreen_.testFlag(Qt::WindowMaximized)) showMaximized();
     else if (!geometryBeforeFullScreen_.isNull()) setGeometry(geometryBeforeFullScreen_);
@@ -324,6 +326,8 @@ void BrowserWindow::toggleBrowserFullScreen() {
   if (topBar_) topBar_->hide();
   if (navBar_) navBar_->hide();
   if (bookmarkBar_) bookmarkBar_->hide();
+  // Fullscreen is never covered: a side panel stays collapsed, no edge reveal.
+  if (layoutController_) layoutController_->setFullScreen(true);
   showFullScreen();
 }
 
@@ -343,6 +347,7 @@ void BrowserWindow::setPageFullScreen(bool on, QWidget *owner) {
       if (topBar_) topBar_->hide();
       if (navBar_) navBar_->hide();
       if (bookmarkBar_) bookmarkBar_->hide();
+      if (layoutController_) layoutController_->setFullScreen(true);
       showFullScreen();
     }
   } else {
@@ -350,6 +355,7 @@ void BrowserWindow::setPageFullScreen(bool on, QWidget *owner) {
       isWebFullScreen_ = false;
       if (topBar_) topBar_->show();
       if (navBar_) navBar_->show();
+      if (layoutController_) layoutController_->setFullScreen(false);
       updateBookmarkBarVisibility();
       const Qt::WindowStates prevState = windowStateBeforeFullScreen_ & ~Qt::WindowFullScreen;
       if (prevState.testFlag(Qt::WindowMaximized)) {

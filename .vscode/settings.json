@@ -1,13 +1,13 @@
 {
   "cmake.sourceDirectory": "${workspaceFolder}",
-  "cmake.buildDirectory": "${workspaceFolder}/build",
-  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+  "cmake.buildDirectory": "${workspaceFolder}/build-dalinira",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build-dalinira/compile_commands.json",
   "files.associations": {
     "*.dali": "dali",
     "*.dl": "dali"
   },
   "clangd.arguments": [
-    "--compile-commands-dir=${workspaceFolder}/build",
+    "--compile-commands-dir=${workspaceFolder}/build-dalinira",
     "--background-index",
     "-j=4"
   ]

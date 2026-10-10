@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QGuiApplication>
 #include <QKeySequence>
+#include <QMetaMethod>
 #include <QPainter>
 #include <QShortcut>
 #include <QVBoxLayout>
@@ -227,8 +228,29 @@ int qtKeyFromKeyval(guint keyval) {
     case GDK_KEY_equal: return Qt::Key_Equal;
     case GDK_KEY_Return:
     case GDK_KEY_KP_Enter: return Qt::Key_Return;
-    default: return 0;
+    case GDK_KEY_KP_Multiply: return Qt::Key_Asterisk;
+    case GDK_KEY_KP_Divide: return Qt::Key_Slash;
+    case GDK_KEY_space: return Qt::Key_Space;
+    case GDK_KEY_BackSpace: return Qt::Key_Backspace;
+    case GDK_KEY_Delete:
+    case GDK_KEY_KP_Delete: return Qt::Key_Delete;
+    case GDK_KEY_Insert:
+    case GDK_KEY_KP_Insert: return Qt::Key_Insert;
+    case GDK_KEY_Escape: return Qt::Key_Escape;
+    default: break;
   }
+  // Any other printable key (punctuation, national letters): Qt names it by
+  // its upper-case code point, so a shortcut recorded in Settings with Qt key
+  // events matches the same key arriving through GTK.
+  const gunichar ch = gdk_keyval_to_unicode(keyval);
+  if (ch > 0x20 && ch != 0x7f && g_unichar_isprint(ch)) return static_cast<int>(QChar::toUpper(char32_t(ch)));
+  return 0;
+}
+
+// Symbols whose character Shift selected (Ctrl+Shift+= types "+"): bindings
+// name the symbol without Shift (KeyboardShortcutService::canonical).
+bool shiftSelectsSymbol(int key) {
+  return key > Qt::Key_Space && key < Qt::Key_Escape && !QChar::isLetterOrNumber(char32_t(key));
 }
 
 } // namespace
@@ -548,6 +570,42 @@ void WebKitEngineView::resizeEvent(QResizeEvent *event) {
   resizeNativeSurface();
 }
 
+void WebKitEngineView::forwardPagePointer(double rootX, double rootY) {
+  if (!isSignalConnected(QMetaMethod::fromSignal(&EngineView::pagePointerMoved)) || !gtkWindow_) return;
+  GdkWindow *plugWindow = gtk_widget_get_window(gtkWindow_);
+  if (!plugWindow) return;
+  // The plug fills this widget in device pixels (resizeNativeSurface).
+  int originX = 0;
+  int originY = 0;
+  gdk_window_get_origin(plugWindow, &originX, &originY);
+  const qreal dpr = devicePixelRatioF();
+  const QPoint local(qRound((rootX - originX) / dpr), qRound((rootY - originY) / dpr));
+  emit pagePointerMoved(mapToGlobal(local));
+}
+
+bool WebKitEngineView::synthesizePagePointerForTesting(const QPoint &local) {
+  if (!webView_) return false;
+  GdkWindow *window = gtk_widget_get_window(GTK_WIDGET(webView_));
+  if (!window) return false;
+  int originX = 0;
+  int originY = 0;
+  gdk_window_get_origin(window, &originX, &originY);
+  const qreal dpr = devicePixelRatioF();
+  GdkEvent *event = gdk_event_new(GDK_MOTION_NOTIFY);
+  event->motion.window = GDK_WINDOW(g_object_ref(window));
+  event->motion.send_event = TRUE;
+  event->motion.time = GDK_CURRENT_TIME;
+  event->motion.x = local.x() * dpr;
+  event->motion.y = local.y() * dpr;
+  event->motion.x_root = originX + event->motion.x;
+  event->motion.y_root = originY + event->motion.y;
+  if (GdkSeat *seat = gdk_display_get_default_seat(gdk_window_get_display(window)))
+    gdk_event_set_device(event, gdk_seat_get_pointer(seat));
+  gtk_widget_event(GTK_WIDGET(webView_), event);
+  gdk_event_free(event);
+  return true;
+}
+
 bool WebKitEngineView::dispatchBrowserShortcut(unsigned int keyval, unsigned int state) {
   const bool ctrl = state & GDK_CONTROL_MASK;
   const bool alt = state & GDK_MOD1_MASK;
@@ -560,12 +618,19 @@ bool WebKitEngineView::dispatchBrowserShortcut(unsigned int keyval, unsigned int
   if (alt) modifiers |= Qt::AltModifier;
   if (state & GDK_SHIFT_MASK) modifiers |= Qt::ShiftModifier;
   const QKeySequence sequence(QKeyCombination(modifiers, static_cast<Qt::Key>(key)));
+  // As Qt's shortcut map does for its own key events: Ctrl+Shift+= also
+  // matches a "Ctrl++" binding, the symbol Shift produced.
+  const QKeySequence unshifted = (modifiers & Qt::ShiftModifier) && shiftSelectsSymbol(key)
+      ? QKeySequence(QKeyCombination(modifiers & ~Qt::ShiftModifier, static_cast<Qt::Key>(key)))
+      : QKeySequence();
 
   QWidget *top = window();
   if (!top) return false;
   const auto shortcuts = top->findChildren<QShortcut *>();
   for (QShortcut *shortcut : shortcuts) {
-    if (!shortcut->isEnabled() || !shortcut->keys().contains(sequence)) continue;
+    if (!shortcut->isEnabled()) continue;
+    const QList<QKeySequence> keys = shortcut->keys();
+    if (!keys.contains(sequence) && (unshifted.isEmpty() || !keys.contains(unshifted))) continue;
     if (shortcut->context() != Qt::WindowShortcut && shortcut->context() != Qt::ApplicationShortcut) continue;
     auto *owner = qobject_cast<QWidget *>(shortcut->parent());
     if (owner && !owner->isVisible()) continue;
@@ -713,6 +778,17 @@ void WebKitEngineView::initWebKit() {
     return self && event && self->dispatchBrowserShortcut(event->keyval, event->state) ? TRUE : FALSE;
   }), this);
 
+  // Pointer moves over the page reach GTK, not Qt: forward them so the
+  // window's side panel can follow the pointer without polling it.
+  g_signal_connect(webView_, "motion-notify-event", G_CALLBACK(+[](GtkWidget *, GdkEventMotion *event, gpointer data) -> gboolean {
+    if (event) static_cast<WebKitEngineView *>(data)->forwardPagePointer(event->x_root, event->y_root);
+    return FALSE;  // WebKit still gets every move
+  }), this);
+  g_signal_connect(webView_, "leave-notify-event", G_CALLBACK(+[](GtkWidget *, GdkEventCrossing *event, gpointer data) -> gboolean {
+    if (event) static_cast<WebKitEngineView *>(data)->forwardPagePointer(event->x_root, event->y_root);
+    return FALSE;
+  }), this);
+
   g_signal_connect(webView_, "button-release-event", G_CALLBACK(+[](GtkWidget *, GdkEventButton *, gpointer data) -> gboolean {
     auto *self = static_cast<WebKitEngineView *>(data);
     if (self) {
@@ -806,6 +882,12 @@ void WebKitEngineView::initWebKit() {
           // for; the document already exists, so apply to it directly.
           if (committedKey != self->documentScriptKey_) self->refreshDocumentScripts();
           emit self->urlChanged(self->cachedUrl_);
+          // notify::favicon only reports changes: a document committed while
+          // the view's favicon was already empty (the previous page's icon
+          // never arrived) would otherwise never be reported as having none,
+          // and the tab kept the site's cached favicon. A real favicon still
+          // replaces this when WebKit reports it.
+          if (!webkit_web_view_get_favicon(wv)) emit self->iconChanged(QIcon());
         }
         break;
       }

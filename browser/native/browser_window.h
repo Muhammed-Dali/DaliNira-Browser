@@ -5,6 +5,7 @@
 #include <memory>
 #include <QFrame>
 #include <QCache>
+#include <QHash>
 #include <QIcon>
 #include <QLabel>
 #include <QList>
@@ -17,6 +18,8 @@
 #include <QWebEngineProfile>
 #include <QWebEngineView>
 #include <QWebEngineFullScreenRequest>
+
+class QShortcut;
 
 namespace dalinira::core {
 class INavigationCandidateProvider;
@@ -154,6 +157,8 @@ struct BrowserTabInfo {
   bool activeMicrophone = false;
   bool isPinned = false;
   bool translationOffered = false;
+  // The current page's own favicon reached the tab (Chromium: reset per load).
+  bool pageIconReported = false;
   QPointer<PageTranslator> translator;
   bool isLoading = false;
   // Set when the UI language changed while this New Tab was in the
@@ -213,6 +218,10 @@ public:
   void closeOtherTabs(int index);
   void closeTabsToRight(int index);
   BrowserWindow *openNewWindow(const QUrl &url = QUrl());
+  // A further window the user opens (New Window, a link or popup in a new
+  // window, a moved or detached tab): deleted when it is closed, so its tabs'
+  // pages and WebKit web processes end with it, as for the first window.
+  static BrowserWindow *createWindow(const BrowserServices &services);
   BrowserWindow *openIncognitoWindow(const QUrl &url = QUrl());
   bool isIncognito() const {
     return (services_.profile && services_.profile->isOffTheRecord()) || services_.privateProfileOwner != nullptr;
@@ -233,6 +242,18 @@ public:
   // Whether a web page may run its own JavaScript: the JavaScript setting and
   // the site's "block scripts" policy. Shared by both engines.
   bool pageScriptsAllowed(const QUrl &url) const;
+
+  // Shared browser actions behind the configurable keyboard shortcuts
+  // (KeyboardShortcutService ids). Both engines run the same handler; the
+  // window holds exactly one QShortcut per action and rebinds it in place.
+  bool triggerBrowserAction(const QString &actionId);
+  QShortcut *shortcutForAction(const QString &actionId) const { return actionShortcuts_.value(actionId); }
+  // The key hint a menu item shows for an action ("\tCtrl+H"), empty without one.
+  static QString shortcutMenuHint(const QString &actionId);
+  // Appends that hint to a menu item's text.
+  static void addShortcutHint(QAction *action, const QString &actionId);
+  void saveCurrentPage();
+  void viewCurrentPageSource();
 
   void showFindBar();
   void hideFindBar();
@@ -354,6 +375,17 @@ public:
   void applyLayoutMode(dalinira::layout::BrowserLayoutMode mode);
   dalinira::layout::BrowserLayoutMode currentLayoutMode() const;
   void updateSidePanelTabs();
+  // Feeds the side panel's auto-hide: New Tab active, active tab loading.
+  void updateSidePanelAutoHide();
+  // The docked panel's glass shows the active New Tab page's background.
+  void scheduleSidePanelBackdrop();
+  void updateSidePanelBackdrop();
+  // The "Auto-hide side tabs" preference, applied to every window at once.
+  static void applySidePanelAutoHideToAllWindows(bool enabled);
+  // Back/forward/reload/add-site/main menu: the side panel's top bar in side
+  // layouts, the toolbar in the classic layout (never both).
+  void placeNavigationControls(bool inSidePanel);
+  dalinira::layout::BrowserLayoutController *layoutController() const { return layoutController_; }
   void dismissCredentialSaveBubble();
   QIcon tabIconForRecord(const BrowserTabInfo &info) const;
 
@@ -418,6 +450,10 @@ private:
   bool transferSidePanelTabTo(uint64_t tabId, BrowserWindow *destination,
                               int targetIndex);
   void setupUi();
+  void setupBrowserShortcuts();
+  void applyShortcutBindings();
+  void refreshShortcutHints();
+  QString shortcutTooltip(const QString &labelKey, const QString &actionId) const;
   void setupStyle();
   // Applies an appearance theme ("system"/"light"/"dark") to the application
   // palette and restyles every browser window's chrome (Settings, onboarding).
@@ -437,7 +473,11 @@ private:
   void onThrobberTick();
 
   BrowserServices services_;
+  QHash<QString, QShortcut *> actionShortcuts_;
+  QHash<QString, std::function<void()>> browserActions_;
   bool isCaptureShell_ = false;
+  bool navigationInSidePanel_ = false;
+  bool backdropQueryPending_ = false;
   bool isMovingTab_ = false;
   bool isSwitchingTab_ = false;
   bool adoptingEnginePopup_ = false;  // addNewTab() for a page-opened WebKit popup: WebKit loads it

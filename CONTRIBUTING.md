@@ -26,19 +26,23 @@ For distribution-specific package installation commands and dependencies, refer 
 git clone https://github.com/Muhammed-Dali/DaliNira-Browser.git
 cd DaliNira-Browser
 
-# Configure build with CMake (Release mode recommended for performance and full tests)
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-
-# Compile across all CPU cores
-cmake --build build -j$(nproc)
+# Build both engines. The first run also builds DaliNira's private WebKitGTK
+# runtime once (about 5 GB of disk, typically 1.5 to 3 hours, asks first).
+./scripts/build-dalinira.sh
 
 # Launch the browser
-./build/dalinira-browser
+./build-dalinira/dalinira-browser
 ```
+
+Install the dependencies listed in [docs/BUILDING.md](docs/BUILDING.md) first;
+`./scripts/bootstrap-webkit-runtime.sh --check` reports anything missing.
+After the first build, `./scripts/build-dalinira.sh` is the only build command
+you need: it checks the WebKit runtime (a no-work step when nothing changed)
+and rebuilds DaliNira incrementally, with at most 3 parallel jobs.
 
 To run with full terminal diagnostics and logging enabled:
 ```bash
-QTWEBENGINE_CHROMIUM_FLAGS="--enable-logging=stderr --v=1" ./build/dalinira-browser
+QTWEBENGINE_CHROMIUM_FLAGS="--enable-logging=stderr --v=1" ./build-dalinira/dalinira-browser
 ```
 
 ---
@@ -75,14 +79,14 @@ Every change must be validated against automated tests before opening a pull req
 While developing, run only the targeted test executable for the affected subsystem:
 ```bash
 # Example: Running password manager tests
-./build/dalinira-browser-password-autofill-test
+./build-dalinira/dalinira-browser-password-autofill-test
 
 # Example: Running download manager tests
-./build/dalinira-browser-general-download-manager-test
+./build-dalinira/dalinira-browser-general-download-manager-test
 ```
 
 CTest regexes and labels are also available, for example `ctest --test-dir
-build -L security --output-on-failure` and `ctest --test-dir build -R
+build-dalinira -L security --output-on-failure` and `ctest --test-dir build-dalinira -R
 'tab|step5' --output-on-failure`. Tests must use temporary settings/profile
 paths and deterministic local fixtures; they must never modify a contributor's
 normal DaliNira profile or require public internet access.
@@ -90,7 +94,7 @@ normal DaliNira profile or require public internet access.
 ### Full CTest Suite
 Before submitting, run the complete test suite:
 ```bash
-ctest --test-dir build --output-on-failure
+ctest --test-dir build-dalinira --output-on-failure
 ```
 All registered test suites must pass. For detailed testing practices, CI headless environments, and test categories, read [docs/TESTING.md](docs/TESTING.md).
 

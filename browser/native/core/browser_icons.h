@@ -77,7 +77,8 @@ enum class BrowserIcon {
   Fullscreen,
   Tune,
   FindInPage,
-  Mail
+  Mail,
+  Keyboard
 };
 
 namespace BrowserIcons {

@@ -40,6 +40,7 @@
 #if defined(DALINIRA_BUILD_WEBKIT)
 #include "engine/webkit/webkit_backend.h"
 #include "engine/webkit/webkit_media_runtime.h"
+#include "engine/webkit/webkit_private_runtime.h"
 #include <cstdio>
 #endif
 #include "i18n/i18n.h"
@@ -181,6 +182,17 @@ int checkMediaRuntime() {
   std::printf("WebKit media runtime: %s\n", report.missing.isEmpty() ? "complete" : "playable, some formats unsupported");
   return report.missing.isEmpty() ? 0 : 2;
 }
+
+// `dalinira-browser --check-webkit-runtime`: reports which WebKitGTK libraries
+// the loader mapped and, in release packages, whether they are DaliNira's
+// private patched runtime (packaging/webkit-runtime/SOURCE.md). Needs no
+// display. Exit status: 0 in use (or a build without a private runtime),
+// 1 broken (the WebKit engine would be disabled).
+int checkWebKitRuntime() {
+  const auto status = dalinira::engine::WebKitPrivateRuntime::probe();
+  std::printf("%s\n", qPrintable(dalinira::engine::WebKitPrivateRuntime::describe(status)));
+  return status.usable() ? 0 : 1;
+}
 #endif
 
 }  // namespace
@@ -198,6 +210,7 @@ int main(int argc, char *argv[]) {
     }
 #if defined(DALINIRA_BUILD_WEBKIT)
     if (qstrcmp(argv[i], "--check-media-runtime") == 0) return checkMediaRuntime();
+    if (qstrcmp(argv[i], "--check-webkit-runtime") == 0) return checkWebKitRuntime();
 #endif
     if (qstrcmp(argv[i], "--onboarding") == 0) {
       forceStandaloneOnboarding = true;
@@ -256,6 +269,19 @@ int main(int argc, char *argv[]) {
   } else if (!displayPlan.note.isEmpty()) {
     qWarning().noquote() << displayPlan.note;
   }
+#if defined(DALINIRA_BUILD_WEBKIT)
+  // Release packages run WebKit only on their private patched runtime; never
+  // fall back to whatever WebKitGTK the system has.
+  if (initialEngine == dalinira::engine::EngineType::WebKit) {
+    const auto webkitRuntime = dalinira::engine::WebKitPrivateRuntime::probe();
+    if (!webkitRuntime.usable()) {
+      qWarning().noquote() << dalinira::engine::WebKitPrivateRuntime::describe(webkitRuntime)
+                           << "\nStarting with Chromium for this run.";
+      initialEngine = dalinira::engine::EngineType::Chromium;
+      displayPlan = dalinira::engine::planDisplay(initialEngine, displayEnvironment);
+    }
+  }
+#endif
   dalinira::engine::applyDisplayPlan(displayPlan);
   dalinira::engine::EngineBackend::setSelectedEngineType(initialEngine);
 

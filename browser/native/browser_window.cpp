@@ -125,6 +125,10 @@ using dalinira::i18n::I18n;
 #include "desktop_tabs/find_bar_widget.h"
 #include "core/bookmark_bar_reorder.h"
 #include <QShortcut>
+#include <QCheckBox>
+#include <QSignalBlocker>
+#include <QtMath>
+#include <cmath>
 #include <QPrinter>
 #include <QPrintDialog>
 #include <QFileDialog>
@@ -194,32 +198,42 @@ QString bookmarkDisplayName(const QUrl &url) {
 }
 
 QIcon bookmarkIcon(bool bookmarked) {
-  QPixmap pixmap(32, 32);
-  pixmap.fill(Qt::transparent);
-  QPainter painter(&pixmap);
-  painter.setRenderHint(QPainter::Antialiasing);
-  QPainterPath honeycomb;
-  honeycomb.moveTo(16, 2);
-  honeycomb.lineTo(27.5, 8.5);
-  honeycomb.lineTo(27.5, 23.5);
-  honeycomb.lineTo(16, 30);
-  honeycomb.lineTo(4.5, 23.5);
-  honeycomb.lineTo(4.5, 8.5);
-  honeycomb.closeSubpath();
-  painter.setPen(QPen(QColor(bookmarked ? QStringLiteral("#4fc3f7") : QStringLiteral("#d8dce0")),
-                      2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-  painter.setBrush(bookmarked ? QBrush(QColor(QStringLiteral("#1688ad"))) : Qt::NoBrush);
-  painter.drawPath(honeycomb);
-  painter.setPen(QPen(QColor(bookmarked ? QStringLiteral("#ffffff") : QStringLiteral("#4fc3f7")),
-                      2.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-  if (bookmarked) {
-    painter.drawLine(QPointF(10, 16), QPointF(14, 20));
-    painter.drawLine(QPointF(14, 20), QPointF(22, 12));
-  } else {
-    painter.drawLine(QPointF(11, 16), QPointF(21, 16));
-    painter.drawLine(QPointF(16, 11), QPointF(16, 21));
+  // The DaliNira honeycomb cell: a regular, upright hexagon centred in the
+  // icon (it was stretched taller than wide), with a proportional mark.
+  QIcon icon;
+  for (const int size : {32, 64}) {
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const qreal unit = size / 32.0;
+    const QPointF centre(16 * unit, 16 * unit);
+    const qreal radius = 12.5 * unit;
+    QPainterPath honeycomb;
+    for (int corner = 0; corner < 6; ++corner) {
+      const qreal angle = qDegreesToRadians(-90.0 + 60.0 * corner);
+      const QPointF point(centre.x() + radius * std::cos(angle), centre.y() + radius * std::sin(angle));
+      if (corner == 0) honeycomb.moveTo(point);
+      else honeycomb.lineTo(point);
+    }
+    honeycomb.closeSubpath();
+    painter.setPen(QPen(QColor(bookmarked ? QStringLiteral("#4fc3f7") : QStringLiteral("#d8dce0")),
+                        2.0 * unit, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(bookmarked ? QBrush(QColor(QStringLiteral("#1688ad"))) : Qt::NoBrush);
+    painter.drawPath(honeycomb);
+    painter.setPen(QPen(QColor(bookmarked ? QStringLiteral("#ffffff") : QStringLiteral("#4fc3f7")),
+                        2.2 * unit, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    if (bookmarked) {
+      painter.drawLine(QPointF(11 * unit, 16.5 * unit), QPointF(14.5 * unit, 20 * unit));
+      painter.drawLine(QPointF(14.5 * unit, 20 * unit), QPointF(21 * unit, 12.5 * unit));
+    } else {
+      painter.drawLine(QPointF(11.5 * unit, 16 * unit), QPointF(20.5 * unit, 16 * unit));
+      painter.drawLine(QPointF(16 * unit, 11.5 * unit), QPointF(16 * unit, 20.5 * unit));
+    }
+    painter.end();
+    icon.addPixmap(pixmap);
   }
-  return QIcon(pixmap);
+  return icon;
 }
 
 
@@ -248,7 +262,7 @@ class BrowserWebPage final : public QWebEnginePage {
       QWebEnginePage *destinationPage = nullptr;
       if (request.destination() == QWebEngineNewWindowRequest::InNewWindow ||
           request.destination() == QWebEngineNewWindowRequest::InNewDialog) {
-        auto *newWindow = new BrowserWindow(window_->services());
+        auto *newWindow = BrowserWindow::createWindow(window_->services());
         newWindow->addNewTab(QUrl{});
         newWindow->show();
         if (newWindow->currentView()) destinationPage = newWindow->currentView()->page();
@@ -730,7 +744,7 @@ void BrowserWindow::showLinkContextMenu(const QUrl &linkUrl, const QString &link
   // 2. Bağlantıyı yeni pencerede aç
   QAction *openWinAct = menu.addAction(BrowserIcons::icon(BrowserIcon::Window), I18n::text(QStringLiteral("context.open_link_window")));
   connect(openWinAct, &QAction::triggered, this, [this, linkUrl] {
-    auto *newWin = new BrowserWindow(services());
+    auto *newWin = BrowserWindow::createWindow(services());
     newWin->addNewTab(linkUrl);
     newWin->show();
   });
@@ -859,19 +873,17 @@ void BrowserWindow::showPageContextMenu(const QPoint &globalPos) {
   connect(forwardAct, &QAction::triggered, this, &BrowserWindow::onForwardClicked);
 
   QAction *reloadAct = menu.addAction(I18n::text(QStringLiteral("context.reload")));
-  reloadAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+  addShortcutHint(reloadAct, QStringLiteral("navigation.reload"));
   connect(reloadAct, &QAction::triggered, this, &BrowserWindow::onReloadOrStopClicked);
 
   menu.addSeparator();
 
   QAction *savePageAct = menu.addAction(BrowserIcons::icon(BrowserIcon::Save), I18n::text(QStringLiteral("context.save_page_as")));
-  savePageAct->setShortcut(QKeySequence::Save);
-  connect(savePageAct, &QAction::triggered, this, [this] {
-    if (currentView() && currentView()->page()) currentView()->page()->triggerAction(QWebEnginePage::SavePage);
-  });
+  addShortcutHint(savePageAct, QStringLiteral("page.save"));
+  connect(savePageAct, &QAction::triggered, this, &BrowserWindow::saveCurrentPage);
 
   QAction *printAct = menu.addAction(BrowserIcons::icon(BrowserIcon::Print), I18n::text(QStringLiteral("context.print")));
-  printAct->setShortcut(QKeySequence::Print);
+  addShortcutHint(printAct, QStringLiteral("page.print"));
   printAct->setEnabled(true);
   connect(printAct, &QAction::triggered, this, &BrowserWindow::printCurrentPage);
 
@@ -892,14 +904,8 @@ void BrowserWindow::showPageContextMenu(const QPoint &globalPos) {
   menu.addSeparator();
 
   QAction *viewSourceAct = menu.addAction(I18n::text(QStringLiteral("context.view_source")));
-  viewSourceAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
-  connect(viewSourceAct, &QAction::triggered, this, [this, pageUrl] {
-    if (currentView() && currentView()->page()) {
-      currentView()->page()->triggerAction(QWebEnginePage::ViewSource);
-    } else if (pageUrl.isValid() && !pageUrl.isEmpty()) {
-      addNewTab(QUrl(QStringLiteral("view-source:") + pageUrl.toString()));
-    }
-  });
+  addShortcutHint(viewSourceAct, QStringLiteral("page.view_source"));
+  connect(viewSourceAct, &QAction::triggered, this, &BrowserWindow::viewCurrentPageSource);
 
   QAction *inspectAct = menu.addAction(BrowserIcons::icon(BrowserIcon::Tools), I18n::text(QStringLiteral("context.inspect")));
   connect(inspectAct, &QAction::triggered, this, [this] {
@@ -1086,128 +1092,15 @@ void BrowserWindow::setupUi() {
   tabSearchBtn_ = new QToolButton(topBar_);
   tabSearchBtn_->setObjectName(QStringLiteral("tabSearchBtn"));
   tabSearchBtn_->setText(QString::fromUtf8("⌵"));
-  tabSearchBtn_->setToolTip(I18n::text(QStringLiteral("toolbar.search_tabs")));
+  tabSearchBtn_->setToolTip(shortcutTooltip(QStringLiteral("toolbar.search_tabs"), QStringLiteral("tabs.search")));
   tabSearchBtn_->setFixedSize(Metrics::tabSearchButtonSize,
                               Metrics::tabSearchButtonSize);
   connect(tabSearchBtn_, &QToolButton::clicked, this, &BrowserWindow::toggleTabSearchPopup);
   topLayout->addWidget(tabSearchBtn_, 0, Qt::AlignVCenter);
 
-  auto *tabSearchShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A), this);
-  connect(tabSearchShortcut, &QShortcut::activated, this, &BrowserWindow::toggleTabSearchPopup);
-
-  auto *groupShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_P), this);
-  connect(groupShortcut, &QShortcut::activated, this, [this] {
-    if (tabGroupLauncherPopup_ && tabGroupLauncherPopup_->isVisible()) {
-      tabGroupLauncherPopup_->close();
-    }
-    createNewTabGroupWithNewTab();
-  });
-
-  auto *addTabInGroupShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_C), this);
-  connect(addTabInGroupShortcut, &QShortcut::activated, this, [this] {
-    const int currentIdx = tabStrip_->currentIndex();
-    if (currentIdx >= 0 && currentIdx < tabs_.size() && tabs_[currentIdx].groupId.has_value()) {
-      addTabToGroup(*tabs_[currentIdx].groupId);
-    }
-  });
-
-  auto *closeGroupShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_W), this);
-  connect(closeGroupShortcut, &QShortcut::activated, this, [this] {
-    const int currentIdx = tabStrip_->currentIndex();
-    if (currentIdx >= 0 && currentIdx < tabs_.size() && tabs_[currentIdx].groupId.has_value()) {
-      closeTabGroup(*tabs_[currentIdx].groupId);
-    }
-  });
-
-  auto *bookmarkBarShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_B), this);
-  connect(bookmarkBarShortcut, &QShortcut::activated, this, &BrowserWindow::toggleBookmarkBar);
-
-  auto *newTabShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_T), this);
-  connect(newTabShortcut, &QShortcut::activated, this, [this] {
-    addNewTab(QUrl(QStringLiteral("dalinira://newtab/")));
-  });
-
-  auto *newWindowShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_N), this);
-  connect(newWindowShortcut, &QShortcut::activated, this, [this] {
-    openNewWindow();
-  });
-
-  auto *incognitoWindowShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N), this);
-  connect(incognitoWindowShortcut, &QShortcut::activated, this, [this] {
-    openIncognitoWindow();
-  });
-
-  auto *closeTabShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), this);
-  connect(closeTabShortcut, &QShortcut::activated, this, [this] {
-    if (tabStrip_ && tabStrip_->currentIndex() >= 0 && tabStrip_->currentIndex() < tabs_.size()) {
-      closeTab(tabStrip_->currentIndex());
-    }
-  });
-
-  auto *reopenClosedTabShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_T), this);
-  connect(reopenClosedTabShortcut, &QShortcut::activated, this, &BrowserWindow::restoreLastClosedTab);
-
-  auto *findShortcut = new QShortcut(QKeySequence::Find, this);
-  connect(findShortcut, &QShortcut::activated, this, &BrowserWindow::showFindBar);
-
-  // Platform themes differ on FindNext/FindPrevious (KDE binds only F3);
-  // Ctrl+G / Ctrl+Shift+G work everywhere, as in other browsers.
-  const auto withKey = [](QKeySequence::StandardKey standard, const QKeySequence &extra) {
-    QList<QKeySequence> keys = QKeySequence::keyBindings(standard);
-    if (!keys.contains(extra)) keys.append(extra);
-    return keys;
-  };
-  auto *findNextShortcut = new QShortcut(this);
-  findNextShortcut->setKeys(withKey(QKeySequence::FindNext, QKeySequence(Qt::CTRL | Qt::Key_G)));
-  connect(findNextShortcut, &QShortcut::activated, this, [this] {
-    if (findBar_ && findBar_->isVisible()) {
-      handleFindRequest(findBar_->findText(), true, findBar_->isCaseSensitive());
-    } else {
-      showFindBar();
-    }
-  });
-
-  auto *findPrevShortcut = new QShortcut(this);
-  findPrevShortcut->setKeys(withKey(QKeySequence::FindPrevious, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G)));
-  connect(findPrevShortcut, &QShortcut::activated, this, [this] {
-    if (findBar_ && findBar_->isVisible()) {
-      handleFindRequest(findBar_->findText(), false, findBar_->isCaseSensitive());
-    }
-  });
-
-  auto *printShortcut = new QShortcut(QKeySequence::Print, this);
-  connect(printShortcut, &QShortcut::activated, this, &BrowserWindow::printCurrentPage);
-
-  auto *historyShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_H), this);
-  connect(historyShortcut, &QShortcut::activated, this, [this] {
-    showSettings(SettingsPage::Category::History);
-  });
-
-  auto *focusLocationShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_L), this);
-  connect(focusLocationShortcut, &QShortcut::activated, this, [this] {
-    omnibox_->setFocus();
-    omnibox_->selectAll();
-  });
-  auto *reloadShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), this);
-  connect(reloadShortcut, &QShortcut::activated, this, &BrowserWindow::onReloadOrStopClicked);
-  auto *reloadF5Shortcut = new QShortcut(QKeySequence(Qt::Key_F5), this);
-  connect(reloadF5Shortcut, &QShortcut::activated, this, &BrowserWindow::onReloadOrStopClicked);
-  auto *backShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Left), this);
-  connect(backShortcut, &QShortcut::activated, this, &BrowserWindow::onBackClicked);
-  auto *forwardShortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Right), this);
-  connect(forwardShortcut, &QShortcut::activated, this, &BrowserWindow::onForwardClicked);
-  auto *bookmarkShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), this);
-  connect(bookmarkShortcut, &QShortcut::activated, this, &BrowserWindow::toggleCurrentBookmark);
-  auto *nextTabShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab), this);
-  connect(nextTabShortcut, &QShortcut::activated, this, [this] {
-    if (tabStrip_ && !tabs_.isEmpty()) switchTab((tabStrip_->currentIndex() + 1) % tabs_.size());
-  });
-  auto *previousTabShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab), this);
-  connect(previousTabShortcut, &QShortcut::activated, this, [this] {
-    if (tabStrip_ && !tabs_.isEmpty()) switchTab((tabStrip_->currentIndex() + tabs_.size() - 1) % tabs_.size());
-  });
-  auto *fullScreenShortcut = new QShortcut(QKeySequence(Qt::Key_F11), this);
-  connect(fullScreenShortcut, &QShortcut::activated, this, &BrowserWindow::toggleBrowserFullScreen);
+  // Every keyboard shortcut comes from KeyboardShortcutService: one QShortcut
+  // per action, rebound in place when the user changes it in Settings.
+  setupBrowserShortcuts();
 
   // Tab Strip (Chromium TabStripWidget)
   tabStrip_ = new dalinira::desktop_tabs::TabStripWidget(topBar_);
@@ -1277,7 +1170,7 @@ void BrowserWindow::setupUi() {
   backBtn_ = new QToolButton(navBar_);
   backBtn_->setObjectName(QStringLiteral("backBtn"));
   backBtn_->setIcon(BrowserIcons::backIcon());
-  backBtn_->setToolTip(I18n::text(QStringLiteral("toolbar.back")));
+  backBtn_->setToolTip(shortcutTooltip(QStringLiteral("toolbar.back"), QStringLiteral("navigation.back")));
   backBtn_->setEnabled(false);
   configureNavigationButton(backBtn_);
   navLayout->addWidget(backBtn_);
@@ -1285,7 +1178,7 @@ void BrowserWindow::setupUi() {
   forwardBtn_ = new QToolButton(navBar_);
   forwardBtn_->setObjectName(QStringLiteral("forwardBtn"));
   forwardBtn_->setIcon(BrowserIcons::forwardIcon());
-  forwardBtn_->setToolTip(I18n::text(QStringLiteral("toolbar.forward")));
+  forwardBtn_->setToolTip(shortcutTooltip(QStringLiteral("toolbar.forward"), QStringLiteral("navigation.forward")));
   forwardBtn_->setEnabled(false);
   configureNavigationButton(forwardBtn_);
   navLayout->addWidget(forwardBtn_);
@@ -1293,7 +1186,7 @@ void BrowserWindow::setupUi() {
   reloadBtn_ = new QToolButton(navBar_);
   reloadBtn_->setObjectName(QStringLiteral("reloadBtn"));
   reloadBtn_->setIcon(BrowserIcons::reloadIcon());
-  reloadBtn_->setToolTip(I18n::text(QStringLiteral("toolbar.reload")));
+  reloadBtn_->setToolTip(shortcutTooltip(QStringLiteral("toolbar.reload"), QStringLiteral("navigation.reload")));
   configureNavigationButton(reloadBtn_);
   navLayout->addWidget(reloadBtn_);
 
@@ -1439,6 +1332,7 @@ void BrowserWindow::setupUi() {
   pageStack_->setObjectName(QStringLiteral("pageStack"));
   pageStack_->setStyleSheet(QStringLiteral("#pageStack { background-color: #07111f; }"));
   bodyLayout_->addWidget(pageStack_, 1);
+  sidePanel_->setBackdropPageArea(pageStack_);
 
   rootLayout->addWidget(bodyContainer_, 1);
 
@@ -1448,6 +1342,17 @@ void BrowserWindow::setupUi() {
 
   connect(sidePanel_, &dalinira::layout::BrowserSidePanel::tabSelected, this, &BrowserWindow::switchTab);
   connect(sidePanel_, &dalinira::layout::BrowserSidePanel::tabCloseRequested, this, &BrowserWindow::closeTab);
+  // The panel's pin toggle flips the shared auto-hide preference.
+  connect(sidePanel_, &dalinira::layout::BrowserSidePanel::pinToggleRequested, this, [this] {
+    if (layoutController_) applySidePanelAutoHideToAllWindows(layoutController_->isPinned());
+  });
+  connect(layoutController_, &dalinira::layout::BrowserLayoutController::pinnedChanged, sidePanel_,
+          &dalinira::layout::BrowserSidePanel::setPinned);
+  connect(sidePanel_, &dalinira::layout::BrowserSidePanel::tabContextMenuRequested,
+          this, &BrowserWindow::onTabContextMenuRequested);
+  // A tab drag keeps an auto-hiding panel open until it ends.
+  connect(sidePanel_, &dalinira::layout::BrowserSidePanel::tabDragActiveChanged, layoutController_,
+          &dalinira::layout::BrowserLayoutController::setTabDragActive);
   connect(sidePanel_, &dalinira::layout::BrowserSidePanel::tabMoved, this, &BrowserWindow::moveTab);
   connect(sidePanel_, &dalinira::layout::BrowserSidePanel::tabDetachRequested,
           this, [this](int index, const QPoint &globalPosition) {
@@ -1470,14 +1375,13 @@ void BrowserWindow::setupUi() {
     detachedPosition.setY(qBound(available.top(), detachedPosition.y(),
                                  available.bottom() - detachedSize.height() + 1));
 
-    auto *destination = new BrowserWindow(services_);
+    auto *destination = createWindow(services_);
     destination->resize(detachedSize);
     destination->move(detachedPosition);
 
     destination->show();
     if (!transferSidePanelTabTo(tabs_[index].id, destination, 0)) {
-      destination->close();
-      destination->deleteLater();
+      destination->close();  // deletes it (createWindow)
     } else {
       destination->raise();
     }
@@ -1498,17 +1402,8 @@ void BrowserWindow::setupUi() {
   connect(sidePanel_, &dalinira::layout::BrowserSidePanel::historyRequested, this, [this] {
     showSettings(SettingsPage::Category::History);
   });
-  connect(sidePanel_, &dalinira::layout::BrowserSidePanel::downloadsRequested, this, [this] {
-    showSettings(SettingsPage::Category::Downloads);
-  });
-  connect(sidePanel_, &dalinira::layout::BrowserSidePanel::passwordsRequested, this, [this] {
-    showSettings(SettingsPage::Category::Passwords);
-  });
   connect(sidePanel_, &dalinira::layout::BrowserSidePanel::settingsRequested, this, [this] {
     showSettings();
-  });
-  connect(sidePanel_, &dalinira::layout::BrowserSidePanel::closePanelRequested, this, [this] {
-    applyLayoutMode(dalinira::layout::BrowserLayoutMode::Classic);
   });
 
   setCentralWidget(central);
@@ -1949,15 +1844,8 @@ void BrowserWindow::retranslateUi() {
     if (scheme == QLatin1String("http") || scheme == QLatin1String("https"))
       tab.translator->detectLanguage();
   }
-  if (backBtn_) {
-    backBtn_->setToolTip(I18n::text(QStringLiteral("toolbar.back")));
-  }
-  if (forwardBtn_) {
-    forwardBtn_->setToolTip(I18n::text(QStringLiteral("toolbar.forward")));
-  }
-  if (reloadBtn_) {
-    updateReloadStopButton(isCurrentTabLoading());
-  }
+  // Back, forward, reload and tab search tooltips name their current shortcut.
+  refreshShortcutHints();
   if (zoomButton_) {
     zoomButton_->setToolTip(I18n::text(QStringLiteral("toolbar.zoom")));
   }
@@ -2461,6 +2349,12 @@ int BrowserWindow::addNewTab(const QUrl &url, int insertIndex, bool initiallyPin
 // holding it. Made when the tab is created and again when it moves to
 // another window (adoptTab), as wireViewSignals does for Chromium pages.
 void BrowserWindow::wireEngineViewSignals(dalinira::engine::EngineView *engineView, uint64_t tabId) {
+  // A native page (WebKit) reports pointer moves itself: the side panel's
+  // edge reveal follows them, event-driven, as Qt's events on Chromium pages.
+  connect(engineView, &dalinira::engine::EngineView::pagePointerMoved, this, [this, engineView](const QPoint &globalPos) {
+    if (layoutController_ && engineView->window() == this) layoutController_->updatePanelForPointer(globalPos);
+  });
+
   connect(engineView, &dalinira::engine::EngineView::iconChanged, this, [this, tabId, engineView](const QIcon &icon) {
     const int idx = findIndexByTabId(tabId);
     if (idx >= 0 && tabs_[idx].engineView == engineView) {
@@ -2692,7 +2586,7 @@ void BrowserWindow::wireEngineViewSignals(dalinira::engine::EngineView *engineVi
       using Disposition = dalinira::engine::WebKitEngineView::NewTabRequest::Disposition;
       BrowserWindow *host = this;
       if (request.disposition == Disposition::NewWindow) {
-        host = new BrowserWindow(services_);
+        host = createWindow(services_);
         host->show();
       }
       const QUrl initialUrl = request.url.isValid() ? request.url : QUrl(QStringLiteral("about:blank"));
@@ -3316,6 +3210,10 @@ void BrowserWindow::wireViewSignals(QWebEngineView *view, uint64_t tabId) {
 
   connect(view, &QWebEngineView::loadStarted, this, [this, tabId, view] {
     const int idx = findIndexByTabId(tabId);
+    if (idx >= 0) {
+      tabs_[idx].isLoading = true;  // as for engine views (side panel, tab state)
+      tabs_[idx].pageIconReported = false;
+    }
     if (idx >= 0 && !tabs_[idx].isInternal && !isNewTabUrl(view->url())) {
       TabThrobber::instance().startLoading(view, this);
       tabStrip_->setTabLoading(idx, true);
@@ -3449,6 +3347,7 @@ void BrowserWindow::wireViewSignals(QWebEngineView *view, uint64_t tabId) {
       // adapter while a navigation is finishing. iconChanged has already cached
       // any favicon that arrived, so preserve that value before finishLoading()
       // removes the throbber state and avoid querying WebEngine synchronously.
+      tabs_[idx].isLoading = false;
       const QIcon cachedLoadIcon = TabThrobber::instance().cachedFavicon(view);
       TabThrobber::instance().finishLoading(view, success);
       tabStrip_->setTabLoading(idx, false);
@@ -3459,9 +3358,18 @@ void BrowserWindow::wireViewSignals(QWebEngineView *view, uint64_t tabId) {
         const QPointer<QWebEngineView> guardedView(view);
         const QUrl pageUrl = view->url();
         services_.profile->requestIconForPageURL(pageUrl, 32, [guardedWindow, tabId, guardedView, pageUrl](const QIcon &ico, const QUrl &, const QUrl &) {
-          if (guardedWindow && !ico.isNull() && guardedView && guardedView->url() == pageUrl) {
-            const int curIdx = guardedWindow->findIndexByTabId(tabId);
-            if (curIdx >= 0) guardedWindow->applyTabFavicon(curIdx, guardedView, ico, false);
+          if (!guardedWindow || !guardedView || guardedView->url() != pageUrl) return;
+          const int curIdx = guardedWindow->findIndexByTabId(tabId);
+          if (curIdx < 0) return;
+          if (!ico.isNull()) {
+            guardedWindow->applyTabFavicon(curIdx, guardedView, ico, false);
+          } else if (!guardedWindow->tabs_[curIdx].pageIconReported) {
+            // QtWebEngine reports no icon change for a page that has none
+            // when the view never had one (a fresh tab). Its favicon
+            // database having none for the loaded page is that answer: show
+            // the generic site icon, not the site's cached favicon (as WebKit
+            // does from its commit). A favicon arriving later replaces it.
+            guardedWindow->applyTabFavicon(curIdx, guardedView, QIcon(), true);
           }
         });
       }
@@ -3597,6 +3505,7 @@ void BrowserWindow::syncNewTabViews() {
                isIncognito() ? QStringLiteral("false") : QStringLiteral("true")));
     }
   }
+  scheduleSidePanelBackdrop();
 }
 
 void BrowserWindow::handleFrequentSitesCommand(const QString &op, const QUrl &url, const QString &engine, const QString &name, const QString &original) {
@@ -4080,13 +3989,16 @@ bool BrowserWindow::isCurrentTabLoading() const {
 }
 
 void BrowserWindow::updateReloadStopButton(bool isLoading) {
+  // Load state of the active tab: leaving New Tab collapses an auto-hiding
+  // panel once that navigation has completed.
+  updateSidePanelAutoHide();
   if (!reloadBtn_) return;
   if (isLoading) {
     reloadBtn_->setIcon(BrowserIcons::stopIcon());
-    reloadBtn_->setToolTip(I18n::text(QStringLiteral("toolbar.stop")));
+    reloadBtn_->setToolTip(shortcutTooltip(QStringLiteral("toolbar.stop"), QStringLiteral("navigation.stop")));
   } else {
     reloadBtn_->setIcon(BrowserIcons::reloadIcon());
-    reloadBtn_->setToolTip(I18n::text(QStringLiteral("toolbar.reload")));
+    reloadBtn_->setToolTip(shortcutTooltip(QStringLiteral("toolbar.reload"), QStringLiteral("navigation.reload")));
   }
 }
 
@@ -4331,8 +4243,10 @@ void BrowserWindow::applyLayoutMode(dalinira::layout::BrowserLayoutMode mode) {
   }
   if (layoutController_) {
     const bool anim = dalinira::onboarding::OnboardingManager::animationsEnabled();
+    if (sidePanel_) sidePanel_->setPanelOnRight(mode == dalinira::layout::BrowserLayoutMode::VerticalTabsRight);
     layoutController_->setLayoutMode(mode, anim);
     dalinira::layout::setPersistedLayoutMode(mode);
+    placeNavigationControls(mode != dalinira::layout::BrowserLayoutMode::Classic);
     updateSidePanelTabs();
   }
 }
@@ -4341,12 +4255,131 @@ dalinira::layout::BrowserLayoutMode BrowserWindow::currentLayoutMode() const {
   return layoutController_ ? layoutController_->currentMode() : dalinira::layout::BrowserLayoutMode::Classic;
 }
 
+void BrowserWindow::updateSidePanelAutoHide() {
+  // Shared tab/page state: the same for Chromium and WebKit tabs.
+  if (layoutController_) layoutController_->setNewTabActive(isCurrentTabNewTab(), isCurrentTabLoading());
+  scheduleSidePanelBackdrop();
+}
+
+void BrowserWindow::scheduleSidePanelBackdrop() {
+  if (backdropQueryPending_) return;
+  backdropQueryPending_ = true;
+  QTimer::singleShot(0, this, [this] {
+    backdropQueryPending_ = false;
+    updateSidePanelBackdrop();
+  });
+}
+
+// The docked side panel shows the New Tab page's own background through a
+// tinted glass. The page reports what it paints (its computed CSS) through the
+// same script on both engines; nothing is composited through the panel.
+void BrowserWindow::updateSidePanelBackdrop() {
+  if (!sidePanel_) return;
+  const int index = tabStrip_ ? tabStrip_->currentIndex() : -1;
+  const bool sideLayout = layoutController_ && layoutController_->currentMode() != dalinira::layout::BrowserLayoutMode::Classic;
+  if (!sideLayout || index < 0 || index >= tabs_.size() || !isCurrentTabNewTab() || isCurrentTabLoading()) {
+    sidePanel_->setNewTabBackdrop({});
+    return;
+  }
+  const uint64_t tabId = tabs_[index].id;
+  const QString script = QStringLiteral(
+      "(()=>{if(!document.body)return '';const b=getComputedStyle(document.body);"
+      "return JSON.stringify({image:b.backgroundImage,color:b.backgroundColor,"
+      "overlay:getComputedStyle(document.body,'::before').backgroundColor})})()");
+  const QPointer<BrowserWindow> self(this);
+  const auto apply = [self, tabId](const QVariant &value) {
+    if (!self || !self->sidePanel_) return;
+    const int current = self->tabStrip_ ? self->tabStrip_->currentIndex() : -1;
+    if (current < 0 || current >= self->tabs_.size() || self->tabs_[current].id != tabId || !self->isCurrentTabNewTab()) return;
+    const QJsonObject css = QJsonDocument::fromJson(value.toString().toUtf8()).object();
+    dalinira::layout::NewTabBackdrop backdrop;
+    backdrop.valid = !css.isEmpty();
+    backdrop.cssImage = css.value(QStringLiteral("image")).toString();
+    static const QRegularExpression rgb(QStringLiteral(R"(rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.]+))?\s*\))"));
+    const auto toColor = [](const QString &text) {
+      const auto match = rgb.match(text);
+      if (!match.hasMatch()) return QColor(text);
+      QColor color(qRound(match.captured(1).toDouble()), qRound(match.captured(2).toDouble()), qRound(match.captured(3).toDouble()));
+      if (!match.captured(4).isEmpty()) color.setAlphaF(match.captured(4).toDouble());
+      return color;
+    };
+    backdrop.baseColor = toColor(css.value(QStringLiteral("color")).toString());
+    backdrop.overlay = toColor(css.value(QStringLiteral("overlay")).toString());
+    // url(...) images: the built-in Flow picture or the user's own background.
+    if (backdrop.cssImage.contains(QLatin1String("managed-background")) && self->services_.profileService &&
+        self->services_.profileService->newTabBackgroundStore())
+      backdrop.imagePath = self->services_.profileService->newTabBackgroundStore()->managedImagePath();
+    else if (backdrop.cssImage.contains(QLatin1String("dalinira-flow-blue")))
+      backdrop.imagePath = QStringLiteral(":/new-tab/dalinira-flow-blue.png");
+    self->sidePanel_->setNewTabBackdrop(backdrop);
+  };
+  if (auto *engineView = tabs_[index].engineView.data()) engineView->runJavaScript(script, apply);
+  else if (auto *view = tabs_[index].view.data(); view && view->page()) view->page()->runJavaScript(script, apply);
+}
+
+void BrowserWindow::applySidePanelAutoHideToAllWindows(bool enabled) {
+  dalinira::layout::setSidePanelAutoHideEnabled(enabled);
+  for (QWidget *widget : QApplication::topLevelWidgets()) {
+    auto *window = qobject_cast<BrowserWindow *>(widget);
+    if (!window || !window->layoutController_) continue;
+    window->layoutController_->setAutoHideEnabled(enabled);
+    // An open Settings page shows the same choice as the panel's pin toggle.
+    if (auto *checkbox = window->findChild<QCheckBox *>(QStringLiteral("settings-side-panel-auto-hide"))) {
+      const QSignalBlocker blocker(checkbox);
+      checkbox->setChecked(enabled);
+    }
+  }
+}
+
+// Side-panel layouts keep the navigation controls in the panel's top bar (as
+// Zen's sidebar top buttons), so they never show twice; the classic layout
+// puts them back in the toolbar. The widgets themselves move: their state
+// (enabled, reload/stop, add-site) and connections stay as they are.
+void BrowserWindow::placeNavigationControls(bool inSidePanel) {
+  auto *navLayout = navBar_ ? qobject_cast<QHBoxLayout *>(navBar_->layout()) : nullptr;
+  if (!sidePanel_ || !navLayout || !backBtn_ || !forwardBtn_ || !reloadBtn_ || !bookmarkBtn_ || !mainMenuBtn_) return;
+  const QList<QToolButton *> leading{backBtn_, forwardBtn_, reloadBtn_, bookmarkBtn_};
+  if (inSidePanel == navigationInSidePanel_) return;
+  navigationInSidePanel_ = inSidePanel;
+  // Without the navigation buttons the address bar starts at the toolbar's
+  // edge; the classic toolbar centres it between flexible spacers.
+  for (int index = 0; index < navLayout->count(); ++index)
+    if (navLayout->itemAt(index)->spacerItem()) navLayout->setStretch(index, inSidePanel ? 0 : 1);
+  using Metrics = dalinira::ui::BrowserChromeMetrics;
+  if (inSidePanel) {
+    for (QToolButton *button : leading) navLayout->removeWidget(button);
+    navLayout->removeWidget(mainMenuBtn_);
+    for (QToolButton *button : leading) {
+      button->setFixedSize(30, 30);
+      button->setIconSize(QSize(18, 18));
+    }
+    bookmarkBtn_->setIconSize(QSize(20, 20));
+    mainMenuBtn_->setFixedSize(30, 30);
+    sidePanel_->setChromeControls({backBtn_, forwardBtn_, reloadBtn_, bookmarkBtn_}, {mainMenuBtn_});
+    return;
+  }
+  sidePanel_->setChromeControls({}, {});
+  for (QToolButton *button : {backBtn_, forwardBtn_, reloadBtn_, bookmarkBtn_, mainMenuBtn_}) {
+    button->setParent(navBar_);
+    button->setFixedSize(Metrics::navigationButtonSize, Metrics::navigationButtonSize);
+    button->setIconSize(QSize(Metrics::navigationIconSize, Metrics::navigationIconSize));
+  }
+  bookmarkBtn_->setIconSize(QSize(24, 24));
+  navLayout->insertWidget(0, backBtn_);
+  navLayout->insertWidget(1, forwardBtn_);
+  navLayout->insertWidget(2, reloadBtn_);
+  navLayout->insertWidget(navLayout->indexOf(omnibox_), bookmarkBtn_);
+  navLayout->addWidget(mainMenuBtn_);
+  for (QToolButton *button : {backBtn_, forwardBtn_, reloadBtn_, bookmarkBtn_, mainMenuBtn_}) button->show();
+}
+
 void BrowserWindow::updateSidePanelTabs() {
   if (!sidePanel_) return;
   QVector<dalinira::layout::SidePanelTabInfo> sideTabs;
   sideTabs.reserve(tabs_.size());
-  for (const auto &t : tabs_) {
-    sideTabs.push_back({t.id, t.title, t.icon, t.isLoading});
+  for (int i = 0; i < tabs_.size(); ++i) {
+    const auto &t = tabs_[i];
+    sideTabs.push_back({t.id, t.title, t.icon, t.isLoading, isTabSleeping(i)});
   }
   const int activeIdx = tabStrip_ ? tabStrip_->currentIndex() : -1;
   sidePanel_->setTabs(sideTabs, activeIdx);
@@ -4384,6 +4417,7 @@ void BrowserWindow::showSettings(SettingsPage::Category category) {
     applyLayoutMode(dalinira::layout::layoutModeFromString(modeStr));
   };
   hooks.setTheme = &BrowserWindow::applyAppearanceToAllWindows;
+  hooks.setSidePanelAutoHide = &BrowserWindow::applySidePanelAutoHideToAllWindows;
   hooks.reopenOnboarding = [this] {
     dalinira::onboarding::OnboardingManager::instance().reopenOnboarding();
     saveSessionNow();
@@ -5382,7 +5416,14 @@ void BrowserWindow::renderBookmarks() {
   using Metrics = dalinira::ui::BrowserChromeMetrics;
   if (!bookmarkBar_ || !services_.profileService) return;
   if (bookmarkReorder_) bookmarkReorder_->clearItems();
+  // QToolBar::clear() only detaches the widget actions: every previous button
+  // would stay alive, hidden and parentless, until the window closes. Delete
+  // them, deferred: a rebuild can run from a click handler of one of them
+  // (the shortcut remove button).
+  const QList<QAction *> previousActions = bookmarkBar_->actions();
   bookmarkBar_->clear();
+  for (QAction *action : previousActions)
+    if (action->parent() == bookmarkBar_) action->deleteLater();
 
   // 1. Far-left Tab Group button ("Yeni sekme grubu oluştur")
   appsBtn_ = new QToolButton(bookmarkBar_);
@@ -5750,6 +5791,8 @@ bool BrowserWindow::isCurrentTabNewTab() const {
 }
 
 void BrowserWindow::updateBookmarkBarVisibility() {
+  // Called whenever the active tab may have become (or left) the New Tab page.
+  updateSidePanelAutoHide();
   if (!bookmarkBar_) return;
 
   const QString mode = QSettings().value(
@@ -6199,6 +6242,7 @@ void BrowserWindow::toggleTabSearchPopup() {
   }
   if (!tabSearchPopup_) {
     tabSearchPopup_ = new dalinira::desktop_tabs::TabSearchPopup(this);
+    refreshShortcutHints();
   }
   tabSearchPopup_->showBelow(tabSearchBtn_);
 }
@@ -6337,7 +6381,7 @@ void BrowserWindow::moveGroupToNewWindow(const QUuid &groupId) {
 
   const dalinira::desktop_tabs::TabGroup groupToMove = *optGroup;
 
-  auto *newWindow = new BrowserWindow(services_);
+  auto *newWindow = createWindow(services_);
   newWindow->groupModel()->addOrUpdateGroup(groupToMove);
 
   for (uint64_t tid : memberTabIds) {
@@ -6562,6 +6606,7 @@ void BrowserWindow::applyTabFavicon(int idx, const QObject *throbberKey, const Q
   } else if (!pageIcon.isNull()) {
     tab.icon = pageIcon;
     tab.faviconHost = host;
+    tab.pageIconReported = true;
     cacheNewTabFavicon(services_.profileService, tab.url, pageIcon);
     TabThrobber::instance().cacheFavicon(throbberKey, pageIcon);
     updateBookmarkIconsForUrl(tab.url, pageIcon);
@@ -7233,8 +7278,14 @@ void BrowserWindow::dismissActivePermissionPrompt(bool cancelRequest) {
 }
 #endif
 
+BrowserWindow *BrowserWindow::createWindow(const BrowserServices &services) {
+  auto *window = new BrowserWindow(services);
+  window->setAttribute(Qt::WA_DeleteOnClose);
+  return window;
+}
+
 BrowserWindow *BrowserWindow::openNewWindow(const QUrl &url) {
-  auto *window = new BrowserWindow(services_);
+  auto *window = createWindow(services_);
   if (url.isValid() && !url.isEmpty()) {
     window->addNewTab(url);
   } else {
@@ -7439,6 +7490,8 @@ void BrowserWindow::syncTabSleepingIndicator(const QUuid &uuid) {
   for (int i = 0; i < tabs_.size(); ++i) {
     if (tabs_[i].uuid == uuid) {
       if (tabStrip_) tabStrip_->setTabSleeping(i, isTabSleeping(i));
+      if (layoutController_ && layoutController_->currentMode() != dalinira::layout::BrowserLayoutMode::Classic)
+        updateSidePanelTabs();
       return;
     }
   }

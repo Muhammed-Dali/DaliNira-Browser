@@ -18,8 +18,10 @@
 #include "engine/engine_type.h"
 #include "engine/engine_resolver.h"
 #include "core/engine_ui_profile.h"
+#include "core/keyboard_shortcut_service.h"
 #include "newtab/new_tab_shortcuts.h"
 #include "layout/browser_layout.h"
+#include "layout/browser_layout_controller.h"
 #include <QProcess>
 
 #include <QAbstractButton>
@@ -87,6 +89,23 @@ void applySettingsAppearance(QWidget *page) {
       #settings-page QPushButton { background:#e8eef5; color:#243343; border-color:#c2ceda; }
       #settings-page QPushButton:hover { background:#dce6f0; border-color:#9eafc0; }
       #settings-row-separator { color:#e1e6ec; background:#e1e6ec; }
+      #settings-shortcuts-intro { color:#647588; }
+      #settings-shortcuts-status { color:#1a7f37; }
+      #settings-shortcut-group { color:#17212b; }
+      #settings-shortcut-divider { background:rgba(0,0,0,0.10); }
+      #settings-shortcut-label { color:rgba(23,33,43,0.75); }
+      #settings-shortcut-message { color:#647588; }
+      #settings-shortcut-message[error="true"] { color:#b42318; }
+      #settings-page QPushButton#settings-shortcut-edit { background:transparent; color:#17212b; border-color:rgba(0,0,0,0.16); }
+      #settings-page QPushButton#settings-shortcut-edit:hover { background:rgba(0,0,0,0.03); border-color:rgba(0,0,0,0.30); }
+      #settings-page QPushButton#settings-shortcut-edit:focus { border-color:#1873d1; }
+      #settings-page QPushButton#settings-shortcut-edit[unset="true"] { color:rgba(23,33,43,0.35); }
+      #settings-page QPushButton#settings-shortcut-edit[customized="true"] { color:#0f5fa8; }
+      #settings-page QPushButton#settings-shortcut-edit[capturing="true"] { background:rgba(24,115,209,0.08); color:#0d3b66; border-color:#1873d1; }
+      #settings-page QPushButton#settings-shortcut-edit[flash="valid"] { border-color:#1a7f37; }
+      #settings-page QPushButton#settings-shortcut-edit[flash="invalid"] { border-color:#b42318; }
+      #settings-page QPushButton#settings-shortcut-reset { background:transparent; border-color:transparent; }
+      #settings-page QPushButton#settings-shortcut-reset:hover { background:rgba(0,0,0,0.06); }
     )CSS");
   }
   page->setStyleSheet(style);
@@ -157,6 +176,7 @@ SettingsPage::SettingsPage(BrowserProfileService *profileService, Hooks hooks, Q
   addCategory(Category::Bookmarks, BrowserIcon::Bookmark, I18n::text(QStringLiteral("menu.bookmarks")), I18n::text(QStringLiteral("settings.keywords.bookmarks")), createBookmarksSection());
   addCategory(Category::History, BrowserIcon::History, I18n::text(QStringLiteral("menu.history")), I18n::text(QStringLiteral("settings.keywords.history")), createHistorySection());
   addCategory(Category::Accessibility, BrowserIcon::Accessibility, I18n::text(QStringLiteral("settings.category.accessibility")), I18n::text(QStringLiteral("settings.keywords.accessibility")), createAccessibilitySection());
+  addCategory(Category::Shortcuts, BrowserIcon::Keyboard, I18n::text(QStringLiteral("settings.category.shortcuts")), I18n::text(QStringLiteral("settings.keywords.shortcuts")), createShortcutsSection());
   addSidebarSeparator();
   addCategory(Category::System, BrowserIcon::Settings, I18n::text(QStringLiteral("settings.category.system")), I18n::text(QStringLiteral("settings.keywords.system")), createSystemSection());
   addCategory(Category::Listening, BrowserIcon::Tools, QStringLiteral("Pulse"), I18n::text(QStringLiteral("settings.keywords.listening")), createListeningSection());
@@ -233,6 +253,7 @@ void SettingsPage::retranslateUi() {
   updateItem(Category::Downloads, QStringLiteral("settings.category.downloads"));
   updateItem(Category::Languages, QStringLiteral("settings.category.languages"));
   updateItem(Category::Accessibility, QStringLiteral("settings.category.accessibility"));
+  updateItem(Category::Shortcuts, QStringLiteral("settings.category.shortcuts"));
   updateItem(Category::System, QStringLiteral("settings.category.system"));
   updateItem(Category::Listening, QStringLiteral("settings.category.listening"));
   updateItem(Category::Reset, QStringLiteral("settings.category.reset"));
@@ -266,6 +287,7 @@ void SettingsPage::retranslateUi() {
   updateHeading(Category::Bookmarks, QStringLiteral("settings.category.bookmarks"), QStringLiteral("settings.description.bookmarks"));
   updateHeading(Category::History, QStringLiteral("settings.category.history"), QStringLiteral("settings.description.history"));
   updateHeading(Category::Accessibility, QStringLiteral("settings.category.accessibility"), QStringLiteral("settings.description.accessibility"));
+  updateHeading(Category::Shortcuts, QStringLiteral("settings.category.shortcuts"), QStringLiteral("settings.description.shortcuts"));
   updateHeading(Category::System, QStringLiteral("settings.category.system"), QStringLiteral("settings.description.system"));
   updateHeading(Category::Listening, QStringLiteral("settings.category.listening"), QStringLiteral("settings.description.listening"));
   updateHeading(Category::Reset, QStringLiteral("settings.category.reset"), QStringLiteral("settings.description.reset"));
@@ -324,6 +346,10 @@ void SettingsPage::refreshPreferences() {
   }
   if (auto *restore = findChild<QPushButton *>(QStringLiteral("settings-restore-frequent-sites")))
     restore->setEnabled(!dalinira::ui_profile::getVisualValue(QStringLiteral("browser/hiddenFrequentSites")).toStringList().isEmpty());
+  if (auto *autoHide = findChild<QCheckBox *>(QStringLiteral("settings-side-panel-auto-hide"))) {
+    const QSignalBlocker blocker(autoHide);
+    autoHide->setChecked(dalinira::layout::sidePanelAutoHideEnabled(dalinira::layout::currentLayoutMode()));
+  }
   if (auto *engine = findChild<QComboBox *>(QStringLiteral("settings-search-engine"))) {
     const QSignalBlocker blocker(engine);
     engine->setCurrentText(settings.value(QStringLiteral("browser/searchEngine"), QStringLiteral("DuckDuckGo")).toString());
@@ -628,7 +654,24 @@ QWidget *SettingsPage::createAppearanceSection() {
     layoutFrameWidgets.push_back(frame);
   }
 
-  auto updateLayoutSelection = [this, layoutOptions, layoutFrameWidgets, layoutRadioButtons](int index) {
+  // Auto-hide side tabs (Zen-style): the docked side layouts only.
+  auto *autoHide = new QCheckBox(layoutContainer);
+  autoHide->setObjectName(QStringLiteral("settings-side-panel-auto-hide"));
+  autoHide->setAccessibleName(I18n::text(QStringLiteral("settings.appearance.side_tabs_auto_hide")));
+  autoHide->setAccessibleDescription(I18n::text(QStringLiteral("settings.appearance.side_tabs_auto_hide_desc")));
+  autoHide->setChecked(dalinira::layout::sidePanelAutoHideEnabled(dalinira::layout::currentLayoutMode()));
+  const auto sideLayout = [](const QString &id) { return id != QLatin1String("classic"); };
+  autoHide->setEnabled(sideLayout(currentLayoutStr));
+  connect(autoHide, &QCheckBox::toggled, this, [this](bool enabled) {
+    if (hooks_.setSidePanelAutoHide) hooks_.setSidePanelAutoHide(enabled);
+    else dalinira::layout::setSidePanelAutoHideEnabled(enabled);
+  });
+  QWidget *autoHideRow = settingRow(layoutContainer, I18n::text(QStringLiteral("settings.appearance.side_tabs_auto_hide")),
+                                    I18n::text(QStringLiteral("settings.appearance.side_tabs_auto_hide_desc")), autoHide);
+  if (autoHideRow->layout()) autoHideRow->layout()->setContentsMargins(4, 8, 4, 0);
+  layoutVBox->addWidget(autoHideRow);
+
+  auto updateLayoutSelection = [this, layoutOptions, layoutFrameWidgets, layoutRadioButtons, autoHide, sideLayout](int index) {
     if (index < 0 || index >= static_cast<int>(layoutOptions.size())) return;
     const QString selectedId = layoutOptions[index].id;
     for (int i = 0; i < static_cast<int>(layoutFrameWidgets.size()); ++i) {
@@ -641,6 +684,11 @@ QWidget *SettingsPage::createAppearanceSection() {
       }
     }
     dalinira::layout::setPersistedLayoutMode(dalinira::layout::layoutModeFromString(selectedId));
+    autoHide->setEnabled(sideLayout(selectedId));
+    {
+      const QSignalBlocker blocker(autoHide);
+      autoHide->setChecked(dalinira::layout::sidePanelAutoHideEnabled(dalinira::layout::layoutModeFromString(selectedId)));
+    }
     if (hooks_.setLayoutMode) hooks_.setLayoutMode(selectedId);
   };
 
@@ -910,13 +958,26 @@ QWidget *SettingsPage::createBookmarksSection() {
     if (hooks_.refreshBookmarkBarVisibility) hooks_.refreshBookmarkBarVisibility();
   });
 
-  addRow(barCard, settingRow(
+  QWidget *barRow = settingRow(
       barCard,
       I18n::text(QStringLiteral("menu.bookmarks_bar")),
       I18n::text(QStringLiteral("settings.bookmarks.bar_visibility_desc")),
       visibilityCombo,
       BrowserIcon::Bookmark,
-      true));
+      true);
+  addRow(barCard, barRow);
+  // The description names the bookmarks-bar shortcut currently assigned.
+  if (auto *barDescription = barRow->findChild<QLabel *>(QStringLiteral("settings-row-description"))) {
+    const auto describeBar = [barDescription] {
+      const QString key = dalinira::KeyboardShortcutService::primaryText(QStringLiteral("bookmarks.toggle_bar"));
+      const QString text = I18n::text(QStringLiteral("settings.bookmarks.bar_visibility_desc"));
+      barDescription->setText(key.isEmpty() ? text : QStringLiteral("%1 (%2)").arg(text, key));
+    };
+    describeBar();
+    connect(&dalinira::KeyboardShortcutService::instance(), &dalinira::KeyboardShortcutService::shortcutsChanged,
+            barDescription, describeBar);
+    languageRefreshers_.push_back(describeBar);
+  }
   section.layout->addWidget(barCard);
 
   auto *card = makeCard(section.page, I18n::text(QStringLiteral("settings.bookmarks.saved_card")));

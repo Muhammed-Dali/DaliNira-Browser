@@ -1,0 +1,36 @@
+--- a/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/AcceleratedSurface.cpp
++++ b/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/AcceleratedSurface.cpp
+@@ -44,6 +44,7 @@
+ #include <wtf/SafeStrerror.h>
+ #include <wtf/SystemTracing.h>
+ #include <wtf/TZoneMallocInlines.h>
++#include <wtf/threads/BinarySemaphore.h>
+ 
+ WTF_IGNORE_WARNINGS_IN_THIRD_PARTY_CODE_BEGIN
+ #include <skia/core/SkCanvas.h>
+@@ -1033,11 +1034,21 @@
+ #endif
+ 
+     // m_releaseUnusedBuffersTimer is owned by the compositing run loop and its destructor stops it, so
+-    // destroy it on that run loop's thread rather than here on the main thread.
++    // destroy it on that run loop's thread rather than here on the main thread. Do it synchronously:
++    // the compositing run loop is stopped right after this (its WorkQueue goes away with the
++    // ThreadedCompositor), and a task dispatched to it may then never run; it is dropped when the
++    // thread exits, the surface is destroyed on the main run loop and the still-active timer with it.
+     if (RefPtr compositingRunLoop = std::exchange(m_compositingRunLoop, nullptr)) {
+-        compositingRunLoop->dispatch([protectedThis = Ref { *this }] {
+-            protectedThis->m_releaseUnusedBuffersTimer = nullptr;
+-        });
++        if (compositingRunLoop->isCurrent())
++            m_releaseUnusedBuffersTimer = nullptr;
++        else {
++            BinarySemaphore semaphore;
++            compositingRunLoop->dispatch([this, &semaphore] {
++                m_releaseUnusedBuffersTimer = nullptr;
++                semaphore.signal();
++            });
++            semaphore.wait();
++        }
+     }
+ #if PLATFORM(GTK) || ENABLE(WPE_PLATFORM)
+     WebProcess::singleton().parentProcessConnection()->removeMessageReceiver(Messages::AcceleratedSurface::messageReceiverName(), m_id);

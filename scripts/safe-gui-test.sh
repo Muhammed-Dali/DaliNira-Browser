@@ -22,11 +22,11 @@
 #     detected (--keep-cores keeps them for debugging);
 #   * a 1 Hz resource monitor (scripts/gui-test-monitor.py) records CPU,
 #     PSS/private memory, WebKit process and window counts, GPU engine time
-#     and memory pressure to build/gui-test-logs/, and stops the test when
+#     and memory pressure to build-dalinira/gui-test-logs/, and stops the test when
 #     it exceeds a limit (e.g. more than one view's web processes, low
 #     available memory, memory pressure);
 #   * local deterministic pages by default. Opt-in tiers, only on request:
-#       --manual           window-manager cases (several windows, fullscreen)
+#       --manual           window-manager cases (media fullscreen)
 #       --live             live sites (DuckDuckGo, YouTube)
 #       --memory-profile   the memory profiler (live sites)
 #
@@ -36,11 +36,11 @@
 #   scripts/safe-gui-test.sh --list
 #
 # Without TEST names, every ctest test labelled "gui" runs, in order.
-# A plain `ctest --test-dir build` skips the GUI tier (it stays invisible).
+# A plain `ctest --test-dir build-dalinira` skips the GUI tier (it stays invisible).
 
 set -u
 
-BUILD_DIR="build"
+BUILD_DIR="${DALINIRA_BUILD_DIR:-build-dalinira}"
 LIVE=0
 MANUAL=0
 KEEP_CORES=0
@@ -84,7 +84,7 @@ else
   ulimit -c 0
 fi
 # The default tier allows one view (a navigation may briefly overlap two web
-# processes). The manual tier opens three windows at once; the profiler, tabs.
+# processes). The manual tier raises the budget; the profiler, tabs.
 if [ "$MANUAL" = 1 ]; then
   export DALINIRA_GUI_MANUAL=1
   export DALINIRA_GUI_MAX_WEB_PROCESSES="${DALINIRA_GUI_MAX_WEB_PROCESSES:-4}"

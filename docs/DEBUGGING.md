@@ -10,8 +10,12 @@ To generate unoptimized binaries with full debugging symbols (`-g`) and clangd c
 
 ```bash
 cmake -S . -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-cmake --build build-debug -j$(nproc)
+cmake --build build-debug -j3
 ```
+
+Run `./scripts/build-dalinira.sh` once first: the debug build uses the same
+private WebKitGTK runtime in `build-webkit-runtime/prefix/`. Keep parallel jobs
+at 3 or fewer, as every DaliNira build does.
 
 You can then run the debug binary directly or attach GDB:
 ```bash
@@ -27,26 +31,26 @@ Running DaliNira Browser from a terminal reveals valuable real-time subsystem lo
 ### 1. Chromium & WebEngine Diagnostic Logging
 To route Chromium's internal logging directly to your terminal standard error:
 ```bash
-QTWEBENGINE_CHROMIUM_FLAGS="--enable-logging=stderr --v=1" ./build/dalinira-browser
+QTWEBENGINE_CHROMIUM_FLAGS="--enable-logging=stderr --v=1" ./build-dalinira/dalinira-browser
 ```
 
 ### 2. Qt Framework Logging Categories
 To filter or enable verbose Qt logging for WebEngine, networking, and widgets:
 ```bash
-QT_LOGGING_RULES="qt.webengine*=true;qt.network*=true" ./build/dalinira-browser
+QT_LOGGING_RULES="qt.webengine*=true;qt.network*=true" ./build-dalinira/dalinira-browser
 ```
 
 ### 3. Chromium Remote Web Inspector
 You can inspect browser tabs and internal web pages using a remote Chromium DevTools frontend:
 ```bash
-QTWEBENGINE_REMOTE_DEBUGGING=9222 ./build/dalinira-browser
+QTWEBENGINE_REMOTE_DEBUGGING=9222 ./build-dalinira/dalinira-browser
 ```
 Then open any Chromium-based browser (or another DaliNira tab) and navigate to `http://127.0.0.1:9222` to inspect the DOM, console logs, network waterfalls, and JavaScript execution.
 
 ### 4. DaliNira Internal Performance Diagnostics
 DaliNira includes a built-in diagnostics monitor that prints memory and subsystem metrics:
 ```bash
-DALINIRA_FEATURE_DIAGNOSTICS=1 ./build/dalinira-browser
+DALINIRA_FEATURE_DIAGNOSTICS=1 ./build-dalinira/dalinira-browser
 ```
 
 ---
@@ -56,7 +60,7 @@ DALINIRA_FEATURE_DIAGNOSTICS=1 ./build/dalinira-browser
 If the browser crashes with a Segmentation Fault (`SIGSEGV`) or Abort (`SIGABRT`), run under GDB to capture the exact stack trace:
 
 ```bash
-gdb -batch -ex "run" -ex "bt 30" ./build/dalinira-browser
+gdb -batch -ex "run" -ex "bt 30" ./build-dalinira/dalinira-browser
 ```
 
 ### Analyzing Core Dumps
@@ -104,7 +108,7 @@ If web media audio is distorted or not processing:
 2. Check terminal output for DALI Web Audio graph compilation errors.
 3. Test with and without hardware audio acceleration:
    ```bash
-   QTWEBENGINE_CHROMIUM_FLAGS="--disable-features=AudioServiceSandbox" ./build/dalinira-browser
+   QTWEBENGINE_CHROMIUM_FLAGS="--disable-features=AudioServiceSandbox" ./build-dalinira/dalinira-browser
    ```
 
 ### DaliNira Pulse (Music Recognition)
@@ -116,13 +120,13 @@ If song recognition cannot capture audio:
   Look for `.monitor` sources (e.g. `alsa_output.pci-0000_00_1f.3.analog-stereo.monitor`).
 - Launch with terminal output to inspect Shazam fingerprinting query status:
   ```bash
-  ./build/dalinira-browser dalinira://pulse
+  ./build-dalinira/dalinira-browser dalinira://pulse
   ```
 
 ### GeneralDownloadManager (Adaptive Parallel Downloads)
 To observe connection scaling (1 → 2 → 4 → 8 chunks) and range chunking:
 ```bash
-QT_LOGGING_RULES="dalinira.downloads=true" ./build/dalinira-browser dalinira://downloads
+QT_LOGGING_RULES="dalinira.downloads=true" ./build-dalinira/dalinira-browser dalinira://downloads
 ```
 Check if the remote HTTP server returns `Accept-Ranges: bytes` or returns HTTP 429 throttling headers.
 
@@ -133,5 +137,5 @@ To verify VA-API video decoding pipelines:
 vainfo
 
 # Launch browser with explicit driver if auto-detection fails
-LIBVA_DRIVER_NAME=iHD ./build/dalinira-browser
+LIBVA_DRIVER_NAME=iHD ./build-dalinira/dalinira-browser
 ```

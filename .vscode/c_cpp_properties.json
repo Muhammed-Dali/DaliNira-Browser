@@ -5,7 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/**"
             ],
-            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "compileCommands": "${workspaceFolder}/build-dalinira/compile_commands.json",
             "defines": [],
             "cStandard": "c17",
             "cppStandard": "c++20",

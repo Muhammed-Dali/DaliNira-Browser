@@ -1,0 +1,3 @@
+# Unified diffs: an empty context line is a single space.
+packaging/webkit-runtime/patches/*.patch -whitespace
+docs/research/webkit-exit-crash/*.patch -whitespace
