@@ -114,7 +114,9 @@ void TabSearchPopup::setupUi() {
   ));
   searchLayout->addWidget(searchEdit_, 1);
 
-  shortcutLabel_ = new QLabel(QStringLiteral("Ctrl+Shift+A"), searchContainer);
+  shortcutLabel_ = new QLabel(searchContainer);
+  shortcutLabel_->setObjectName(QStringLiteral("tabSearchShortcutHint"));
+  shortcutLabel_->hide();
   shortcutLabel_->setStyleSheet(QStringLiteral(
       "color: #9aa0a6; font-size: 11px; font-weight: 500; padding: 2px 6px; background: rgba(255, 255, 255, 0.06); border-radius: 4px;"
   ));
@@ -164,6 +166,11 @@ void TabSearchPopup::setupUi() {
 
   connect(searchEdit_, &QLineEdit::textChanged, this, &TabSearchPopup::onSearchTextChanged);
   searchEdit_->installEventFilter(this);
+}
+
+void TabSearchPopup::setShortcutHint(const QString &text) {
+  shortcutLabel_->setText(text);
+  shortcutLabel_->setVisible(!text.isEmpty());
 }
 
 void TabSearchPopup::showBelow(QWidget *anchorWidget) {

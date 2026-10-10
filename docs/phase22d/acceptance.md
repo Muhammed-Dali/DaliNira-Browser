@@ -44,9 +44,8 @@ Bu dosya otomatik test ile canlı site kabulünü ayrı kaydeder. Fixture sonuç
 ## Doğrulama komutları
 
 ```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j 4
-ctest --test-dir build --output-on-failure
+./scripts/build-dalinira.sh
+ctest --test-dir build-dalinira --output-on-failure
 git diff --check
 ```
 

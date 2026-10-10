@@ -1,0 +1,56 @@
+From: Muhammed Dali <dali.nira.12.1453kerinyoli@gmail.com>
+Date: Wed, 8 Oct 2026 00:00:00 +0300
+Subject: [PATCH] [GTK] AcceleratedSurface: destroy the release-buffers timer
+ synchronously on its run loop
+
+AcceleratedSurface::willDestroyCompositingRunLoop() dispatched the reset of
+m_releaseUnusedBuffersTimer to the compositing run loop. The ThreadedCompositor
+stops that run loop right afterwards, and a task still pending when its thread
+exits is dropped unrun. The lambda's protectedThis can then be the surface's
+last reference, so the surface, and with it the still-active RunLoop timer, is
+destroyed on the main run loop, and ~TimerBase() aborts the web process
+(WebKitGTK 2.54.1, about 2% of window lifetimes in DaliNira's multi-tab flow).
+
+Reset the timer synchronously on the compositing run loop instead.
+
+Changed by DaliNira on 2026-10-08 for its private WebKitGTK 2.54.1 runtime.
+Validated: 0 crashes in 500 window lifetimes (unpatched control: 3 in 40).
+Not yet merged upstream. The file is under the BSD-2-Clause terms in its
+header; this change is offered under the same terms.
+
+--- a/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/AcceleratedSurface.cpp
++++ b/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/AcceleratedSurface.cpp
+@@ -44,6 +44,7 @@
+ #include <wtf/SafeStrerror.h>
+ #include <wtf/SystemTracing.h>
+ #include <wtf/TZoneMallocInlines.h>
++#include <wtf/threads/BinarySemaphore.h>
+ 
+ WTF_IGNORE_WARNINGS_IN_THIRD_PARTY_CODE_BEGIN
+ #include <skia/core/SkCanvas.h>
+@@ -1033,11 +1034,21 @@
+ #endif
+ 
+     // m_releaseUnusedBuffersTimer is owned by the compositing run loop and its destructor stops it, so
+-    // destroy it on that run loop's thread rather than here on the main thread.
++    // destroy it on that run loop's thread rather than here on the main thread. Do it synchronously:
++    // the compositing run loop is stopped right after this (its WorkQueue goes away with the
++    // ThreadedCompositor), and a task dispatched to it may then never run; it is dropped when the
++    // thread exits, the surface is destroyed on the main run loop and the still-active timer with it.
+     if (RefPtr compositingRunLoop = std::exchange(m_compositingRunLoop, nullptr)) {
+-        compositingRunLoop->dispatch([protectedThis = Ref { *this }] {
+-            protectedThis->m_releaseUnusedBuffersTimer = nullptr;
+-        });
++        if (compositingRunLoop->isCurrent())
++            m_releaseUnusedBuffersTimer = nullptr;
++        else {
++            BinarySemaphore semaphore;
++            compositingRunLoop->dispatch([this, &semaphore] {
++                m_releaseUnusedBuffersTimer = nullptr;
++                semaphore.signal();
++            });
++            semaphore.wait();
++        }
+     }
+ #if PLATFORM(GTK) || ENABLE(WPE_PLATFORM)
+     WebProcess::singleton().parentProcessConnection()->removeMessageReceiver(Messages::AcceleratedSurface::messageReceiverName(), m_id);

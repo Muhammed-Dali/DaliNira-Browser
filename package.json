@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "start": "bash scripts/dev-linux.sh",
-    "build": "cmake -S . -B build -G Ninja && cmake --build build"
+    "build": "./scripts/build-dalinira.sh"
   },
   "keywords": [
     "browser",

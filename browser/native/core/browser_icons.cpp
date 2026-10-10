@@ -100,6 +100,7 @@ QString BrowserIcons::resourcePath(BrowserIcon id) {
     case BrowserIcon::Fullscreen: return QStringLiteral(":/browser-icons/fullscreen.svg");
     case BrowserIcon::Tune: return QStringLiteral(":/browser-icons/tune.svg");
     case BrowserIcon::Mail: return QStringLiteral(":/browser-icons/mail.svg");
+    case BrowserIcon::Keyboard: return QStringLiteral(":/browser-icons/keyboard.svg");
   }
   return {};
 }

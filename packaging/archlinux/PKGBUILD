@@ -6,7 +6,36 @@ pkgrel=1
 pkgdesc="Native Qt/C++ desktop browser with integrated privacy and media tools"
 arch=('x86_64')
 url="https://github.com/Muhammed-Dali/DaliNira-Browser"
-license=('GPL-3.0-only')
+# DaliNira itself, then its private WebKitGTK runtime (the same license set
+# Arch Linux's webkit2gtk-4.1 declares; texts in
+# /usr/share/licenses/dalinira-browser/webkitgtk/LICENSE.WebKitGTK).
+license=(
+  'GPL-3.0-only'
+  'AFL-2.0 OR GPL-2.0-or-later'
+  'Apache-2.0'
+  'Apache-2.0 WITH LLVM-exception'
+  'BSD-2-Clause'
+  'BSD-2-Clause-Views'
+  'BSD-3-Clause'
+  'BSD-Source-Code'
+  'BSL-1.0'
+  'bzip2-1.0.6'
+  'GPL-2.0-only'
+  'GPL-3.0-only WITH Autoconf-exception-3.0'
+  'GPL-3.0-or-later WITH Bison-exception-2.2'
+  'ICU'
+  'ISC'
+  'LGPL-2.1-only'
+  'LGPL-2.1-or-later'
+  'MIT'
+  'MPL-1.1'
+  'MPL-2.0'
+  'NCSA'
+  'NCSA OR MIT'
+  'OFL-1.1'
+  'SunPro'
+  'Unicode-TOU'
+)
 depends=(
   'ffmpeg'
   'libpsl'
@@ -18,15 +47,65 @@ depends=(
   'qt6-imageformats'
   'qt6-svg'
   'qt6-webengine'
-  # WebKit engine and its HTML5 media runtime (docs/webkit-media-runtime.md).
+  # The WebKit engine's HTML5 media runtime (docs/webkit-media-runtime.md).
   # gst-plugins-good: autoaudiosink (WebKitGTK aborts the web process without
   # it), WebM/MP4 demuxers, VP9; gst-plugins-bad: opusparse, which YouTube's
   # Opus audio needs through MSE; gst-libav: H.264 and AAC.
-  'webkit2gtk-4.1'
   'gst-plugins-base'
   'gst-plugins-good'
   'gst-plugins-bad'
   'gst-libav'
+  # Libraries of the private WebKitGTK runtime (packaging/webkit-runtime),
+  # which replaces the system webkit2gtk-4.1 for DaliNira.
+  # The runtime's web-process sandbox runs /usr/bin/bwrap and
+  # /usr/bin/xdg-dbus-proxy, as Arch's webkit2gtk-4.1 depends on them.
+  'bubblewrap'
+  'xdg-dbus-proxy'
+  # libegl, libgl, libgles: loaded at run time through libepoxy.
+  'at-spi2-core'
+  'cairo'
+  'enchant'
+  'expat'
+  'fontconfig'
+  'freetype2'
+  'glib2'
+  'glibc'
+  'gst-plugins-base-libs'
+  'gstreamer'
+  'gtk3'
+  'harfbuzz'
+  'harfbuzz-icu'
+  'hyphen'
+  'icu'
+  'lcms2'
+  'libatomic'
+  'libavif'
+  'libdrm'
+  'libegl'
+  'libepoxy'
+  'libgcc'
+  'libgcrypt'
+  'libgl'
+  'libgles'
+  'libjpeg-turbo'
+  'libjxl'
+  'libmanette'
+  'libpng'
+  'libseccomp'
+  'libsoup3'
+  'libstdc++'
+  'libsystemd'
+  'libtasn1'
+  'libwebp'
+  'libx11'
+  'libxml2'
+  'libxslt'
+  'mesa'
+  'pango'
+  'sqlite'
+  'ttf-font'
+  'wayland'
+  'zlib'
 )
 optdepends=(
   'qt6-wayland: native Wayland windows for the Chromium engine (QT_QPA_PLATFORM=wayland)'
@@ -36,22 +115,62 @@ makedepends=(
   'git'
   'ninja'
   'nodejs'
+  # The private WebKitGTK runtime (as Arch Linux's webkit2gtk-4.1, without
+  # documentation and introspection).
+  'clang'
+  'glib2-devel'
+  'gperf'
+  'lld'
+  'python'
+  'ruby'
+  'ruby-stdlib'
+  'systemd'
+  'unifdef'
+  'wayland-protocols'
 )
 provides=('dalinira' 'dalinira-webmedia')
 conflicts=('dalinira' 'dalinira-bin' 'dalinira-webmedia')
 replaces=('dalinira-bin' 'dalinira-webmedia')
-source=("${pkgname}-${pkgver}.tar.gz::https://github.com/Muhammed-Dali/DaliNira-Browser/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('SKIP')
+_webkitver=2.54.1
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/Muhammed-Dali/DaliNira-Browser/archive/refs/tags/v${pkgver}.tar.gz"
+        "https://webkitgtk.org/releases/webkitgtk-${_webkitver}.tar.xz")
+# build-webkit-runtime.sh verifies, extracts and patches it.
+noextract=("webkitgtk-${_webkitver}.tar.xz")
+sha256sums=('SKIP'
+            'ea0bbb02dbdbc596874a4e7ad35b66645b3e0a232bd0e4081de5ed92eb0a397d')
 
 build() {
+  # Parallel jobs follow makepkg.conf's MAKEFLAGS (-jN), which neither Ninja
+  # nor the runtime recipe reads on its own; without it, every CPU is used.
+  local _jobs
+  _jobs="$(sed -n 's/.*-j[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<< "${MAKEFLAGS:-}")"
+  _jobs="${_jobs:-$(nproc)}"
+
+  # DaliNira's private WebKitGTK runtime, built like Arch Linux's
+  # webkit2gtk-4.1: Clang and lld (upstream's preference), FORTIFY_SOURCE=2
+  # (Skia uses malloc_usable_size), no CET (JIT code has no landing pads).
+  # The script drops debug and LTO flags (the validated configuration).
+  (
+    export CC=clang CXX=clang++
+    export CFLAGS="${CFLAGS/_FORTIFY_SOURCE=3/_FORTIFY_SOURCE=2} -fcf-protection=none"
+    export CXXFLAGS="${CXXFLAGS/_FORTIFY_SOURCE=3/_FORTIFY_SOURCE=2} -fcf-protection=none"
+    export LDFLAGS="${LDFLAGS} -fuse-ld=lld"
+    bash "DaliNira-Browser-${pkgver}/packaging/webkit-runtime/build-webkit-runtime.sh" \
+      --sdk "${srcdir}/webkit-sdk" \
+      --build-dir "${srcdir}/webkit-build" \
+      --tarball "${srcdir}/webkitgtk-${_webkitver}.tar.xz" \
+      --jobs "${_jobs}"
+  )
+
   cmake \
     -S "DaliNira-Browser-${pkgver}" \
     -B build \
     -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser
-  cmake --build build
+    -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser \
+    -DDALINIRA_WEBKIT_RUNTIME_SDK="${srcdir}/webkit-sdk"
+  cmake --build build --parallel "${_jobs}"
 }
 
 check() {
@@ -74,4 +193,6 @@ package() {
     "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
   install -Dm644 "DaliNira-Browser-${pkgver}/browser/resources/adblock/NOTICE.txt" \
     "${pkgdir}/usr/share/licenses/${pkgname}/NOTICE.adblock"
+  # WebKitGTK licenses, patches, build record and source notice.
+  ln -s ../../doc/dalinira-browser/webkitgtk "${pkgdir}/usr/share/licenses/${pkgname}/webkitgtk"
 }

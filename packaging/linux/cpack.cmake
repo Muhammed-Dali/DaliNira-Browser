@@ -4,13 +4,17 @@
 # container, so library dependencies match that release:
 #
 #   cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
-#         -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser -DDALINIRA_PACKAGE_DISTRO=debian12
+#         -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser -DDALINIRA_PACKAGE_DISTRO=debian12 \
+#         -DDALINIRA_WEBKIT_RUNTIME_SDK=/path/to/distribution-sdk
 #   cmake --build build
 #   cd build && cpack -G DEB        # or -G RPM for fedora
 #
-# Shared libraries the binaries link (Qt, QtWebEngine, WebKitGTK, GStreamer
-# core, OpenSSL, libpsl) become dependencies automatically: dpkg-shlibdeps for
-# .deb, rpmbuild's soname requirements for .rpm. What neither tool can see is
+# Shared libraries the binaries link (Qt, QtWebEngine, GStreamer core,
+# OpenSSL, libpsl, and the libraries of the private WebKitGTK runtime: GTK,
+# libsoup, ICU, ...) become dependencies automatically: dpkg-shlibdeps for
+# .deb, rpmbuild's soname requirements for .rpm. WebKitGTK itself is not a
+# dependency: release packages ship DaliNira's private, patched build of it
+# under /usr/lib/dalinira-browser/webkit (packaging/webkit-runtime). What neither tool can see is
 # declared below: plugins that are loaded at runtime, above all the GStreamer
 # plugins WebKitGTK needs for HTML5 audio/video and YouTube. The distributions'
 # WebKitGTK packages only recommend or suggest them, so without these entries
@@ -21,6 +25,11 @@
 
 set(DALINIRA_PACKAGE_DISTRO "" CACHE STRING
     "Distribution the cpack package targets: debian12, ubuntu2404 or fedora")
+if(NOT DALINIRA_PACKAGE_DISTRO STREQUAL "" AND DALINIRA_BUILD_WEBKIT AND
+   NOT DALINIRA_WEBKIT_RUNTIME_SDK)
+  message(FATAL_ERROR
+    "Distribution packages require DALINIRA_WEBKIT_RUNTIME_SDK; a developer runtime path must never enter a package")
+endif()
 
 set(CPACK_PACKAGE_NAME "dalinira-browser")
 set(CPACK_PACKAGE_VENDOR "Muhammed Dali")
@@ -58,8 +67,19 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 # The private WebKit web-process extension is not a public library.
 set(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS OFF)
+# The private WebKitGTK libraries, relative to the package root (CPack runs
+# dpkg-shlibdeps there): found in the package, so no system WebKitGTK
+# dependency; their own library dependencies still become Depends.
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS_PRIVATE_DIRS "lib/dalinira-browser/webkit/lib")
+if(NOT CMAKE_INSTALL_PREFIX STREQUAL "/")
+  string(REGEX REPLACE "^/" "" _dalinira_prefix_rel "${CMAKE_INSTALL_PREFIX}")
+  set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS_PRIVATE_DIRS "${_dalinira_prefix_rel}/lib/dalinira-browser/webkit/lib")
+endif()
+# bubblewrap, xdg-dbus-proxy: the private runtime's web-process sandbox runs
+# /usr/bin/bwrap and /usr/bin/xdg-dbus-proxy, which dpkg-shlibdeps cannot see
+# (libwebkit2gtk-4.1-0 depends on them for the same reason).
 set(CPACK_DEBIAN_PACKAGE_DEPENDS
-    "gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav, gstreamer1.0-gl, gstreamer1.0-alsa, libqt6webenginecore6-bin, qt6-image-formats-plugins, ffmpeg")
+    "bubblewrap, xdg-dbus-proxy, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav, gstreamer1.0-gl, gstreamer1.0-alsa, libqt6webenginecore6-bin, qt6-image-formats-plugins, ffmpeg")
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "gstreamer1.0-pipewire")
 set(CPACK_DEBIAN_PACKAGE_SUGGESTS "qt6-wayland")
 
@@ -69,10 +89,15 @@ set(CPACK_RPM_PACKAGE_GROUP "Applications/Internet")
 set(CPACK_RPM_PACKAGE_ARCHITECTURE "x86_64")
 set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
 set(CPACK_RPM_PACKAGE_AUTOREQ ON)
-# Don't advertise the private WebKit extension module as a provided library.
+# Don't advertise the private WebKit extension module or the private
+# WebKitGTK libraries as provided libraries.
 set(CPACK_RPM_PACKAGE_AUTOPROV OFF)
+# ... and don't require the system's copies of the private WebKitGTK
+# libraries: the package ships them (rpm's dependency generator honours this).
+set(CPACK_RPM_SPEC_MORE_DEFINE "%global __requires_exclude ^lib(webkit2gtk|javascriptcoregtk)-4\\.1\\.so")
+# bubblewrap, xdg-dbus-proxy: see the Debian dependencies above.
 set(CPACK_RPM_PACKAGE_REQUIRES
-    "gstreamer1-plugins-base, gstreamer1-plugins-good, gstreamer1-plugins-bad-free, gstreamer1-plugin-libav, qt6-qtimageformats, /usr/bin/ffmpeg")
+    "bubblewrap, xdg-dbus-proxy, gstreamer1-plugins-base, gstreamer1-plugins-good, gstreamer1-plugins-bad-free, gstreamer1-plugin-libav, qt6-qtimageformats, /usr/bin/ffmpeg")
 set(CPACK_RPM_PACKAGE_RECOMMENDS "gstreamer1-plugin-openh264")
 set(CPACK_RPM_PACKAGE_SUGGESTS "qt6-qtwayland")
 set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION

@@ -9,6 +9,10 @@ All notable release-facing changes to DaliNira Browser are documented here.
 - **Dual-engine architecture**: Chromium (Qt WebEngine) and WebKitGTK behind a shared `EngineView`/`EngineBackend` abstraction, selectable in onboarding and Settings → System, with a separate tab/session workspace per engine.
 - **Onboarding**: language, engine, layout and theme, search engine and privacy options, and browser data import.
 - **Layouts**: vertical tabs on the left or right and a floating sidebar, alongside the classic tab strip.
+- **Auto-hiding side tabs** (Zen-inspired): visible on New Tab, hidden on websites, revealed by hovering the window edge, with a pin toggle (Settings → Appearance → Auto-hide side tabs); left, right and floating layouts; navigation controls and the main menu move into the panel; a background-aware glass look beside New Tab; event-driven pointer tracking on WebKitGTK; parity-tested on both engines.
+- **Keyboard Shortcuts** (Settings → Keyboard Shortcuts): customizable bindings with conflict detection and reassignment, reset one or reset all, live updates in every window, reserved text-editing keys, DaliNira's own key names (e.g. Ctrl+⇧+Y), and the same behavior on Chromium and WebKitGTK.
+- **Private WebKitGTK runtime**: the WebKit engine runs on DaliNira's own build of WebKitGTK 2.54.1 under `/usr/lib/dalinira-browser/webkit/`, with a fix for an `AcceleratedSurface` web-process crash (unpatched 3/40 window lifetimes crashed; patched 0/500, packaged runtime 0/500). License texts, the patch and a source notice are installed; the corresponding source is published with the release.
+- **Unified developer build**: `./scripts/build-dalinira.sh` checks or builds the private runtime (first run: pinned download, SHA-256 check, patch, at most 3 jobs) and then builds the dual-engine application.
 - **Tab sleeping**: two-stage light/full sleep, unsaved-input protection, a sleeping-tab indicator, Wake actions, and per-tab memory in the hover card where it can be measured exactly.
 - **Privacy**: Global Privacy Control, HTTPS by default with a one-time fallback, link debouncing (`$urlskip`), fingerprinting noise, WebKitGTK third-party cookie blocking with ITP, and Chromium cache/connection partitioning.
 - **Find in page**: redesigned find bar, toolbar button, Ctrl+G / Ctrl+Shift+G.
@@ -17,6 +21,10 @@ All notable release-facing changes to DaliNira Browser are documented here.
 - French interface translation; live language switching for all four interface languages (English, Turkish, Arabic, French).
 - Engine-parity, onboarding, window-platform, and feedback-link regression suites; a localization audit; a GUI test safety runner.
 - Packaging and CI jobs that build and fresh-install the portable archive and the `.deb`, `.rpm` and Arch packages.
+
+### Known issues
+
+- WebKitGTK 2.54.1 (upstream): when the `<video>` element itself is made fullscreen (native video controls, or `requestFullscreen()` on the video), playback stops advancing until fullscreen ends. Container fullscreen, as on YouTube, windowed playback and the Chromium engine are not affected.
 
 ### Changed
 
@@ -28,6 +36,7 @@ All notable release-facing changes to DaliNira Browser are documented here.
 
 - WebKitGTK X11 error handling, keyboard focus handover, and stacking of native overlays.
 - Clean shutdown of retained WebKitGTK web processes such as service workers.
+- Windows opened for links, popups and detached tabs are released on close, together with their WebKit tabs and web processes.
 - Ad-blocking scripts on page-initiated cross-site navigations in Chromium.
 - New Tab page no longer scrolls.
 - Settings → About names the engine actually running (WebKitGTK and its version under WebKit) and shows the product name correctly.

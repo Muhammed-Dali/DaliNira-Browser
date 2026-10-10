@@ -46,18 +46,27 @@ jobs:
           test "$(sed -n 's/^pkgname=//p' "${recipe_dir}/PKGBUILD")" = "${AUR_PACKAGE}"
           test "$(sed -n 's/^pkgver=//p' "${recipe_dir}/PKGBUILD")" = "${version}"
           archive="dalinira-browser-${version}-linux-x86_64.tar.zst"
-          gh release download "${{ inputs.release_tag }}" --pattern "${archive}" --dir "${RUNNER_TEMP}"
+          # The private WebKitGTK runtime built on Arch Linux (packaging/webkit-runtime).
+          runtime="dalinira-webkit-runtime-${version}-arch-x86_64.tar.zst"
+          gh release download "${{ inputs.release_tag }}" --pattern "${archive}" --pattern "${runtime}" --dir "${RUNNER_TEMP}"
           checksum="$(sha256sum "${RUNNER_TEMP}/${archive}" | cut -d' ' -f1)"
+          runtime_checksum="$(sha256sum "${RUNNER_TEMP}/${runtime}" | cut -d' ' -f1)"
           cp "${recipe_dir}/PKGBUILD" "${RUNNER_TEMP}/PKGBUILD"
           cp "${recipe_dir}/.SRCINFO" "${RUNNER_TEMP}/.SRCINFO"
-          sed -i "s/^sha256sums=('SKIP')$/sha256sums=('${checksum}')/" "${RUNNER_TEMP}/PKGBUILD"
+          # Two sources, in this order: the portable archive, the runtime.
+          sed -i -z "s/sha256sums=('SKIP'\n            'SKIP')/sha256sums=('${checksum}'\n            '${runtime_checksum}')/" "${RUNNER_TEMP}/PKGBUILD"
           sed -i -E "s/^([[:space:]]*pkgver = ).*/\1${version}/" "${RUNNER_TEMP}/.SRCINFO"
           sed -i -E "s#releases/download/v[0-9]+\.[0-9]+\.[0-9]+/#releases/download/v${version}/#g" "${RUNNER_TEMP}/.SRCINFO"
           sed -i -E "s#dalinira-browser-[0-9]+\.[0-9]+\.[0-9]+-linux-x86_64#dalinira-browser-${version}-linux-x86_64#g" "${RUNNER_TEMP}/.SRCINFO"
-          sed -i "s/sha256sums = SKIP/sha256sums = ${checksum}/" "${RUNNER_TEMP}/.SRCINFO"
+          sed -i -E "s#dalinira-webkit-runtime-[0-9]+\.[0-9]+\.[0-9]+-arch-x86_64#dalinira-webkit-runtime-${version}-arch-x86_64#g" "${RUNNER_TEMP}/.SRCINFO"
+          sed -i "0,/sha256sums = SKIP/s//sha256sums = ${checksum}/" "${RUNNER_TEMP}/.SRCINFO"
+          sed -i "0,/sha256sums = SKIP/s//sha256sums = ${runtime_checksum}/" "${RUNNER_TEMP}/.SRCINFO"
           grep -F "pkgver = ${version}" "${RUNNER_TEMP}/.SRCINFO"
-          grep -F "sha256sums=('${checksum}')" "${RUNNER_TEMP}/PKGBUILD"
+          grep -F "sha256sums=('${checksum}'" "${RUNNER_TEMP}/PKGBUILD"
+          grep -F "            '${runtime_checksum}')" "${RUNNER_TEMP}/PKGBUILD"
           grep -F "sha256sums = ${checksum}" "${RUNNER_TEMP}/.SRCINFO"
+          grep -F "sha256sums = ${runtime_checksum}" "${RUNNER_TEMP}/.SRCINFO"
+          if grep -q SKIP "${RUNNER_TEMP}/PKGBUILD" "${RUNNER_TEMP}/.SRCINFO"; then exit 1; fi
 
       - name: Push the AUR package
         run: |

@@ -5,8 +5,6 @@
 // web process has exited before the next case starts (webkit_gui_harness.h).
 // Pages are served locally. Opt-in extras:
 //   DALINIRA_LIVE_TESTS=1  live DuckDuckGo / YouTube navigation (--live)
-//   DALINIRA_GUI_MANUAL=1  window-manager cases: several simultaneous windows
-//                          and a create/destroy sequence (--manual)
 // The engine-neutral logic (identities, storage, resolver, UI profiles) is in
 // webkit_engine_logic_test.cpp, which runs without any window.
 
@@ -926,41 +924,15 @@ void caseSleepAndWake(WebKitGuiHarness &h) {
   h.destroyView(view);
 }
 
-// ---------------------------------------------------------------------------
-// Manual tier (DALINIRA_GUI_MANUAL=1): window-manager behaviour with several
-// simultaneous top-level WebKit windows and a short create/destroy sequence.
-// Not part of the default GUI run.
-// ---------------------------------------------------------------------------
-void caseManualWindowManager(WebKitGuiHarness &h, const QUrl &examplePage) {
-  std::cout << "[MANUAL] Three simultaneous WebKit windows, then create/destroy x3..." << std::endl;
-  auto *backend = webKitBackend();
-  QList<EngineView *> windows;
-  for (int i = 0; i < 3; ++i) {
-    auto *window = backend->createView();
-    window->resize(400, 300);
-    window->show();
-    QObject::connect(window, &EngineView::webProcessTerminated, [](int reason) {
-      std::cout << "[FAIL] manual window: web process terminated (reason " << reason << ")" << std::endl;
-      std::_Exit(1);
-    });
-    windows.append(window);
-  }
-  WK_CHECK(h.loadAndWait(windows.first(), examplePage));
-  WK_CHECK(h.loadAndWait(windows.at(1), QUrl(QStringLiteral("about:blank"))));
-  WK_CHECK(windows.first()->url().host() == examplePage.host());
-  WK_CHECK(windows.at(1)->url().toString().startsWith(QLatin1String("about:blank")));
-  qDeleteAll(windows);
-  WK_CHECK(h.waitUntil([] { return WebKitGuiHarness::webProcessPids().isEmpty(); }, 10000));
-  for (int i = 0; i < 3; ++i) {
-    auto *window = backend->createView();
-    window->resize(200, 150);
-    window->show();
-    h.pump(300);
-    delete window;
-    WK_CHECK(h.waitUntil([] { return WebKitGuiHarness::webProcessPids().isEmpty(); }, 10000));
-  }
-  std::cout << "[PASS] Simultaneous windows are isolated; create/destroy leaves no web process behind." << std::endl;
-}
+// Removed on 2026-10-08: a manual case that showed three bare WebKit views as
+// separate top-level windows at once. It hung every time: the view in an
+// inactive top-level window answers the GTK plug's XEMBED_REQUEST_FOCUS with
+// a focus grab that cannot take effect, GTK requests focus again, and the
+// exchange never ends (WebKitEngineView::nativeEvent -> gtk_widget_grab_focus;
+// the test process spun and grew, and the desktop stopped mapping windows
+// until a hard reset, twice). DaliNira never shows a WebKit view as its own
+// top-level window. Real multi-window use is covered by browser-webkit-lifecycle.
+// Do not bring this case back without fixing that focus exchange first.
 
 void caseOriginScopedSiteDataClear(WebKitGuiHarness &h) {
   std::cout << "[CASE] Origin-scoped ephemeral bounce data deletion..." << std::endl;
@@ -1103,11 +1075,6 @@ int main(int argc, char *argv[]) {
   caseNetworkFiltering(h);
   caseBlockerFilterSyntax(h);
   caseSleepAndWake(h);
-  if (dalinira::test::manualGuiTestsEnabled()) {
-    caseManualWindowManager(h, examplePage);
-  } else {
-    std::cout << "[SKIP] Window-manager cases with several windows (DALINIRA_GUI_MANUAL=1)." << std::endl;
-  }
 
   h.shell().close();
   EngineBackend::shutdown();

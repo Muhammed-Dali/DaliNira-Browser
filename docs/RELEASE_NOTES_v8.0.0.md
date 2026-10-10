@@ -5,7 +5,8 @@ Released on 5 October 2026.
 DaliNira Browser 8.0.0 is a major release. DaliNira now ships two complete
 browser engines, Chromium (through Qt WebEngine) and WebKitGTK, behind one
 shared interface. It also adds a new first-run experience, a substantially
-reworked ad and tracker blocker, tab sleeping, and many interface improvements.
+reworked ad and tracker blocker, customizable keyboard shortcuts, auto-hiding
+side tabs, tab sleeping, and many interface improvements.
 
 ## Two engines, one browser
 
@@ -48,12 +49,57 @@ reworked ad and tracker blocker, tab sleeping, and many interface improvements.
   layout and theme, search engine and privacy options, and importing data from
   other browsers.
 - The interface is available in English, Turkish, Arabic and, new in this
-  release, French. The translation catalog grew from 209 to 2,031 strings, so
+  release, French. The translation catalog grew from 209 to 2,128 strings, so
   settings, menus, dialogs and internal pages are now translated as well. The
   language can be changed without restarting, and the browser chrome stays
   left-to-right in every language.
 - Four layouts are available: classic tabs, vertical tabs on the left or right,
   and a floating sidebar.
+
+## Side tabs
+
+Vertical side tabs gain an auto-hide mode inspired by the Zen browser:
+
+- The side tabs stay visible on the New Tab page and slide away on websites,
+  so the page gets the full window width.
+- Moving the pointer to the window edge reveals them as an overlay that slides
+  in and out in 150 ms; the page is not relaid out. With reduced motion (the
+  `ui/reduceMotion` preference or `DALINIRA_REDUCED_MOTION=1`) the panel
+  appears and hides without sliding.
+- The pin button in the panel keeps the tabs open or lets them hide again. The
+  same preference is **Settings → Appearance → Auto-hide side tabs** and the
+  *Keep side tabs open* shortcut action (no default key). Left and right layouts stay pinned by
+  default; the floating sidebar hides by default.
+- Works with the left, right and floating layouts. Fullscreen always hides the
+  panel, and it never hides while a tab is being dragged.
+- Beside the New Tab page the panel shows a blurred, tinted copy of the page
+  background, so it matches the page in both light and dark themes.
+- In side layouts, back, forward, reload, the add-site button and the main menu
+  move into the panel's top bar.
+- WebKitGTK pages report pointer movement to the panel through GTK events, so
+  edge reveal works the same in both engines without a polling timer.
+- The behavior is covered by a unit test and an engine-parity GUI test on
+  Chromium and WebKitGTK.
+
+## Keyboard shortcuts
+
+A new **Settings → Keyboard Shortcuts** page manages the browser's shortcuts:
+
+- Every action has a customizable binding. Actions are grouped as windows and
+  tabs, navigation, search and find, page operations, history and bookmarks,
+  media and display, and DaliNira tools, in a layout modelled on Zen's
+  shortcut settings.
+- Conflict detection: when a combination is already in use, the page names
+  the action that has it and offers to reassign it. Text-editing keys such as
+  Ctrl+C, Ctrl+V and Ctrl+Z, window-manager keys such as Alt+F4, and AltGr
+  combinations are reserved.
+- Reset one shortcut to its default, or reset all shortcuts at once.
+- Changes take effect immediately in every open window, without a restart.
+- The same bindings work on Chromium and WebKitGTK pages; on WebKitGTK,
+  browser shortcuts take priority over the page as they do in Chromium.
+- Shortcuts are shown with DaliNira's own key names, so they match the
+  interface language instead of the desktop's locale.
+- New defaults include Ctrl+1 to Ctrl+8, Ctrl+9 and Ctrl+PgUp / Ctrl+PgDn.
 
 ## Browsing
 
@@ -84,11 +130,16 @@ reworked ad and tracker blocker, tab sleeping, and many interface improvements.
   Chromium and WebKitGTK backends.
 - WebKitGTK shutdown now waits for retained web processes, such as service
   workers, to exit cleanly.
+- Windows opened for links, popups and detached tabs are now released when
+  they close, together with their WebKit tabs and web processes. The GUI test
+  `browser-webkit-lifecycle` checks the WebKit process lifecycle: tabs,
+  background tabs, sleep and wake, a second window, window close and shutdown.
 - Fixed X11 error handling, focus handover and native overlay stacking for the
   embedded WebKitGTK view.
 - New regression suites: engine parity (popups, scripts, media, layout, privacy,
-  network, fingerprinting, find in page, translation), onboarding, window
-  platform and feedback links. A localization audit keeps all four catalogs
+  network, fingerprinting, find in page, translation, keyboard shortcuts, side
+  tabs), onboarding, window platform, feedback links, keyboard shortcuts and
+  side-tab auto-hide. A localization audit keeps all four catalogs
   complete and consistent.
 - GUI tests run separately from the default test run, through a safety runner
   with resource monitoring.
@@ -103,8 +154,34 @@ reworked ad and tracker blocker, tab sleeping, and many interface improvements.
 - Release builds produce a portable archive, `.deb` packages for Debian 12 and
   Ubuntu 24.04, an `.rpm` package for Fedora, and Arch Linux packages. CI
   installs each package into a fresh container and checks it.
+- The WebKit engine runs on DaliNira's own build of WebKitGTK 2.54.1. It is
+  installed under `/usr/lib/dalinira-browser/webkit/` and carries a fix for a
+  web process crash in WebKitGTK 2.54.1: a compositor timer was destroyed on
+  the wrong thread when a background tab closed. Only DaliNira uses this
+  copy. The fix was validated before release: the unpatched WebKitGTK 2.54.1
+  crashed in 3 of 40 window lifetimes; the patched build and the packaged
+  private runtime each ran 500 lifetimes with 2,000 web processes without a
+  crash. The patch caused no deadlock and no CPU, GPU or heap-memory
+  regression in an interleaved comparison. No upstream fix exists yet. The system's WebKitGTK is neither needed nor changed, and no setup is
+  required. `dalinira-browser --check-webkit-runtime` shows which WebKitGTK
+  is in use. Its licenses, the patch and the source notice are installed in
+  `/usr/share/doc/dalinira-browser/webkitgtk/`. The complete source is
+  published with each release (`dalinira-webkit-runtime-source-8.0.0.tar`).
 - WebKitGTK media playback needs the GStreamer plugins listed in
   [docs/webkit-media-runtime.md](webkit-media-runtime.md).
+
+## For developers
+
+- `./scripts/build-dalinira.sh` is the single build command. Each run first
+  checks the private WebKitGTK runtime in `build-webkit-runtime/`, which is a
+  no-work step when nothing changed, and then builds the dual-engine
+  application in `build-dalinira/`.
+- On a fresh checkout the same command builds the private runtime once: it
+  downloads WebKitGTK 2.54.1, verifies the pinned SHA-256, applies the patch,
+  and builds with at most 3 jobs after asking for confirmation. The first
+  build takes about 5 GB of disk and typically 1.5 to 3 hours. See
+  [BUILDING.md](BUILDING.md).
+- A normal build fails instead of producing a Chromium-only browser.
 
 ## Known limitations
 
@@ -118,6 +195,12 @@ reworked ad and tracker blocker, tab sleeping, and many interface improvements.
   sleep releases the page in both engines.
 - Per-site cookie exceptions are not available on WebKitGTK, whose cookie
   policy is global.
+- WebKitGTK 2.54.1 known issue (upstream): a video shown fullscreen *as the
+  `<video>` element itself* stops advancing until fullscreen ends. This
+  happens with the native video controls' fullscreen button and with pages
+  that call `requestFullscreen()` on the video element. Sites that make
+  their player container fullscreen, as YouTube does, are not affected, and
+  windowed playback is not affected. Chromium is not affected.
 
 ## Platform status
 

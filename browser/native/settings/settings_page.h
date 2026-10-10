@@ -41,6 +41,7 @@ class SettingsPage final : public QWidget {
     Downloads,
     Languages,
     Accessibility,
+    Shortcuts,
     System,
     Reset,
     Listening,
@@ -56,6 +57,7 @@ class SettingsPage final : public QWidget {
     std::function<void()> refreshTabStyle;
     std::function<void(const QString &)> setLayoutMode;
     std::function<void(const QString &)> setTheme;
+    std::function<void(bool)> setSidePanelAutoHide;
     std::function<void()> reopenOnboarding;
     std::function<dalinira::TabPerformanceManager *()> performanceManager;
   };
@@ -86,6 +88,7 @@ class SettingsPage final : public QWidget {
   QWidget *createHistorySection();
   QWidget *createLanguagesSection();
   QWidget *createAccessibilitySection();
+  QWidget *createShortcutsSection();
   QWidget *createSystemSection();
   QWidget *createResetSection();
   QWidget *createListeningSection();

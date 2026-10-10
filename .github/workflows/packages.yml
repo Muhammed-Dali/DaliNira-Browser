@@ -5,11 +5,18 @@ name: Packages
 # dependencies: the package manager alone must bring in the whole runtime,
 # including the GStreamer plugins WebKit needs for HTML5 media.
 #
+#   webkit-runtime  DaliNira's private, patched WebKitGTK (packaging/webkit-runtime),
+#                 built once per distribution family and cached: the SDK the
+#                 portable and native builds compile against and package
+#   webkit-source the runtime's corresponding source (upstream tarball, patches,
+#                 recipe), published next to the binaries (LGPL-2.1 section 6)
 #   portable      Debian 12 baseline build -> dalinira-browser-<v>-linux-x86_64.tar.zst
 #                 (the release archive; the Arch binary packages repack it)
 #   native        .deb (Debian 12, Ubuntu 24.04) and .rpm (Fedora), via CPack
-#   arch-bin      packaging/pacman PKGBUILD (pacman repo / AUR dalinira, dalinira-bin)
-#   arch-source   packaging/archlinux PKGBUILD (source build)
+#   arch-source   packaging/archlinux PKGBUILD (source build, runtime included);
+#                 its runtime also becomes dalinira-webkit-runtime-<v>-arch-x86_64.tar.zst
+#   arch-bin      packaging/pacman PKGBUILD (pacman repo / AUR dalinira, dalinira-bin):
+#                 the portable archive with the Arch-built runtime
 #   install-test  fresh install of each package + packaging/linux/validate-installed-package.sh
 #
 # No GUI tests and no display server here: the validation starts the browser
@@ -74,9 +81,151 @@ jobs:
         name: Version
         run: echo "version=$(sed -n 's/^project(DaliNiraBrowser VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)" >> "$GITHUB_OUTPUT"
 
+  webkit-runtime:
+    name: WebKit runtime (${{ matrix.distro }})
+    needs: metadata
+    runs-on: ubuntu-latest
+    container: ${{ matrix.container }}
+    # A WebKitGTK build takes 2-3 hours on a hosted runner; cached afterwards.
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Debian 12 builds its own WebKitGTK 2.50 with clang-16 and without
+          # system sysprof-capture or libjxl; same here.
+          - distro: debian12
+            container: debian:12
+            cc: clang-16
+            cxx: clang++-16
+            ldflags: ""
+            cmake_args: -DUSE_SYSTEM_SYSPROF_CAPTURE=OFF -DUSE_JPEGXL=OFF
+          - distro: ubuntu2404
+            container: ubuntu:24.04
+            cc: clang
+            cxx: clang++
+            ldflags: -fuse-ld=lld
+            cmake_args: ""
+          - distro: fedora
+            container: fedora:latest
+            cc: clang
+            cxx: clang++
+            ldflags: -fuse-ld=lld
+            cmake_args: ""
+    steps:
+      - name: Install Debian/Ubuntu build dependencies
+        if: ${{ matrix.distro != 'fedora' }}
+        run: |
+          apt-get update
+          # As Debian's own webkit2gtk Build-Depends, without documentation,
+          # introspection, GTK 4 and speech synthesis.
+          extra=""
+          case "${{ matrix.distro }}" in
+            debian12) extra="clang-16 binutils" ;;
+            *) extra="clang lld libsysprof-capture-4-dev libjxl-dev" ;;
+          esac
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates curl xz-utils zstd file patch cmake ninja-build gperf bison flex ruby unifdef \
+            python3 perl pkg-config bubblewrap xdg-dbus-proxy libseccomp-dev libglib2.0-dev \
+            libharfbuzz-dev libcairo2-dev libdrm-dev libgbm-dev libepoxy-dev libfontconfig-dev \
+            libfreetype-dev libicu-dev libgcrypt20-dev libhyphen-dev liblcms2-dev libmanette-0.2-dev \
+            libxslt1-dev libxml2-dev libxml2-utils libsoup-3.0-dev libgtk-3-dev libsqlite3-dev \
+            libsystemd-dev libgudev-1.0-dev libwoff-dev libavif-dev libjpeg-dev libopenjp2-7-dev \
+            libpng-dev libtasn1-6-dev libwebp-dev libxt-dev libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev libenchant-2-dev \
+            libsecret-1-dev libegl-dev libgl-dev libgles-dev libwayland-dev wayland-protocols \
+            libxkbcommon-dev libatspi2.0-dev libexpat1-dev ${extra}
+
+      - name: Install Fedora build dependencies
+        if: ${{ matrix.distro == 'fedora' }}
+        run: |
+          # As Fedora's own webkitgtk.spec BuildRequires, without documentation,
+          # introspection, GTK 4 and speech synthesis.
+          dnf install -y \
+            curl xz zstd file patch clang lld cmake ninja-build gperf bison flex gettext ruby rubygems \
+            rubygem-json 'rubygem(getoptlong)' unifdef python3 perl 'perl(English)' 'perl(FindBin)' \
+            'perl(JSON::PP)' 'perl(bigint)' bubblewrap xdg-dbus-proxy libatomic \
+            'pkgconfig(atspi-2)' 'pkgconfig(cairo)' 'pkgconfig(egl)' 'pkgconfig(enchant-2)' \
+            'pkgconfig(epoxy)' 'pkgconfig(expat)' 'pkgconfig(fontconfig)' 'pkgconfig(freetype2)' \
+            'pkgconfig(gbm)' 'pkgconfig(glib-2.0)' 'pkgconfig(gstreamer-1.0)' \
+            'pkgconfig(gstreamer-plugins-bad-1.0)' 'pkgconfig(gstreamer-plugins-base-1.0)' \
+            'pkgconfig(gtk+-3.0)' 'pkgconfig(harfbuzz)' 'pkgconfig(icu-uc)' 'pkgconfig(lcms2)' \
+            'pkgconfig(libavif)' 'pkgconfig(libdrm)' 'pkgconfig(libgcrypt)' 'pkgconfig(libjpeg)' \
+            'pkgconfig(libjxl)' 'pkgconfig(libpng)' 'pkgconfig(libseccomp)' 'pkgconfig(libsecret-1)' \
+            'pkgconfig(libsoup-3.0)' 'pkgconfig(libsystemd)' 'pkgconfig(libtasn1)' 'pkgconfig(libwebp)' \
+            'pkgconfig(libwoff2dec)' 'pkgconfig(libxslt)' 'pkgconfig(manette-0.2)' 'pkgconfig(sqlite3)' \
+            'pkgconfig(sysprof-capture-4)' 'pkgconfig(wayland-client)' 'pkgconfig(wayland-egl)' \
+            'pkgconfig(wayland-protocols)' 'pkgconfig(wayland-server)' 'pkgconfig(xt)' hyphen-devel
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+
+      - name: Restore the runtime SDK
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: webkit-sdk
+          key: webkit-runtime-${{ matrix.distro }}-${{ hashFiles('packaging/webkit-runtime/**') }}
+
+      - name: Build the runtime
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+          CFLAGS: -O2 -pipe -fno-plt -fexceptions -Wp,-D_FORTIFY_SOURCE=2 -fstack-clash-protection -fcf-protection=none
+          CXXFLAGS: -O2 -pipe -fno-plt -fexceptions -Wp,-D_FORTIFY_SOURCE=2 -fstack-clash-protection -fcf-protection=none -Wp,-D_GLIBCXX_ASSERTIONS
+          LDFLAGS: -Wl,-O1 -Wl,--as-needed -Wl,-z,relro -Wl,-z,now ${{ matrix.ldflags }}
+          WEBKIT_RUNTIME_CMAKE_ARGS: ${{ matrix.cmake_args }}
+        run: |
+          packaging/webkit-runtime/build-webkit-runtime.sh \
+            --sdk "${GITHUB_WORKSPACE}/webkit-sdk" --build-dir /tmp/webkit-build --jobs 4 \
+            || { tail -n 80 /tmp/webkit-build/configure.log /tmp/webkit-build/build.log; exit 1; }
+          rm -rf /tmp/webkit-build
+          cat webkit-sdk/legal/BUILD-INFO
+
+      - name: Upload the runtime SDK
+        run: tar --zstd -cf "webkit-sdk-${{ matrix.distro }}.tar.zst" webkit-sdk
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: webkit-sdk-${{ matrix.distro }}
+          path: webkit-sdk-${{ matrix.distro }}.tar.zst
+          if-no-files-found: error
+          retention-days: 7
+
+  webkit-source:
+    name: WebKit runtime corresponding source
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BUILD_REF }}
+      - name: Upstream tarball, patches and build recipe
+        run: |
+          set -euo pipefail
+          source packaging/webkit-runtime/webkitgtk-runtime.env
+          version="${{ needs.metadata.outputs.version }}"
+          name="dalinira-webkit-runtime-source-${version}"
+          mkdir -p "dist/${name}/packaging"
+          curl -fL --retry 3 -o "dist/${name}/webkitgtk-${WEBKITGTK_VERSION}.tar.xz" "${WEBKITGTK_URL}"
+          echo "${WEBKITGTK_SHA256}  dist/${name}/webkitgtk-${WEBKITGTK_VERSION}.tar.xz" | sha256sum -c -
+          cp -R packaging/webkit-runtime "dist/${name}/packaging/"
+          tar -C dist -cf "dist/${name}.tar" "${name}"
+          rm -rf "dist/${name}"
+          ls -l dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: webkit-source
+          path: dist/*
+          if-no-files-found: error
+
   portable:
     name: Portable archive (Debian 12 baseline)
-    needs: metadata
+    needs: [metadata, webkit-runtime]
     runs-on: ubuntu-latest
     container: debian:12
     steps:
@@ -95,12 +244,19 @@ jobs:
         with:
           ref: ${{ env.BUILD_REF }}
 
+      - name: Download the WebKit runtime SDK
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: webkit-sdk-debian12
+
       - name: Configure and build
         run: |
+          tar --zstd -xf webkit-sdk-debian12.tar.zst
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
-            -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser
+            -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser \
+            -DDALINIRA_WEBKIT_RUNTIME_SDK="${GITHUB_WORKSPACE}/webkit-sdk"
           cmake --build build --parallel 2
 
       - name: Non-GUI tests
@@ -131,7 +287,7 @@ jobs:
 
   native:
     name: Native package (${{ matrix.distro }})
-    needs: metadata
+    needs: [metadata, webkit-runtime]
     runs-on: ubuntu-latest
     container: ${{ matrix.container }}
     strategy:
@@ -153,7 +309,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential ca-certificates cmake dpkg-dev file ffmpeg git ninja-build nodejs \
+            build-essential ca-certificates cmake dpkg-dev file ffmpeg git ninja-build nodejs zstd \
             libssl-dev libpsl-dev pkg-config qt6-base-dev qt6-image-formats-plugins qt6-svg-dev \
             qt6-webengine-dev libwebkit2gtk-4.1-dev libgstreamer1.0-dev
 
@@ -161,7 +317,7 @@ jobs:
         if: ${{ matrix.generator == 'RPM' }}
         run: |
           dnf install -y \
-            cmake ffmpeg-free gcc-c++ git ninja-build nodejs openssl-devel libpsl-devel \
+            cmake ffmpeg-free gcc-c++ git ninja-build nodejs zstd openssl-devel libpsl-devel \
             pkgconf-pkg-config rpm-build file qt6-qtbase-devel qt6-qtimageformats \
             qt6-qtsvg-devel qt6-qtwebengine-devel webkit2gtk4.1-devel gstreamer1-devel
 
@@ -170,13 +326,20 @@ jobs:
         with:
           ref: ${{ env.BUILD_REF }}
 
+      - name: Download the WebKit runtime SDK
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: webkit-sdk-${{ matrix.distro }}
+
       - name: Configure and build
         run: |
+          tar --zstd -xf webkit-sdk-${{ matrix.distro }}.tar.zst
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DCMAKE_INSTALL_BINDIR=lib/dalinira-browser \
-            -DDALINIRA_PACKAGE_DISTRO=${{ matrix.distro }}
+            -DDALINIRA_PACKAGE_DISTRO=${{ matrix.distro }} \
+            -DDALINIRA_WEBKIT_RUNTIME_SDK="${GITHUB_WORKSPACE}/webkit-sdk"
           # Everything the install rules package (policy, Dali modules, assets).
           cmake --build build --parallel 2
 
@@ -196,9 +359,15 @@ jobs:
         run: |
           for package in packages/*; do
             case "$package" in
-              *.deb) dpkg-deb --field "$package" Package Version Depends Recommends Suggests ;;
-              *.rpm) rpm -qp --requires --recommends --suggests "$package" | grep -v '^rpmlib(' ;;
+              *.deb) dpkg-deb --field "$package" Package Version Depends Recommends Suggests > deps.txt ;;
+              *.rpm) rpm -qp --requires --recommends --suggests "$package" | grep -v '^rpmlib(' > deps.txt ;;
             esac
+            cat deps.txt
+            # The package carries its own WebKitGTK; it must not pull in the system's.
+            if grep -Eiq 'webkit2gtk|javascriptcoregtk' deps.txt; then
+              echo "package depends on a system WebKitGTK" >&2
+              exit 1
+            fi
           done
 
       - name: Upload package
@@ -210,7 +379,7 @@ jobs:
 
   arch-bin:
     name: Arch binary package (pacman repo / AUR)
-    needs: [metadata, portable]
+    needs: [metadata, portable, arch-source]
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     steps:
@@ -228,10 +397,16 @@ jobs:
           name: portable
           path: packaging/pacman
 
+      - name: Download the Arch WebKit runtime
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: webkit-runtime-arch
+          path: packaging/pacman
+
       - name: Build with makepkg
         run: |
-          # The recipe's source file is already present, so makepkg uses this
-          # build instead of downloading a published release.
+          # The recipe's source files are already present, so makepkg uses
+          # these builds instead of downloading a published release.
           useradd -m builder
           chown -R builder:builder packaging/pacman
           su builder -c "cd '${GITHUB_WORKSPACE}/packaging/pacman' && makepkg -f --nodeps --noconfirm"
@@ -253,17 +428,22 @@ jobs:
     needs: metadata
     runs-on: ubuntu-latest
     container: archlinux:base-devel
+    # Builds the private WebKit runtime inside makepkg (2-3 hours).
+    timeout-minutes: 345
     steps:
-      - name: Install build dependencies
-        run: |
-          pacman -Syu --noconfirm --needed git cmake ninja nodejs \
-            ffmpeg libpsl libsecret openssl qt6-base qt6-imageformats qt6-svg qt6-webengine \
-            webkit2gtk-4.1 gst-plugins-base gst-plugins-good gst-plugins-bad gst-libav
-
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.BUILD_REF }}
+
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git
+          # Everything the recipe declares (the private WebKit runtime's
+          # build and runtime dependencies included).
+          cd packaging/archlinux
+          deps="$(bash -c 'source ./PKGBUILD; printf "%s\n" "${depends[@]}" "${makedepends[@]}"')"
+          pacman -S --noconfirm --needed ${deps}
 
       - name: Build with makepkg
         run: |
@@ -288,6 +468,23 @@ jobs:
         with:
           name: package-arch-source
           path: packages/*
+          if-no-files-found: error
+
+      - name: Arch WebKit runtime asset (for the binary packages)
+        run: |
+          set -euo pipefail
+          version="${{ needs.metadata.outputs.version }}"
+          mkdir -p runtime-root runtime
+          tar -C runtime-root -xf packages/dalinira-browser-*.pkg.tar.zst \
+            usr/lib/dalinira-browser/webkit usr/share/doc/dalinira-browser/webkitgtk
+          tar --zstd -C runtime-root -cf "runtime/dalinira-webkit-runtime-${version}-arch-x86_64.tar.zst" usr
+          tar --zstd -tvf runtime/*.tar.zst | tail -n 5
+          ls -l runtime
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: webkit-runtime-arch
+          path: runtime/*
           if-no-files-found: error
 
   install-test:

@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QVBoxLayout>
+#include "core/keyboard_shortcut_service.h"
 #include "i18n/i18n.h"
 
 namespace dalinira::desktop_tabs {
@@ -118,8 +119,20 @@ QPixmap renderColorSwatch(const QColor &color, bool selected) {
   return pm;
 }
 
+// Shows an action's current first shortcut; follows changes made in Settings.
+void bindShortcutHint(QLabel *label, const QString &actionId) {
+  const auto update = [label, actionId] {
+    const QString text = dalinira::KeyboardShortcutService::primaryText(actionId);
+    label->setText(text);
+    label->setVisible(!text.isEmpty());
+  };
+  update();
+  QObject::connect(&dalinira::KeyboardShortcutService::instance(),
+                   &dalinira::KeyboardShortcutService::shortcutsChanged, label, update);
+}
+
 QPushButton *createActionRow(QWidget *parent, const QIcon &icon, const QString &text,
-                             const QString &shortcut = QString(), bool isDelete = false) {
+                             const QString &shortcutAction = QString(), bool isDelete = false) {
   auto *btn = new QPushButton(parent);
   btn->setCursor(Qt::PointingHandCursor);
   btn->setStyleSheet(QStringLiteral(
@@ -152,9 +165,10 @@ QPushButton *createActionRow(QWidget *parent, const QIcon &icon, const QString &
   ).arg(isDelete ? QStringLiteral("#f28b82") : QStringLiteral("#f1f3f4")));
   layout->addWidget(titleLabel, 1, Qt::AlignVCenter);
 
-  if (!shortcut.isEmpty()) {
-    auto *shortcutLabel = new QLabel(shortcut, btn);
+  if (!shortcutAction.isEmpty()) {
+    auto *shortcutLabel = new QLabel(btn);
     shortcutLabel->setStyleSheet(QStringLiteral("color: #9aa0a6; font-size: 11px; font-weight: 500;"));
+    bindShortcutHint(shortcutLabel, shortcutAction);
     layout->addWidget(shortcutLabel, 0, Qt::AlignVCenter);
   }
 
@@ -253,10 +267,10 @@ void TabGroupPopup::setupUi() {
   sep1->setProperty("class", QStringLiteral("divider"));
   mainLayout->addWidget(sep1);
 
-  // 3. Action: Grupta yeni sekme (Alt+Shift+C)
+  // 3. Action: Grupta yeni sekme
   auto *newTabBtn = createActionRow(this, createNewTabInGroupIcon(),
                                     I18n::text(QStringLiteral("tabgroup.new_tab_in_group")),
-                                    QStringLiteral("Alt+Shift+C"));
+                                    QStringLiteral("tabs.group_add_tab"));
   connect(newTabBtn, &QPushButton::clicked, this, [this] {
     const QUuid id = currentGroupId_;
     close();
@@ -274,10 +288,10 @@ void TabGroupPopup::setupUi() {
   });
   mainLayout->addWidget(moveWindowBtn);
 
-  // 5. Action: Grubu kapat (Alt+Shift+W)
+  // 5. Action: Grubu kapat
   auto *closeGroupBtn = createActionRow(this, createCloseGroupIcon(),
                                         I18n::text(QStringLiteral("tabgroup.close_group")),
-                                        QStringLiteral("Alt+Shift+W"));
+                                        QStringLiteral("tabs.group_close"));
   connect(closeGroupBtn, &QPushButton::clicked, this, [this] {
     const QUuid id = currentGroupId_;
     close();

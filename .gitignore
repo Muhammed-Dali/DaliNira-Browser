@@ -1,5 +1,7 @@
 # Build directories
 build/
+build-dalinira/
+build-webkit-runtime/
 build-release-*/
 release-root-*/
 dist/
@@ -21,6 +23,9 @@ npm-debug.log*
 *.generated.js
 *.worklet.generated.js
 *.wasm.generated.js
+*.bak
+/core
+core.[0-9]*
 
 # VS Code local state
 .vscode/compile_commands.json

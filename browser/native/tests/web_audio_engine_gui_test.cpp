@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <glib.h>
 #include <iostream>
 
 #include "audio/web_audio_effects_controller.h"
@@ -555,6 +556,10 @@ int runLatency(const QString &engine, const QString &base, int argc, char *argv[
   dalinira::engine::EngineBackend::setSelectedEngineType(engineType);
   if (webkit) QCoreApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
   else registerDaliNiraUrlSchemes();
+  // Its own audio stream identity: the desktop restores stream volumes per
+  // application name, and the effects test run by this same binary leaves
+  // its streams at other volumes, which would make these media elements silent.
+  g_set_application_name("dalinira-browser-web-audio-latency-test");
   QApplication app(argc, argv);
   dalinira::application_identity::apply();
   const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
@@ -628,7 +633,11 @@ int runLatency(const QString &engine, const QString &base, int argc, char *argv[
       js(QStringLiteral("document.getElementById('%1').play()").arg(QLatin1String(id)));
       return;
     }
-    js(QStringLiteral("setTimeout(function(){const p=document.getElementById('%1').play();"
+    // The site sets its volume, as a player does: WebKitGTK mirrors element
+    // volume to its PipeWire stream, and the desktop restores this test
+    // binary's last stream volume, which browser-web-audio-engine-gui drives
+    // to 0 (the effects runtime leaves silent elements alone).
+    js(QStringLiteral("setTimeout(function(){const m=document.getElementById('%1');m.volume=1;const p=m.play();"
                       "window.__playResult='pending';if(p&&p.then)p.then(function(){window.__playResult='ok'},"
                       "function(e){window.__playResult=e.name+': '+e.message})},1200)").arg(QLatin1String(id)));
   };

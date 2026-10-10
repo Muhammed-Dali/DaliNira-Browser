@@ -129,6 +129,14 @@ class WebKitEngineView : public EngineView {
     deferredPopupEvaluator_ = std::move(evaluator);
   }
   void runIsolatedJavaScript(const QString &script, std::function<void(const QVariant &)> callback = {}) override;
+  // The GTK key path (the plug's key-press-event) into the window's browser
+  // shortcuts, for tests that cannot type into the native page.
+  bool dispatchBrowserShortcutForTesting(unsigned int keyval, unsigned int state) {
+    return dispatchBrowserShortcut(keyval, state);
+  }
+  // Sends a GTK motion event (as the X server would) to the page at `local`
+  // (Qt coordinates of this view), through the same signal path.
+  bool synthesizePagePointerForTesting(const QPoint &local);
 
  signals:
   void credentialMessage(const QString &type, const QVariantMap &payload);
@@ -156,6 +164,7 @@ class WebKitEngineView : public EngineView {
   void focusWebContent(Qt::FocusReason reason);
   void returnKeyboardFocusToQt(QWidget *target);
   bool dispatchBrowserShortcut(unsigned int keyval, unsigned int state);
+  void forwardPagePointer(double rootX, double rootY);
   void serveInternalPage(WebKitURISchemeRequest *request);
   void serveInternalAsset(WebKitURISchemeRequest *request, const QUrl &url);
   void installDocumentScripts(const QUrl &url);

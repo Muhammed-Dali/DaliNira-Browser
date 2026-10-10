@@ -19,6 +19,6 @@ does not validate Wayland global-coordinate based attach behaviour.
 Run:
 
 ```bash
-cmake --build build
-./build/dalinira-browser-state-test
+./scripts/build-dalinira.sh
+./build-dalinira/dalinira-browser-state-test
 ```

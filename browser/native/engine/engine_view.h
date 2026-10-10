@@ -112,6 +112,11 @@ class EngineView : public QWidget {
   // The page entered (true) or left (false) element fullscreen; the browser
   // window follows, exactly like QWebEnginePage::fullScreenRequested.
   void fullScreenRequested(bool on);
+  // Pointer motion over the page, in global Qt coordinates, from engines whose
+  // page is a separate native window that hides pointer moves from Qt
+  // (WebKit's XEmbed surface). Event-driven: one per real pointer move.
+  // Chromium pages are Qt widgets; Qt's own mouse events cover them.
+  void pagePointerMoved(const QPoint &globalPos);
   void lifecycleStateChanged(dalinira::TabLifecycleState state);
   void audibleChanged(bool audible);
   void dialogStateChanged(bool open);

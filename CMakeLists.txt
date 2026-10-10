@@ -181,6 +181,7 @@ set(CORE_SOURCES
    browser/native/core/composite_navigation_candidate_provider.cpp
   browser/native/core/address_input_resolver.cpp
   browser/native/core/adult_content_protection.cpp
+  browser/native/core/keyboard_shortcut_service.cpp
 )
 
 set(NEWTAB_SOURCES
@@ -225,6 +226,7 @@ set(SETTINGS_SOURCES
   browser/native/settings/settings_performance_section.cpp
   browser/native/settings/settings_privacy_section.cpp
   browser/native/settings/settings_languages_section.cpp
+  browser/native/settings/settings_shortcuts_section.cpp
 )
 
 set(ONBOARDING_SOURCES
@@ -323,6 +325,7 @@ set(WINDOW_SOURCES
   browser/native/browser_window.cpp
   browser/native/browser_window_menus.cpp
   browser/native/browser_window_page_actions.cpp
+  browser/native/browser_window_shortcuts.cpp
   browser/native/layout/browser_layout.cpp
   browser/native/layout/browser_layout_controller.cpp
   browser/native/layout/browser_side_panel.cpp
@@ -339,9 +342,90 @@ set(ENGINE_SOURCES
 )
 
 option(DALINIRA_ENABLE_WEBKIT "Enable WebKit backend (WebCore/JavaScriptCore)" ON)
+option(DALINIRA_REQUIRE_DUAL_ENGINE
+  "Fail configuration unless both Chromium and WebKit backends are available" ON)
+set(DALINIRA_BUILD_WEBKIT 0)
+# DaliNira's private, patched WebKitGTK runtime (packaging/webkit-runtime):
+# release packages build against the SDK that build-webkit-runtime.sh makes
+# and install the runtime under lib/dalinira-browser/webkit.
+set(DALINIRA_WEBKIT_RUNTIME_SDK "" CACHE PATH
+    "Package SDK made by packaging/webkit-runtime/build-webkit-runtime.sh")
+# The normal application build can use the preserved local validation build
+# directly. This is a developer-only input; release packages always pass the
+# SDK above and never retain this workstation path.
+set(DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME
+    "${CMAKE_SOURCE_DIR}/build-webkit-runtime/prefix" CACHE PATH
+    "Private patched WebKitGTK development prefix made by scripts/build-dalinira.sh")
+# TEST-ONLY escape hatch for CI jobs that cannot afford a WebKitGTK build:
+# compile the WebKit backend against the system WebKitGTK. Such a build
+# cannot be installed or packaged, and it cannot be combined with a package
+# SDK. Normal and release builds leave it OFF and require the private runtime.
+option(DALINIRA_ALLOW_SYSTEM_WEBKIT_FOR_TESTS
+  "Test-only: build the WebKit backend against the unpatched system WebKitGTK (never for releases)" OFF)
+if(DALINIRA_ALLOW_SYSTEM_WEBKIT_FOR_TESTS AND DALINIRA_WEBKIT_RUNTIME_SDK)
+  message(FATAL_ERROR
+    "DALINIRA_ALLOW_SYSTEM_WEBKIT_FOR_TESTS is test-only and cannot be combined "
+    "with DALINIRA_WEBKIT_RUNTIME_SDK (a package build).")
+endif()
+set(DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME_ACTIVE OFF)
+if(DALINIRA_ENABLE_WEBKIT AND DALINIRA_WEBKIT_RUNTIME_SDK)
+  include("${DALINIRA_WEBKIT_RUNTIME_SDK}/dalinira-webkit-runtime.cmake")
+  # WebKitGTK compiles in the paths of its helper processes, so the runtime
+  # must be installed exactly at the prefix it was built for.
+  if(NOT DALINIRA_WEBKIT_RUNTIME_PREFIX STREQUAL "${CMAKE_INSTALL_PREFIX}/lib/dalinira-browser/webkit")
+    message(FATAL_ERROR "The WebKit runtime SDK was built for ${DALINIRA_WEBKIT_RUNTIME_PREFIX}, "
+                        "but this build installs to ${CMAKE_INSTALL_PREFIX}/lib/dalinira-browser/webkit")
+  endif()
+  set(ENV{PKG_CONFIG_PATH} "${DALINIRA_WEBKIT_RUNTIME_PKGCONFIG_DIR}:$ENV{PKG_CONFIG_PATH}")
+  add_compile_definitions(DALINIRA_WEBKIT_PRIVATE_RUNTIME_PREFIX="${DALINIRA_WEBKIT_RUNTIME_PREFIX}")
+  # DT_RPATH, not DT_RUNPATH: searched before LD_LIBRARY_PATH, so the private
+  # libraries win over any system WebKitGTK whatever the environment says.
+  add_link_options(LINKER:--disable-new-dtags)
+  # Build tree: the install location first (a staged package mounted there for
+  # the GUI tests), then the SDK itself.
+  set(CMAKE_BUILD_RPATH "${DALINIRA_WEBKIT_RUNTIME_PREFIX}/lib;${DALINIRA_WEBKIT_RUNTIME_STAGE}/lib")
+  message(STATUS "WebKit: private runtime WebKitGTK ${DALINIRA_WEBKIT_RUNTIME_VERSION} "
+                 "(revision ${DALINIRA_WEBKIT_RUNTIME_REVISION}) at ${DALINIRA_WEBKIT_RUNTIME_PREFIX}")
+elseif(DALINIRA_ENABLE_WEBKIT AND DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME AND
+       EXISTS "${DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME}/lib/pkgconfig/webkit2gtk-4.1.pc")
+  get_filename_component(DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME
+    "${DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME}" REALPATH)
+  set(DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME_ACTIVE ON)
+  set(ENV{PKG_CONFIG_PATH}
+      "${DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+  add_compile_definitions(
+    DALINIRA_WEBKIT_PRIVATE_RUNTIME_PREFIX="${DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME}"
+    DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME=1)
+  set(CMAKE_BUILD_RPATH "${DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME}/lib")
+  message(STATUS "WebKit: preserved private development runtime at "
+                 "${DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME}")
+endif()
+set(DALINIRA_SYSTEM_WEBKIT_TEST_BUILD OFF)
+if(DALINIRA_ENABLE_WEBKIT AND NOT DALINIRA_WEBKIT_RUNTIME_SDK AND
+   NOT DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME_ACTIVE)
+  if(NOT DALINIRA_ALLOW_SYSTEM_WEBKIT_FOR_TESTS)
+    message(FATAL_ERROR
+      "DaliNira's WebKit engine is built only against its private patched "
+      "WebKitGTK runtime, and none was found at "
+      "${DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME}. The unpatched system WebKitGTK is "
+      "not used as a substitute.\n"
+      "Run ./scripts/build-dalinira.sh: on a fresh checkout it builds the "
+      "runtime once (or run ./scripts/bootstrap-webkit-runtime.sh first). "
+      "Package builds pass -DDALINIRA_WEBKIT_RUNTIME_SDK=DIR. See docs/BUILDING.md.")
+  endif()
+  set(DALINIRA_SYSTEM_WEBKIT_TEST_BUILD ON)
+  add_compile_definitions(DALINIRA_SYSTEM_WEBKIT_TEST_BUILD=1)
+  message(WARNING
+    "TEST-ONLY build: the WebKit backend uses the unpatched system WebKitGTK "
+    "(DALINIRA_ALLOW_SYSTEM_WEBKIT_FOR_TESTS=ON). It cannot be installed or packaged.")
+endif()
 if(DALINIRA_ENABLE_WEBKIT)
   # gstreamer-1.0: the UI process checks the same registry WebKit's media stack uses.
   pkg_check_modules(WEBKIT webkit2gtk-4.1 gstreamer-1.0)
+  if(DALINIRA_WEBKIT_RUNTIME_SDK OR DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME_ACTIVE)
+    # Full paths, so the link uses the SDK's libraries and not a system copy.
+    set(WEBKIT_LIBRARIES ${WEBKIT_LINK_LIBRARIES})
+  endif()
   pkg_check_modules(X11 x11 xi xcb)
   if(WEBKIT_FOUND AND X11_FOUND)
     set(DALINIRA_BUILD_WEBKIT 1)
@@ -355,10 +439,14 @@ if(DALINIRA_ENABLE_WEBKIT)
       browser/native/engine/webkit/webkit_engine_profile.cpp
       browser/native/engine/webkit/webkit_media_runtime.cpp
       browser/native/engine/webkit/webkit_network_filter.cpp
+      browser/native/engine/webkit/webkit_private_runtime.cpp
     )
     # Loaded by WebKitGTK into DaliNira's web processes (network and audio policy).
     # It lives next to the executable, in the build tree and when installed.
     pkg_check_modules(WEBKIT_EXTENSION REQUIRED webkit2gtk-web-extension-4.1 gstreamer-1.0)
+    if(DALINIRA_WEBKIT_RUNTIME_SDK OR DALINIRA_WEBKIT_DEVELOPMENT_RUNTIME_ACTIVE)
+      set(WEBKIT_EXTENSION_LIBRARIES ${WEBKIT_EXTENSION_LINK_LIBRARIES})
+    endif()
     add_library(dalinira-webkit-extension MODULE
       browser/native/engine/webkit/extension/dalinira_web_extension.cpp)
     target_include_directories(dalinira-webkit-extension PRIVATE ${WEBKIT_EXTENSION_INCLUDE_DIRS})
@@ -372,6 +460,15 @@ if(DALINIRA_ENABLE_WEBKIT)
     message(WARNING "WebKit requested but webkit2gtk-4.1 or x11 not found. WebKit backend disabled.")
   endif()
 endif()
+if(DALINIRA_REQUIRE_DUAL_ENGINE AND NOT DALINIRA_BUILD_WEBKIT)
+  message(FATAL_ERROR
+    "A normal DaliNira build requires both Chromium and WebKit. "
+    "Use scripts/build-dalinira.sh with build-webkit-runtime/prefix. "
+    "For an intentional Chromium-only diagnostic build, explicitly set both "
+    "-DDALINIRA_REQUIRE_DUAL_ENGINE=OFF and -DDALINIRA_ENABLE_WEBKIT=OFF.")
+endif()
+set(DALINIRA_BUILD_WEBKIT ${DALINIRA_BUILD_WEBKIT} CACHE INTERNAL
+  "Whether the WebKit backend is compiled into DaliNira" FORCE)
 
 set(BROWSER_SOURCES
   ${CORE_SOURCES}
@@ -562,6 +659,7 @@ qt_add_resources(dalinira-browser "browser_icons"
     browser/assets/browser-icons/chevron-up.svg
     browser/assets/browser-icons/find-in-page.svg
     browser/assets/browser-icons/mail.svg
+    browser/assets/browser-icons/keyboard.svg
     browser/assets/browser-icons/chevron-down.svg
     browser/assets/browser-icons/fonts.svg
     browser/assets/browser-icons/mouse.svg
@@ -834,6 +932,7 @@ add_test(NAME browser-installed-package-layout
     -DDALINIRA_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -DDALINIRA_INSTALL_BINDIR=${CMAKE_INSTALL_BINDIR}
     -DDALINIRA_EXPECT_WEBKIT=$<BOOL:${DALINIRA_BUILD_WEBKIT}>
+    "-DDALINIRA_EXPECT_WEBKIT_RUNTIME=$<AND:$<BOOL:${DALINIRA_BUILD_WEBKIT}>,$<BOOL:${DALINIRA_WEBKIT_RUNTIME_SDK}>>"
     -P ${CMAKE_CURRENT_SOURCE_DIR}/browser/cmake/verify_install_layout.cmake
 )
 set_tests_properties(browser-installed-package-layout PROPERTIES TIMEOUT 90)
@@ -959,6 +1058,16 @@ target_compile_definitions(dalinira-browser-application-identity-test PRIVATE
 target_link_libraries(dalinira-browser-application-identity-test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
 add_test(NAME browser-application-identity COMMAND dalinira-browser-application-identity-test)
 set_tests_properties(browser-application-identity PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The keyboard shortcut registry and its persistence, without any window.
+add_executable(dalinira-browser-keyboard-shortcut-service-test
+  browser/native/tests/keyboard_shortcut_service_test.cpp
+  browser/native/core/keyboard_shortcut_service.cpp)
+target_compile_definitions(dalinira-browser-keyboard-shortcut-service-test PRIVATE
+  DALINIRA_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(dalinira-browser-keyboard-shortcut-service-test PRIVATE Qt6::Core Qt6::Gui)
+add_test(NAME browser-keyboard-shortcut-service COMMAND dalinira-browser-keyboard-shortcut-service-test)
+set_tests_properties(browser-keyboard-shortcut-service PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
 
 add_executable(dalinira-browser-media-platform-registry-test
   browser/native/tests/media_platform_registry_test.cpp
@@ -1359,6 +1468,29 @@ set_tests_properties(browser-tab-memory-ux PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=xcb;GDK_BACKEND=x11;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu --renderer-process-limit=1;DALINIRA_GUI_MAX_WEB_PROCESSES=4"
   TIMEOUT 240)
 
+# Short WebKit lifecycle regression (GUI tier): tabs opening and closing, a
+# hidden background tab, sleep/wake, window close and engine shutdown with no
+# WebKit process left or lost, in one window lifetime. It stands for the
+# WebKitGTK 2.54.1 compositor crash fixed by the private runtime's patch; the
+# patch's 500-lifetime stress validation is research only
+# (docs/research/webkit-exit-crash/) and never part of a test tier.
+if(DALINIRA_BUILD_WEBKIT)
+  add_executable(dalinira-browser-webkit-lifecycle-test
+    ${DALINIRA_BROWSER_FULL_SOURCES}
+    browser/native/tests/webkit_lifecycle_regression_test.cpp)
+  target_link_libraries(dalinira-browser-webkit-lifecycle-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+  if(DALINIRA_BROWSER_FULL_DEFS)
+    target_compile_definitions(dalinira-browser-webkit-lifecycle-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+  endif()
+  add_dependencies(dalinira-browser-webkit-lifecycle-test dalinira-browser-policy dalinira-web-output-dali
+    dalinira-webkit-extension)
+  add_test(NAME browser-webkit-lifecycle COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-webkit-lifecycle-test>)
+  set_tests_properties(browser-webkit-lifecycle PROPERTIES
+    # Three WebKit tabs at most, one web process each (safe-gui-test.sh reads this budget).
+    ENVIRONMENT "QT_QPA_PLATFORM=xcb;GDK_BACKEND=x11;DALINIRA_GUI_MAX_WEB_PROCESSES=4"
+    TIMEOUT 120)
+endif()
+
 # Chromium and WebKit browsing workspaces (tabs, session, shortcut row) are
 # independent; the bookmark library stays shared. One executable: the logic
 # checks run in the default tier; the engine switch (one child process per
@@ -1437,7 +1569,13 @@ add_dependencies(dalinira-browser-engine-parity-test dalinira-browser-policy dal
 if(TARGET dalinira-webkit-extension)
   add_dependencies(dalinira-browser-engine-parity-test dalinira-webkit-extension)
 endif()
-set(DALINIRA_PARITY_CASES popup scripts media layout privacy network fingerprint audit about find)
+set(DALINIRA_PARITY_CASES popup scripts media layout privacy network fingerprint audit about find shortcuts sidepanel)
+# Real Qt key events for the shortcuts case's Chromium key path (optional).
+find_package(Qt6 QUIET COMPONENTS Test)
+if(TARGET Qt6::Test)
+  target_compile_definitions(dalinira-browser-engine-parity-test PRIVATE DALINIRA_TEST_QTEST=1)
+  target_link_libraries(dalinira-browser-engine-parity-test PRIVATE Qt6::Test)
+endif()
 if(DALINIRA_XTST_FOUND)
   target_compile_definitions(dalinira-browser-engine-parity-test PRIVATE DALINIRA_TEST_XTEST=1)
   target_include_directories(dalinira-browser-engine-parity-test PRIVATE ${DALINIRA_XTST_INCLUDE_DIRS})
@@ -1576,6 +1714,19 @@ target_link_libraries(dalinira-browser-onboarding-test PRIVATE Qt6::Widgets Qt6:
 add_test(NAME browser-onboarding COMMAND dalinira-browser-onboarding-test)
 set_tests_properties(browser-onboarding PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The auto-hiding side tab panel's states, without a web engine.
+add_executable(dalinira-browser-side-panel-auto-hide-test
+  browser/native/tests/side_panel_auto_hide_test.cpp
+  browser/native/layout/browser_layout.cpp
+  browser/native/layout/browser_layout_controller.cpp
+  browser/native/layout/browser_side_panel.cpp
+  browser/native/core/browser_icons.cpp
+  browser/native/core/search_engine_definition.cpp
+  browser/native/i18n/language_manager.cpp)
+target_link_libraries(dalinira-browser-side-panel-auto-hide-test PRIVATE Qt6::Widgets Qt6::Svg)
+add_test(NAME browser-side-panel-auto-hide COMMAND dalinira-browser-side-panel-auto-hide-test)
+set_tests_properties(browser-side-panel-auto-hide PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
 
 add_executable(dalinira-browser-tab-performance-manager-test
   browser/native/tests/tab_performance_manager_test.cpp
@@ -1913,7 +2064,7 @@ foreach(DALINIRA_PARITY_CASE IN LISTS DALINIRA_PARITY_CASES)
   list(APPEND DALINIRA_GUI_TESTS browser-engine-parity-${DALINIRA_PARITY_CASE})
 endforeach()
 if(DALINIRA_BUILD_WEBKIT)
-  list(APPEND DALINIRA_GUI_TESTS browser-webkit-backend browser-webkit-media)
+  list(APPEND DALINIRA_GUI_TESTS browser-webkit-backend browser-webkit-media browser-webkit-lifecycle)
 endif()
 set_tests_properties(${DALINIRA_GUI_TESTS} PROPERTIES RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
@@ -2076,6 +2227,14 @@ include(GNUInstallDirs)
 
 set(DALINIRA_RUNTIME_INSTALL_DIR "lib/dalinira-browser")
 
+# A test-only system-WebKit build must never become an installation or package;
+# this runs first in cmake_install.cmake, before anything is copied.
+if(DALINIRA_SYSTEM_WEBKIT_TEST_BUILD)
+  install(CODE [[message(FATAL_ERROR
+    "This is a TEST-ONLY build against the system WebKitGTK "
+    "(DALINIRA_ALLOW_SYSTEM_WEBKIT_FOR_TESTS=ON); it cannot be installed or packaged.")]])
+endif()
+
 install(TARGETS dalinira-browser
   RUNTIME DESTINATION ${DALINIRA_RUNTIME_INSTALL_DIR}
 )
@@ -2118,6 +2277,40 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/assets/new-tab/
 if(TARGET dalinira-webkit-extension)
   install(TARGETS dalinira-webkit-extension
     LIBRARY DESTINATION ${DALINIRA_RUNTIME_INSTALL_DIR}/webkit-extensions
+  )
+endif()
+
+# The private WebKitGTK runtime: the libraries, the helper processes and the
+# injected bundle at the paths compiled into libwebkit2gtk, its translations,
+# BUILD-INFO and the license / corresponding-source material. Not shipped:
+# headers, pkg-config files, development symlinks, WebKitWebDriver, jsc.
+if(DALINIRA_BUILD_WEBKIT AND DALINIRA_WEBKIT_RUNTIME_SDK)
+  set(DALINIRA_WEBKIT_RUNTIME_INSTALL_DIR "${DALINIRA_RUNTIME_INSTALL_DIR}/webkit")
+  set_target_properties(dalinira-browser dalinira-webkit-extension PROPERTIES
+    INSTALL_RPATH "${DALINIRA_WEBKIT_RUNTIME_PREFIX}/lib")
+  install(DIRECTORY "${DALINIRA_WEBKIT_RUNTIME_STAGE}/lib/"
+    DESTINATION ${DALINIRA_WEBKIT_RUNTIME_INSTALL_DIR}/lib
+    USE_SOURCE_PERMISSIONS
+    FILES_MATCHING
+      PATTERN "libwebkit2gtk-4.1.so.*"
+      PATTERN "libjavascriptcoregtk-4.1.so.*"
+      PATTERN "libwebkit2gtkinjectedbundle.so"
+      PATTERN "pkgconfig" EXCLUDE
+  )
+  install(PROGRAMS
+    "${DALINIRA_WEBKIT_RUNTIME_STAGE}/libexec/webkit2gtk-4.1/WebKitWebProcess"
+    "${DALINIRA_WEBKIT_RUNTIME_STAGE}/libexec/webkit2gtk-4.1/WebKitNetworkProcess"
+    "${DALINIRA_WEBKIT_RUNTIME_STAGE}/libexec/webkit2gtk-4.1/WebKitGPUProcess"
+    DESTINATION ${DALINIRA_WEBKIT_RUNTIME_INSTALL_DIR}/libexec/webkit2gtk-4.1
+  )
+  install(DIRECTORY "${DALINIRA_WEBKIT_RUNTIME_STAGE}/share/locale"
+    DESTINATION ${DALINIRA_WEBKIT_RUNTIME_INSTALL_DIR}/share
+  )
+  install(FILES "${DALINIRA_WEBKIT_RUNTIME_STAGE}/BUILD-INFO"
+    DESTINATION ${DALINIRA_WEBKIT_RUNTIME_INSTALL_DIR}
+  )
+  install(DIRECTORY "${DALINIRA_WEBKIT_RUNTIME_LEGAL_DIR}/"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/dalinira-browser/webkitgtk
   )
 endif()
 

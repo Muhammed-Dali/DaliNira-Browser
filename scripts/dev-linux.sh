@@ -2,12 +2,9 @@
 set -e
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="$ROOT_DIR/build"
+BUILD_DIR="$ROOT_DIR/build-dalinira"
 
-if [ ! -f "$BUILD_DIR/dalinira-browser" ]; then
-  echo "[BUILD] dalinira-browser derleniyor..."
-  cmake --build "$BUILD_DIR" --target dalinira-browser -j2
-fi
+"$ROOT_DIR/scripts/build-dalinira.sh"
 
 # Wayland / XCB display environment setup
 if [ -z "$QT_QPA_PLATFORM" ] && [ -n "$DISPLAY" ] && [ "$XDG_SESSION_TYPE" = "wayland" ]; then

@@ -135,6 +135,18 @@ bool pageReady(BrowserWindow &window, int index, const QString &title) {
   return waitUntil([&] { return runInTab(window, index, QStringLiteral("document.readyState==='complete'?document.title:''")).toString() == title; }, 15000);
 }
 
+// Waits until tab `index` shows the completely loaded document for `url`.
+// BrowserWindow records a tab's URL as soon as a navigation is requested, so
+// the tab model alone (URL, title, icon) still describes the previous
+// document; the committed document's own location decides.
+bool documentLoaded(BrowserWindow &window, int index, const QUrl &url, int timeoutMs = 15000) {
+  return waitUntil([&] {
+    if (index >= window.tabCount() || window.tabInfo(index).url != url || window.tabInfo(index).isLoading) return false;
+    const QString href = runInTab(window, index, QStringLiteral("document.readyState==='complete'?location.href:''")).toString();
+    return !href.isEmpty() && QUrl(href) == url;
+  }, timeoutMs);
+}
+
 // Issues 2-4: favicons, quick access and suggestion activation must behave the
 // same on both engines, through the shared BrowserWindow policies.
 void crossEngineNavigationUx(const char *engineName, BrowserProfileService &profile, BrowserServices services, LocalSite &site) {
@@ -145,23 +157,54 @@ void crossEngineNavigationUx(const char *engineName, BrowserProfileService &prof
   window.show();
   window.addNewTab(newTab);
   assert(window.tabCount() == 1);
-  assert(waitUntil([&] { return runInTab(window, 0, QStringLiteral("!!document.querySelector('#query')")).toBool(); }, 15000));
+  assert(documentLoaded(window, 0, newTab));
+  assert(runInTab(window, 0, QStringLiteral("!!document.querySelector('#query')")).toBool());
 
   // Favicons: DaliNira icon on the new tab, the page favicon on a site, a
   // per-site fallback (never DaliNira, never the previous site) without one.
   assert(waitUntil([&] { return isAppIcon(window.tabInfo(0).icon) && isAppIcon(window.tabStrip()->tabIcon(0)); }, 5000));
   window.navigateCurrentTab(site.url(QStringLiteral("/icon.html")));
+  assert(documentLoaded(window, 0, site.url(QStringLiteral("/icon.html"))));
   assert(waitUntil([&] { return isRedFavicon(window.tabInfo(0).icon) && isRedFavicon(window.tabStrip()->tabIcon(0)); }, 15000)
          && "a site's favicon must replace the DaliNira icon");
   window.navigateCurrentTab(site.url(QStringLiteral("/plain.html")));
-  assert(pageReady(window, 0, QStringLiteral("Plain page")));
+  assert(documentLoaded(window, 0, site.url(QStringLiteral("/plain.html"))));
   assert(waitUntil([&] { const QIcon icon = window.tabStrip()->tabIcon(0);
                          return !icon.isNull() && !isAppIcon(icon) && !isRedFavicon(icon); }, 5000)
          && "a page without favicon gets a site fallback, not DaliNira or the previous favicon");
+  // A page without favicon on a site whose favicon the profile knows, in a new
+  // tab: neither engine reports a change for a view that never had an icon.
+  // DaliNira's rule on both engines: a page shows its own favicon, or the
+  // generic site icon when it has none; the site's cached favicon is only a
+  // placeholder until the engine has answered.
+  window.openBookmarkUrl(site.url(QStringLiteral("/plain.html")), true);
+  assert(window.tabCount() == 2 && documentLoaded(window, 1, site.url(QStringLiteral("/plain.html"))));
+  assert(waitUntil([&] { const QIcon icon = window.tabStrip()->tabIcon(1);
+                         return !icon.isNull() && !isAppIcon(icon) && !isRedFavicon(icon); }, 5000)
+         && "a page without favicon shows the site fallback, not the site's cached favicon");
+  window.closeTab(1);
+  window.switchTab(0);
+  assert(window.tabCount() == 1 && window.tabStrip()->currentIndex() == 0);
   window.navigateCurrentTab(newTab);
+  assert(documentLoaded(window, 0, newTab));
   assert(waitUntil([&] { return isAppIcon(window.tabInfo(0).icon) && isAppIcon(window.tabStrip()->tabIcon(0)); }, 15000)
          && "returning to the new tab restores the DaliNira icon");
   assert(window.tabCount() == 1);
+
+  // Rebuilding the bookmark bar replaces its buttons and deletes the previous
+  // ones (QToolBar::clear() alone kept every old button alive, hidden).
+  const auto liveBookmarkButtons = [] {
+    int count = 0;
+    for (QWidget *widget : QApplication::allWidgets())
+      if (widget->objectName() == QLatin1String("bookmarkItemButton")) ++count;
+    return count;
+  };
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  const int bookmarkButtonsBefore = liveBookmarkButtons();
+  assert(bookmarkButtonsBefore > 0);
+  for (int i = 0; i < 5; ++i) window.renderBookmarks();
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  assert(liveBookmarkButtons() == bookmarkButtonsBefore && "a bookmark bar rebuild does not leak its old buttons");
 
   // Bookmark bar: plain click navigates the current tab; middle-click and the
   // explicit action open new tabs.
@@ -171,27 +214,31 @@ void crossEngineNavigationUx(const char *engineName, BrowserProfileService &prof
   assert(bookmark);
   bookmark->click();
   assert(window.tabCount() == 1 && "a bookmark click from the new tab reuses the current tab");
-  assert(waitUntil([&] { return window.tabInfo(0).url == site.url(QStringLiteral("/plain.html")); }, 5000));
-  assert(pageReady(window, 0, QStringLiteral("Plain page")));
+  assert(documentLoaded(window, 0, site.url(QStringLiteral("/plain.html"))));
   QMouseEvent middleRelease(QEvent::MouseButtonRelease, QPointF(4, 4), bookmark->mapToGlobal(QPointF(4, 4)),
                             Qt::MiddleButton, Qt::NoButton, Qt::NoModifier);
   QApplication::sendEvent(bookmark, &middleRelease);
   assert(window.tabCount() == 2 && "middle-click opens the bookmark in a new tab");
   window.openBookmarkUrl(site.url(QStringLiteral("/plain.html")), true);
   assert(window.tabCount() == 3 && "explicit open-in-new-tab still creates a tab");
+  assert(documentLoaded(window, 1, site.url(QStringLiteral("/plain.html"))) &&
+         documentLoaded(window, 2, site.url(QStringLiteral("/plain.html"))) && "both new tabs show the bookmark");
   window.closeTab(2);
   window.closeTab(1);
   window.switchTab(0);
-  assert(window.tabCount() == 1);
+  assert(window.tabCount() == 1 && window.tabStrip()->currentIndex() == 0);
+  assert(documentLoaded(window, 0, site.url(QStringLiteral("/plain.html"))) && "closing new tabs leaves the original tab");
 
   // Quick-access tile on the new tab navigates the same tab. Frequent sites are
   // grouped per origin, so the tile links to the site root.
   window.navigateCurrentTab(newTab);
+  assert(documentLoaded(window, 0, newTab));
   const QString tileHref = site.url(QStringLiteral("/")).toString();
   assert(waitUntil([&] { return runInTab(window, 0, QStringLiteral("!!document.querySelector('#shortcut-list a.shortcut[href=\"%1\"]')").arg(tileHref)).toBool(); }, 15000)
          && "quick-access tiles are real links to the site");
   runInTab(window, 0, QStringLiteral("document.querySelector('#shortcut-list a.shortcut[href=\"%1\"]').click();true").arg(tileHref));
-  assert(pageReady(window, 0, QStringLiteral("Home page")) && window.tabCount() == 1 && "a tile reuses the current new tab");
+  assert(documentLoaded(window, 0, site.url(QStringLiteral("/"))) && pageReady(window, 0, QStringLiteral("Home page")) &&
+         window.tabCount() == 1 && "a tile reuses the current new tab");
 
   // Suggestions: a search suggestion navigates straight to the engine's search
   // URL for that exact query (never re-resolved: "github" must not open github.com),
@@ -204,7 +251,7 @@ void crossEngineNavigationUx(const char *engineName, BrowserProfileService &prof
   assert(model);
   const auto showRows = [&] {
     window.navigateCurrentTab(site.url(QStringLiteral("/plain.html")));
-    pageReady(window, 0, QStringLiteral("Plain page"));
+    assert(documentLoaded(window, 0, site.url(QStringLiteral("/plain.html"))));
     model->clear();
     auto *remote = new QStandardItem(QStringLiteral("github"));
     remote->setData(expected, Qt::UserRole + 1);
@@ -233,12 +280,14 @@ void crossEngineNavigationUx(const char *engineName, BrowserProfileService &prof
 
   // New Tab search field: the page's activate command uses the same path.
   window.navigateCurrentTab(newTab);
+  assert(documentLoaded(window, 0, newTab));
   assert(waitUntil([&] { return runInTab(window, 0, QStringLiteral("typeof selectSuggestion==='function'&&suggestionCapability.length>0")).toBool(); }, 15000));
   runInTab(window, 0, QStringLiteral("suggestionRows=[{type:'remote',text:'github',url:%1}];selectSuggestion(0);true")
                           .arg(QString::fromUtf8(QJsonDocument(QJsonArray{expected.toString()}).toJson(QJsonDocument::Compact)).mid(1).chopped(1)));
   assert(waitUntil([&] { return window.tabInfo(0).url == expected; }, 5000) && window.tabCount() == 1
          && "a New Tab suggestion click searches immediately in the current tab");
   window.navigateCurrentTab(site.url(QStringLiteral("/plain.html")));  // leave the real search engine
+  assert(documentLoaded(window, 0, site.url(QStringLiteral("/plain.html"))));
   std::cout << "     PASS: [" << engineName << "] favicons, quick access and suggestion activation match Brave behavior.\n";
 }
 

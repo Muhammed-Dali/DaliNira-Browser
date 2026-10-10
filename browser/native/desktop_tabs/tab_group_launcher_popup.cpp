@@ -7,6 +7,7 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QVBoxLayout>
+#include "core/keyboard_shortcut_service.h"
 #include "i18n/i18n.h"
 
 namespace dalinira::desktop_tabs {
@@ -83,8 +84,17 @@ void TabGroupLauncherPopup::setupUi() {
   titleLabel->setStyleSheet(QStringLiteral("color: #f1f3f4; font-size: 13px; font-weight: 500;"));
   rowLayout->addWidget(titleLabel, 1, Qt::AlignVCenter);
 
-  auto *shortcutLabel = new QLabel(QStringLiteral("Alt+Shift+P"), rowBtn);
+  auto *shortcutLabel = new QLabel(rowBtn);
   shortcutLabel->setStyleSheet(QStringLiteral("color: #9aa0a6; font-size: 11px; font-weight: 500;"));
+  // The current "New tab group" shortcut, following changes made in Settings.
+  const auto updateShortcut = [shortcutLabel] {
+    const QString text = dalinira::KeyboardShortcutService::primaryText(QStringLiteral("tabs.group_new"));
+    shortcutLabel->setText(text);
+    shortcutLabel->setVisible(!text.isEmpty());
+  };
+  updateShortcut();
+  connect(&dalinira::KeyboardShortcutService::instance(), &dalinira::KeyboardShortcutService::shortcutsChanged,
+          shortcutLabel, updateShortcut);
   rowLayout->addWidget(shortcutLabel, 0, Qt::AlignVCenter);
 
   connect(rowBtn, &QPushButton::clicked, this, [this] {

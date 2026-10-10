@@ -33,32 +33,32 @@ void BrowserWindow::showMainMenu() {
   menu.setStyleSheet(QStringLiteral("QMenu{background:#1b232d;color:#e8eef5;border:1px solid #3a4857;border-radius:9px;padding:6px;} QMenu::item{min-height:25px;padding:5px 30px 5px 30px;border-radius:6px;} QMenu::item:selected{background:#2b3947;} QMenu::item:disabled{color:#6f7b87;} QMenu::separator{height:1px;background:#33404d;margin:6px 8px;} QMenu::icon{padding-left:7px;}"));
 
   QAction *newTab = menu.addAction(BrowserIcons::icon(BrowserIcon::NewTab), I18n::text(QStringLiteral("menu.new_tab")));
-  newTab->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
+  addShortcutHint(newTab, QStringLiteral("tabs.new"));
   QAction *newWindow = menu.addAction(BrowserIcons::icon(BrowserIcon::Window), I18n::text(QStringLiteral("menu.new_window")));
   newWindow->setObjectName(QStringLiteral("newWindowAction"));
-  newWindow->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_N));
+  addShortcutHint(newWindow, QStringLiteral("window.new"));
   QAction *incognito = menu.addAction(BrowserIcons::icon(BrowserIcon::Incognito), I18n::text(QStringLiteral("menu.new_incognito_window")));
   incognito->setObjectName(QStringLiteral("newIncognitoWindowAction"));
-  incognito->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
-  incognito->setToolTip(I18n::text(QStringLiteral("menu.new_incognito_tooltip")));
+  addShortcutHint(incognito, QStringLiteral("window.new_incognito"));
+  incognito->setToolTip(shortcutTooltip(QStringLiteral("menu.new_incognito_tooltip"), QStringLiteral("window.new_incognito")));
 
   menu.addSeparator();
   QAction *passwords = menu.addAction(BrowserIcons::icon(BrowserIcon::Password), I18n::text(QStringLiteral("menu.passwords")));
   QAction *fillPassword = menu.addAction(BrowserIcons::icon(BrowserIcon::Password), I18n::text(QStringLiteral("menu.fill_password")));
   fillPassword->setEnabled((currentView() != nullptr || currentEngineView() != nullptr) && services_.profileService && services_.profileService->credentialVault() && !services_.profileService->credentialVault()->isLocked());
   QAction *history = menu.addAction(BrowserIcons::icon(BrowserIcon::History), I18n::text(QStringLiteral("menu.history")));
-  history->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_H));
+  addShortcutHint(history, QStringLiteral("history.open"));
 
   QMenu *bookmarksMenu = menu.addMenu(BrowserIcons::icon(BrowserIcon::Bookmark), I18n::text(QStringLiteral("menu.bookmarks")));
   QAction *toggleBar = bookmarksMenu->addAction(I18n::text(QStringLiteral("menu.bookmarks_bar")));
-  toggleBar->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_B));
+  addShortcutHint(toggleBar, QStringLiteral("bookmarks.toggle_bar"));
   toggleBar->setCheckable(true);
   const QString bmMode = QSettings().value(QStringLiteral("browser/bookmarkBarVisibility"), QStringLiteral("new_tab")).toString();
   toggleBar->setChecked(bmMode != QLatin1String("never") && isCurrentTabNewTab());
   connect(toggleBar, &QAction::triggered, this, &BrowserWindow::toggleBookmarkBar);
 
   QAction *bookmarks = bookmarksMenu->addAction(BrowserIcons::icon(BrowserIcon::Bookmark), I18n::text(QStringLiteral("menu.bookmarks_manager")));
-  bookmarks->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O));
+  addShortcutHint(bookmarks, QStringLiteral("bookmarks.manager"));
 
   bookmarksMenu->addSeparator();
   QAction *importBookmarksAct = bookmarksMenu->addAction(I18n::text(QStringLiteral("menu.import_bookmarks")));
@@ -98,7 +98,7 @@ void BrowserWindow::showMainMenu() {
   });
 
   QAction *downloads = menu.addAction(BrowserIcons::icon(BrowserIcon::Download), I18n::text(QStringLiteral("menu.downloads")));
-  downloads->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
+  addShortcutHint(downloads, QStringLiteral("downloads.open"));
 
   menu.addSeparator();
   QMenu *zoom = menu.addMenu(BrowserIcons::icon(BrowserIcon::Zoom), I18n::text(QStringLiteral("menu.zoom")));
@@ -110,10 +110,13 @@ void BrowserWindow::showMainMenu() {
   zoomOut->setEnabled(hasWebContent);
   zoomReset->setEnabled(hasWebContent);
   zoomIn->setEnabled(hasWebContent);
+  addShortcutHint(zoomOut, QStringLiteral("zoom.out"));
+  addShortcutHint(zoomReset, QStringLiteral("zoom.reset"));
+  addShortcutHint(zoomIn, QStringLiteral("zoom.in"));
 
   menu.addSeparator();
   QAction *print = menu.addAction(BrowserIcons::icon(BrowserIcon::Print), I18n::text(QStringLiteral("menu.print")));
-  print->setShortcut(QKeySequence::Print);
+  addShortcutHint(print, QStringLiteral("page.print"));
   print->setEnabled(hasWebContent);
   connect(print, &QAction::triggered, this, &BrowserWindow::printCurrentPage);
 
@@ -122,7 +125,7 @@ void BrowserWindow::showMainMenu() {
   connect(printPdf, &QAction::triggered, this, &BrowserWindow::printCurrentPageToPdf);
 
   QAction *find = menu.addAction(BrowserIcons::icon(BrowserIcon::Search), I18n::text(QStringLiteral("menu.find_in_page")));
-  find->setShortcut(QKeySequence::Find);
+  addShortcutHint(find, QStringLiteral("find.open"));
   find->setEnabled(hasWebContent);
   connect(find, &QAction::triggered, this, &BrowserWindow::showFindBar);
 
@@ -140,15 +143,9 @@ void BrowserWindow::showMainMenu() {
   connect(translate, &QAction::triggered, this, &BrowserWindow::showTranslatePopup);
 
   QAction *save = menu.addAction(BrowserIcons::icon(BrowserIcon::Save), I18n::text(QStringLiteral("context.save_page_as")));
-  save->setShortcut(QKeySequence::Save);
+  addShortcutHint(save, QStringLiteral("page.save"));
   save->setEnabled(hasWebContent);
-  connect(save, &QAction::triggered, this, [this] {
-    if (auto *view = currentView()) {
-      if (view->page()) view->page()->triggerAction(QWebEnginePage::SavePage);
-    } else if (currentEngineView()) {
-      printCurrentPageToPdf();
-    }
-  });
+  connect(save, &QAction::triggered, this, &BrowserWindow::saveCurrentPage);
 
   QMenu *tools = menu.addMenu(BrowserIcons::icon(BrowserIcon::Tools), I18n::text(QStringLiteral("menu.other_tools")));
   QAction *reader = tools->addAction(I18n::text(QStringLiteral("menu.reader_mode")));
@@ -182,6 +179,9 @@ void BrowserWindow::showMainMenu() {
   connect(zoomIn, &QAction::triggered, this, [this] { changeCurrentZoom(0.1); });
   connect(audioEffectsAction, &QAction::triggered, this, &BrowserWindow::showAudioEffects);
   connect(eqPresetsAction, &QAction::triggered, this, &BrowserWindow::showEqPresetBrowser);
+  addShortcutHint(passwords, QStringLiteral("dalinira.passwords"));
+  addShortcutHint(audioEffectsAction, QStringLiteral("dalinira.audio_effects"));
+  addShortcutHint(settings, QStringLiteral("settings.open"));
   connect(settings, &QAction::triggered, this, [this] { showSettings(); });
   connect(quit, &QAction::triggered, qApp, &QCoreApplication::quit);
 
@@ -195,7 +195,7 @@ void BrowserWindow::showHistoryMenu() {
   menu.setStyleSheet(QStringLiteral("QMenu{background:#1b232d;color:#e8eef5;border:1px solid #3a4857;border-radius:9px;padding:6px;} QMenu::item{min-height:25px;padding:5px 30px 5px 30px;border-radius:6px;} QMenu::item:disabled{color:#6f7b87;}"));
 
   QAction *openAllHistory = menu.addAction(BrowserIcons::icon(BrowserIcon::History),
-      I18n::text(QStringLiteral("menu.show_full_history")) + QStringLiteral("\tCtrl+H"));
+      I18n::text(QStringLiteral("menu.show_full_history")) + shortcutMenuHint(QStringLiteral("history.open")));
   connect(openAllHistory, &QAction::triggered, this, [this] {
     showSettings(SettingsPage::Category::History);
   });
@@ -203,7 +203,7 @@ void BrowserWindow::showHistoryMenu() {
 
   if (!isIncognito() && services_.profileService->hasClosedTabs()) {
     QAction *restoreTab = menu.addAction(BrowserIcons::icon(BrowserIcon::History),
-        I18n::text(QStringLiteral("menu.reopen_closed_tab")) + QStringLiteral("\tCtrl+Shift+T"));
+        I18n::text(QStringLiteral("menu.reopen_closed_tab")) + shortcutMenuHint(QStringLiteral("tabs.reopen_closed")));
     connect(restoreTab, &QAction::triggered, this, &BrowserWindow::restoreLastClosedTab);
     menu.addSeparator();
   }
@@ -325,7 +325,7 @@ void BrowserWindow::onTabContextMenuRequested(int index, const QPoint &globalPos
   QAction *moveWindow = menu.addAction(BrowserIcons::icon(BrowserIcon::Window), I18n::text(QStringLiteral("tab.context.move_to_new_window")));
   moveWindow->setEnabled(tabs_.size() > 1);
   connect(moveWindow, &QAction::triggered, this, [this, tabId] {
-    auto *newWin = new BrowserWindow(services_);
+    auto *newWin = createWindow(services_);
     newWin->show();
     transferTabTo(tabId, newWin, 0);
   });
@@ -334,7 +334,7 @@ void BrowserWindow::onTabContextMenuRequested(int index, const QPoint &globalPos
 
   // 5. Yeniden Yükle
   QAction *reloadAct = menu.addAction(I18n::text(QStringLiteral("tab.context.reload")));
-  reloadAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+  addShortcutHint(reloadAct, QStringLiteral("navigation.reload"));
   connect(reloadAct, &QAction::triggered, this, [this, tabId] {
     const int idx = findIndexByTabId(tabId);
     if (idx >= 0 && tabs_[idx].view) {
@@ -413,7 +413,7 @@ void BrowserWindow::onTabContextMenuRequested(int index, const QPoint &globalPos
 
   // 12. Kapat
   QAction *closeAct = menu.addAction(BrowserIcons::icon(BrowserIcon::Close),
-      I18n::text(QStringLiteral("tab.context.close")) + QStringLiteral("\tCtrl+W"));
+      I18n::text(QStringLiteral("tab.context.close")) + shortcutMenuHint(QStringLiteral("tabs.close")));
   connect(closeAct, &QAction::triggered, this, [this, tabId] {
     const int idx = findIndexByTabId(tabId);
     if (idx >= 0) {
@@ -423,7 +423,7 @@ void BrowserWindow::onTabContextMenuRequested(int index, const QPoint &globalPos
 
   // Kapatılan sekmeyi yeniden aç
   QAction *reopenClosedAct = menu.addAction(BrowserIcons::icon(BrowserIcon::History),
-      I18n::text(QStringLiteral("tab.context.reopen_closed")) + QStringLiteral("\tCtrl+Shift+T"));
+      I18n::text(QStringLiteral("tab.context.reopen_closed")) + shortcutMenuHint(QStringLiteral("tabs.reopen_closed")));
   reopenClosedAct->setEnabled(!isIncognito() && services_.profileService && services_.profileService->hasClosedTabs());
   connect(reopenClosedAct, &QAction::triggered, this, &BrowserWindow::restoreLastClosedTab);
 

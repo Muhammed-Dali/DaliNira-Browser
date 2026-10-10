@@ -508,6 +508,24 @@ inline QString settingsStyleSheet() {
     #settings-icon-del-btn:hover { background:#382229; color:#f28b82; }
     #settings-chevron-btn { min-width:28px; max-width:28px; min-height:28px; max-height:28px; background:transparent; border:0; border-radius:6px; padding:0; color:#8e9fae; font-size:18px; font-weight:bold; }
     #settings-chevron-btn:hover { background:#263240; color:#f3f7fc; }
+    #settings-shortcuts-intro { color:#98a8b9; font-size:13px; }
+    #settings-shortcuts-status { color:#8fd0a8; font-size:13px; padding-left:10px; }
+    #settings-shortcut-group { color:#f2f6fb; font-size:15px; font-weight:600; }
+    #settings-shortcut-divider { background:rgba(255,255,255,0.10); border:0; }
+    #settings-shortcut-label { color:rgba(232,238,246,0.78); font-size:14px; }
+    #settings-shortcut-message { color:#9fb0c2; font-size:12px; padding-left:34px; }
+    #settings-shortcut-message[error="true"] { color:#f28b82; }
+    #settings-page QPushButton#settings-shortcut-edit { min-height:30px; max-height:30px; background:transparent; color:#dce6f0; border:1px solid rgba(255,255,255,0.14); border-radius:6px; padding:0 10px; text-align:left; font-size:13px; font-weight:500; }
+    #settings-page QPushButton#settings-shortcut-edit:hover { background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.28); }
+    #settings-page QPushButton#settings-shortcut-edit:focus { border:1px solid #62a9c8; }
+    #settings-page QPushButton#settings-shortcut-edit[unset="true"] { color:rgba(232,238,246,0.32); }
+    #settings-page QPushButton#settings-shortcut-edit[customized="true"] { color:#8cd2f4; }
+    #settings-page QPushButton#settings-shortcut-edit[capturing="true"] { background:rgba(88,166,199,0.10); color:#ffffff; border:2px solid #58a6c7; padding:0 9px; }
+    #settings-page QPushButton#settings-shortcut-edit[flash="valid"] { border:1px solid #3fb950; }
+    #settings-page QPushButton#settings-shortcut-edit[flash="invalid"] { border:1px solid #f85149; }
+    #settings-page QPushButton#settings-shortcut-reset { min-width:28px; max-width:28px; min-height:28px; max-height:28px; padding:0; background:transparent; border:1px solid transparent; border-radius:6px; }
+    #settings-page QPushButton#settings-shortcut-reset:hover { background:rgba(255,255,255,0.08); }
+    #settings-page QPushButton#settings-shortcut-reset:focus { border:1px solid #62a9c8; }
   )CSS");
 }
 
