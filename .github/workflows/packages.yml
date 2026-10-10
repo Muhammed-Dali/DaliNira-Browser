@@ -125,7 +125,7 @@ jobs:
             *) extra="clang lld libsysprof-capture-4-dev libjxl-dev" ;;
           esac
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates curl xz-utils zstd file patch cmake ninja-build gperf bison flex ruby unifdef \
+            ca-certificates curl xz-utils zstd file patch cmake ninja-build gperf bison flex gettext ruby unifdef \
             python3 perl pkg-config bubblewrap xdg-dbus-proxy libseccomp-dev libglib2.0-dev \
             libharfbuzz-dev libcairo2-dev libdrm-dev libgbm-dev libepoxy-dev libfontconfig-dev \
             libfreetype-dev libicu-dev libgcrypt20-dev libhyphen-dev liblcms2-dev libmanette-0.2-dev \
@@ -431,6 +431,11 @@ jobs:
     # Builds the private WebKit runtime inside makepkg (2-3 hours).
     timeout-minutes: 345
     steps:
+      # Before the checkout: without git in the container, actions/checkout
+      # downloads a tarball with no .git, and the git archive below fails.
+      - name: Install git
+        run: pacman -Syu --noconfirm --needed git
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -438,7 +443,6 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          pacman -Syu --noconfirm --needed git
           # Everything the recipe declares (the private WebKit runtime's
           # build and runtime dependencies included).
           cd packaging/archlinux

@@ -86,7 +86,7 @@ sudo apt install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreame
 
 # Private WebKitGTK runtime build dependencies (the list the package CI uses)
 sudo apt install -y --no-install-recommends \
-  ca-certificates curl xz-utils zstd file patch cmake ninja-build gperf bison flex ruby unifdef \
+  ca-certificates curl xz-utils zstd file patch cmake ninja-build gperf bison flex gettext ruby unifdef \
   python3 perl pkg-config bubblewrap xdg-dbus-proxy libseccomp-dev libglib2.0-dev \
   libharfbuzz-dev libcairo2-dev libdrm-dev libgbm-dev libepoxy-dev libfontconfig-dev \
   libfreetype-dev libicu-dev libgcrypt20-dev libhyphen-dev liblcms2-dev libmanette-0.2-dev \
