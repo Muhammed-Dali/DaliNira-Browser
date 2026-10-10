@@ -53,6 +53,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QRegularExpression>
+#include <QCursor>
 #include <QScreen>
 #include <QSet>
 #include <QSettings>
@@ -3361,6 +3362,24 @@ int runPhase(const QString &testCase, const QString &engine, int argc, char *arg
       window->move(screen->availableGeometry().center() - QPoint(640, 400));
   } else {
     window->resize(1000, 700);
+    // The side-panel case reads the panel's pointer state. The X server sends
+    // crossing events at the real pointer, so a window placed under the
+    // user's resting pointer saw it over the panel (kept open) or over the
+    // page (hidden) depending on where it rested. Keep the window clear of it.
+    if (testCase == QLatin1String("sidepanel")) {
+      if (QScreen *screen = QGuiApplication::primaryScreen()) {
+        const QRect available = screen->availableGeometry();
+        const QPoint pointer = QCursor::pos();
+        for (const QPoint &corner : {available.topLeft(), available.topRight() - QPoint(999, 0),
+                                     available.bottomLeft() - QPoint(0, 699),
+                                     available.bottomRight() - QPoint(999, 699)}) {
+          if (!QRect(corner, QSize(1000, 700)).adjusted(-40, -40, 40, 40).contains(pointer)) {
+            window->move(corner);
+            break;
+          }
+        }
+      }
+    }
   }
   window->show();
   // The layout case starts as a first run: onboarding is the first page.
