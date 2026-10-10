@@ -596,6 +596,8 @@ private:
   QRect resizeStartGeometry_;
   bool manualMoving_ = false;
   QPoint manualMoveOffset_;
+  bool titleMovePending_ = false;
+  QPoint titleMovePressPos_;
   bool hasOverrideCursor_ = false;
   Qt::CursorShape currentOverrideShape_ = Qt::ArrowCursor;
 

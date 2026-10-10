@@ -8,6 +8,8 @@
 #include <QCompleter>
 #include <QStandardItemModel>
 #include <QAbstractItemView>
+#include <QCursor>
+#include <QGuiApplication>
 #include <QScreen>
 #include "core/search_suggestion_service.h"
 #include "core/suggestion_remove_delegate.h"
@@ -720,6 +722,24 @@ class BrowserWebView final : public QWebEngineView {
  private:
   QPointer<BrowserWindow> window_;
 };
+
+// A new window's place when nothing is restored: a regular desktop window like
+// Chromium's first window, not an edge-to-edge one. About two thirds of the
+// work area wide and four fifths high, within 1350x900 and above the minimum
+// size, centered on the screen under the pointer (logical pixels, so HiDPI
+// screens get the same proportions).
+QRect defaultWindowGeometry() {
+  QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
+  if (!screen) screen = QGuiApplication::primaryScreen();
+  const QRect available = screen ? screen->availableGeometry() : QRect(0, 0, 1280, 800);
+  const int width = qBound(qMin(640, available.width()), available.width() * 2 / 3,
+                           qMin(1350, available.width()));
+  const int height = qBound(qMin(420, available.height()), available.height() * 4 / 5,
+                            qMin(900, available.height()));
+  QRect geometry(0, 0, width, height);
+  geometry.moveCenter(available.center());
+  return geometry;
+}
 }  // namespace
 
 void BrowserWindow::showLinkContextMenu(const QUrl &linkUrl, const QString &linkText, const QPoint &globalPos) {
@@ -924,7 +944,7 @@ BrowserWindow::BrowserWindow(const BrowserServices &services, bool isCaptureShel
   setAttribute(Qt::WA_Hover, true);
   setMouseTracking(true);
   setMinimumSize(640, 420);
-  resize(1200, 800);
+  setGeometry(defaultWindowGeometry());
   lastNormalSize_ = size();
   lastNormalGeometry_ = geometry();
   setProperty("daliniraRestoredSize", lastNormalSize_);
@@ -5252,27 +5272,42 @@ void BrowserWindow::mousePressEvent(QMouseEvent *event) {
       event->accept();
       return;
     }
-    if (pos.y() <= 40) {
-      if (QGuiApplication::platformName() == QLatin1String("xcb")) {
-        if (!isMaximized() && !isFullScreen()) {
-          manualMoving_ = true;
-          manualMoveOffset_ = event->globalPosition().toPoint() - this->pos();
-          grabMouse();
-          event->accept();
-          return;
-        }
-      }
-      if (windowHandle()) {
-        windowHandle()->startSystemMove();
-        event->accept();
-        return;
-      }
+    // Empty space in the title area (controls take their own presses). A
+    // click is not a drag: the move starts once the pointer really moves.
+    if (pos.y() <= 40 && !isFullScreen()) {
+      titleMovePending_ = true;
+      titleMovePressPos_ = event->globalPosition().toPoint();
+      event->accept();
+      return;
     }
   }
   QMainWindow::mousePressEvent(event);
 }
 
 void BrowserWindow::mouseMoveEvent(QMouseEvent *event) {
+  if (titleMovePending_) {
+    const QPoint globalPos = event->globalPosition().toPoint();
+    if (!(event->buttons() & Qt::LeftButton)) {
+      titleMovePending_ = false;
+    } else if ((globalPos - titleMovePressPos_).manhattanLength() >= QApplication::startDragDistance()) {
+      titleMovePending_ = false;
+      // The window manager moves the window (X11 _NET_WM_MOVERESIZE, Wayland
+      // xdg_toplevel.move): KWin and others then snap, tile, maximize at the
+      // top edge and restore a dragged maximized window, as for any window.
+      if (windowHandle() && windowHandle()->startSystemMove()) {
+        event->accept();
+        return;
+      }
+      // Fallback for a window manager without a native move.
+      if (!isMaximized()) {
+        manualMoving_ = true;
+        manualMoveOffset_ = titleMovePressPos_ - this->pos();
+        grabMouse();
+      }
+    }
+    event->accept();
+    return;
+  }
   if (manualMoving_) {
     if (event->buttons() & Qt::LeftButton) {
       move(event->globalPosition().toPoint() - manualMoveOffset_);
@@ -5301,6 +5336,7 @@ void BrowserWindow::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void BrowserWindow::mouseReleaseEvent(QMouseEvent *event) {
+  titleMovePending_ = false;
   if (manualMoving_) {
     manualMoving_ = false;
     releaseMouse();
