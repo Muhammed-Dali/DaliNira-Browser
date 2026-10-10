@@ -1048,40 +1048,35 @@ void TabStripWidget::mouseMoveEvent(QMouseEvent *event) {
       const QPoint pressed = *pendingWindowMovePress_;
       pendingWindowMovePress_.reset();
       QWidget *top = window();
-      if (QGuiApplication::platformName() == QLatin1String("xcb")) {
-        if (top->isMaximized()) {
-          // On X11, restore under the grabbed point first so the native move
-          // cannot snap a maximized window's cursor to its upper-left corner.
-          const QRect maximized = top->geometry();
-          const QRect normal = top->normalGeometry();
-          QSize restored = top->property("daliniraRestoredSize").toSize();
-          if (restored.width() < 600 || restored.height() < 400) restored = normal.size();
-          QScreen *screen = QGuiApplication::screenAt(globalPos);
-          if (!screen) screen = top->screen();
-          const QSize available = screen ? screen->availableGeometry().size() : QSize(1200, 800);
-          if (restored.width() < 600 || restored.height() < 400)
-            restored = QSize(qMin(1200, available.width()), qMin(800, available.height()));
-          restored = restored.boundedTo(available);
-          const QRect target = restoredWindowGeometryForDrag(maximized, restored, pressed, globalPos);
-          // Qt/X11's native move can reset the pointer to the restored window's
-          // origin. Keep the grabbed titlebar point under the pointer ourselves.
-          manualWindowMoveOffset_ = globalPos - target.topLeft();
-          top->showNormal();
-          top->setGeometry(target);
-          grabMouse();
-          event->accept();
-          return;
-        } else {
-          // In normal (restored) mode on X11, native startSystemMove() also snaps
-          // the pointer to the window origin (0, 0). Keep the grabbed titlebar point
-          // under the pointer ourselves without jumping.
-          manualWindowMoveOffset_ = globalPos - top->pos();
-          grabMouse();
-          event->accept();
-          return;
-        }
+      // The window manager moves the window (X11 _NET_WM_MOVERESIZE, Wayland
+      // xdg_toplevel.move), so it owns edge snapping, tiling, maximize at the
+      // top edge, restoring a dragged maximized window and moves between
+      // monitors, as with any other window.
+      if (top->windowHandle() && top->windowHandle()->startSystemMove()) {
+        event->accept();
+        return;
       }
-      if (top->windowHandle()) top->windowHandle()->startSystemMove();
+      // Fallback for a window manager without a native move: follow the
+      // pointer ourselves, restoring a maximized window under the grabbed point.
+      if (top->isMaximized()) {
+        const QRect maximized = top->geometry();
+        const QRect normal = top->normalGeometry();
+        QSize restored = top->property("daliniraRestoredSize").toSize();
+        if (restored.width() < 600 || restored.height() < 400) restored = normal.size();
+        QScreen *screen = QGuiApplication::screenAt(globalPos);
+        if (!screen) screen = top->screen();
+        const QSize available = screen ? screen->availableGeometry().size() : QSize(1200, 800);
+        if (restored.width() < 600 || restored.height() < 400)
+          restored = QSize(qMin(1200, available.width()), qMin(800, available.height()));
+        restored = restored.boundedTo(available);
+        const QRect target = restoredWindowGeometryForDrag(maximized, restored, pressed, globalPos);
+        manualWindowMoveOffset_ = globalPos - target.topLeft();
+        top->showNormal();
+        top->setGeometry(target);
+      } else {
+        manualWindowMoveOffset_ = globalPos - top->pos();
+      }
+      grabMouse();
       event->accept();
       return;
     }
