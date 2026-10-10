@@ -2,7 +2,7 @@
 
 All notable release-facing changes to DaliNira Browser are documented here.
 
-## [8.0.0] - 2026-10-05
+## [8.0.0] - 2026-10-11
 
 ### Added
 
