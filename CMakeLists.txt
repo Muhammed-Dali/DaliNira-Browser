@@ -42,6 +42,11 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS
   DBus
 )
 find_package(SQLite3 REQUIRED)
+# FindSQLite3 names its target SQLite3::SQLite3 since CMake 4.1 and
+# SQLite::SQLite3 before (Debian 12: 3.25, Ubuntu 24.04: 3.28).
+if(NOT TARGET SQLite3::SQLite3 AND TARGET SQLite::SQLite3)
+  add_library(SQLite3::SQLite3 ALIAS SQLite::SQLite3)
+endif()
 find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PSL REQUIRED IMPORTED_TARGET libpsl)
