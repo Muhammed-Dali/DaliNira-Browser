@@ -123,5 +123,15 @@ if [ -n "$system_webkit_matches" ]; then
   status=1
 fi
 
+# Shell scripts are run directly (README, CI, PKGBUILD check() through the GUI
+# gate), and release tarballs carry the modes git records, not the working
+# tree's. A repository with core.fileMode=false commits new files as 100644.
+non_executable="$(git ls-files -s -- 'scripts/*.sh' 'packaging/*.sh' | awk '$1 != "100755" { print $4 }')"
+if [ -n "$non_executable" ]; then
+  echo "shell scripts not recorded as executable (git update-index --chmod=+x):" >&2
+  echo "$non_executable" >&2
+  status=1
+fi
+
 [ "$status" -eq 0 ] && echo "release metadata and contact email audit consistent: ${cmake_version}"
 exit "$status"
