@@ -932,15 +932,19 @@ set_tests_properties(browser-web-audio-engine-stress PROPERTIES
   TIMEOUT 120
 )
 
-add_test(NAME browser-installed-package-layout
-  COMMAND ${CMAKE_COMMAND}
-    -DDALINIRA_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
-    -DDALINIRA_INSTALL_BINDIR=${CMAKE_INSTALL_BINDIR}
-    -DDALINIRA_EXPECT_WEBKIT=$<BOOL:${DALINIRA_BUILD_WEBKIT}>
-    "-DDALINIRA_EXPECT_WEBKIT_RUNTIME=$<AND:$<BOOL:${DALINIRA_BUILD_WEBKIT}>,$<BOOL:${DALINIRA_WEBKIT_RUNTIME_SDK}>>"
-    -P ${CMAKE_CURRENT_SOURCE_DIR}/browser/cmake/verify_install_layout.cmake
-)
-set_tests_properties(browser-installed-package-layout PROPERTIES TIMEOUT 90)
+# A test-only system-WebKit build refuses to install (see above), so there is
+# no installed layout to check.
+if(NOT DALINIRA_SYSTEM_WEBKIT_TEST_BUILD)
+  add_test(NAME browser-installed-package-layout
+    COMMAND ${CMAKE_COMMAND}
+      -DDALINIRA_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -DDALINIRA_INSTALL_BINDIR=${CMAKE_INSTALL_BINDIR}
+      -DDALINIRA_EXPECT_WEBKIT=$<BOOL:${DALINIRA_BUILD_WEBKIT}>
+      "-DDALINIRA_EXPECT_WEBKIT_RUNTIME=$<AND:$<BOOL:${DALINIRA_BUILD_WEBKIT}>,$<BOOL:${DALINIRA_WEBKIT_RUNTIME_SDK}>>"
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/browser/cmake/verify_install_layout.cmake
+  )
+  set_tests_properties(browser-installed-package-layout PROPERTIES TIMEOUT 90)
+endif()
 
 add_executable(dalinira-browser-credential-vault-test
   browser/native/tests/credential_vault_test.cpp

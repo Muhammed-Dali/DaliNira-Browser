@@ -655,7 +655,7 @@ QList<ImportedHistoryEntry> BrowserDataImporter::readHistoryFromDatabase(
         ? rawTimestamp / 1000
         : rawTimestamp / 1000 - 11644473600000LL;
     entries.append({url, sqliteText(statement.get(), 1),
-                    QDateTime::fromMSecsSinceEpoch(unixMilliseconds, QTimeZone::UTC),
+                    QDateTime::fromMSecsSinceEpoch(unixMilliseconds, QTimeZone::utc()),
                     std::max(1, sqlite3_column_int(statement.get(), 3)),
                     std::max(0, sqlite3_column_int(statement.get(), 4))});
   }

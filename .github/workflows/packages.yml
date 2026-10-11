@@ -93,11 +93,13 @@ jobs:
       matrix:
         include:
           # Debian 12 builds its own WebKitGTK 2.50 with clang-16 and without
-          # system sysprof-capture or libjxl; same here.
+          # system sysprof-capture or libjxl. clang-16 rejects ANGLE's code in
+          # 2.54 (a static_assert in a discarded if constexpr branch), so this
+          # uses clang-18 from the LLVM project's apt repository (apt.llvm.org).
           - distro: debian12
             container: debian:12
-            cc: clang-16
-            cxx: clang++-16
+            cc: clang-18
+            cxx: clang++-18
             ldflags: ""
             cmake_args: -DUSE_SYSTEM_SYSPROF_CAPTURE=OFF -DUSE_JPEGXL=OFF
           - distro: ubuntu2404
@@ -117,11 +119,19 @@ jobs:
         if: ${{ matrix.distro != 'fedora' }}
         run: |
           apt-get update
+          if [ "${{ matrix.distro }}" = debian12 ]; then
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl
+            install -d /etc/apt/keyrings
+            curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o /etc/apt/keyrings/apt.llvm.org.asc
+            echo "deb [signed-by=/etc/apt/keyrings/apt.llvm.org.asc] http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-18 main" \
+              > /etc/apt/sources.list.d/llvm-18.list
+            apt-get update
+          fi
           # As Debian's own webkit2gtk Build-Depends, without documentation,
           # introspection, GTK 4 and speech synthesis.
           extra=""
           case "${{ matrix.distro }}" in
-            debian12) extra="clang-16 binutils" ;;
+            debian12) extra="clang-18 binutils" ;;
             *) extra="clang lld libsysprof-capture-4-dev libjxl-dev" ;;
           esac
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -384,7 +394,11 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Install packaging tools
-        run: pacman -Syu --noconfirm --needed git
+        run: |
+          pacman -Syu --noconfirm --needed git
+          # No -debug split package: the jobs expect exactly the release package, as
+          # built and validated locally (makepkg.conf there has !debug).
+          sed -i -E '/^OPTIONS=/s/([( ])debug([ )])/\1!debug\2/' /etc/makepkg.conf
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -434,7 +448,11 @@ jobs:
       # Before the checkout: without git in the container, actions/checkout
       # downloads a tarball with no .git, and the git archive below fails.
       - name: Install git
-        run: pacman -Syu --noconfirm --needed git
+        run: |
+          pacman -Syu --noconfirm --needed git
+          # No -debug split package: the jobs expect exactly the release package, as
+          # built and validated locally (makepkg.conf there has !debug).
+          sed -i -E '/^OPTIONS=/s/([( ])debug([ )])/\1!debug\2/' /etc/makepkg.conf
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

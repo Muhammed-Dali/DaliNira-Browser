@@ -1044,7 +1044,11 @@ int main(int argc, char **argv)
         QStringLiteral("<!doctype html><title>popup opener</title>"
                        "<a id='oauth' target='_blank' href='https://login.ads.popup.test/oauth'>login</a>"),
         QUrl(QStringLiteral("https://opener.test/")));
-    assert(waitForJs(popupOpener->page(), QStringLiteral("document.readyState==='complete'"), 10000));
+    // The previous document (the New Tab page) is also "complete": wait for the
+    // opener itself, or window.open() may run in the New Tab page (Qt 6.4
+    // commits setHtml() later), whose windows are never treated as popups.
+    assert(waitForJs(popupOpener->page(),
+                     QStringLiteral("document.title==='popup opener'&&document.readyState==='complete'"), 10000));
     const int beforeBlockedPopup = window.tabCount();
     js(popupOpener->page(), QStringLiteral("window.open('https://ads.popup.test/offer','_blank');true"));
     wait(500);

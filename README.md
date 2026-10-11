@@ -265,6 +265,15 @@ vulnerabilities.
 
 ## Known issues
 
+- Packages built against Qt older than 6.8 have fewer privacy and
+  settings features: the Debian 12 and Ubuntu 24.04 `.deb` packages and the portable
+  archive are built against Qt 6.4, and the Arch binary packages (pacman
+  repository, AUR `dalinira-bin`) repackage the portable archive. These builds
+  have no Secure DNS setting (Qt 6.6), no list of saved site permissions (Qt 6.8;
+  permission prompts still work), do not remove the OS version from client
+  hints (Qt 6.8), and follow the system light/dark theme only through the
+  palette (Qt 6.5). The Fedora `.rpm` and the Arch source package
+  (`packaging/archlinux`) are built against current Qt and have all features.
 - **WebKitGTK: fullscreen `<video>` element freezes.** When the `<video>`
   element itself is made fullscreen, the video stops advancing until
   fullscreen ends. This happens with the native video controls' fullscreen
