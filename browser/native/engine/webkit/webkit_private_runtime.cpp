@@ -4,6 +4,7 @@
 #include <QFileInfo>
 
 #include <dlfcn.h>
+#include <link.h>
 
 // WebKitGTK's headers use `signals` as an identifier; Qt headers come first.
 #undef signals
@@ -22,6 +23,23 @@ QString mappedObjectOf(const void *symbol) {
   return resolved.isEmpty() ? path : resolved;
 }
 
+// Path the dynamic loader loaded the shared object `soname` from. Preferred
+// over dladdr() on a function: in an executable that is not position
+// independent (e.g. Fedora's default CMake build), the address of a library
+// function is the executable's own PLT entry, so dladdr() names the browser.
+QString loadedObjectPath(const char *soname) {
+  void *handle = dlopen(soname, RTLD_LAZY | RTLD_NOLOAD);
+  if (!handle) return {};
+  QString path;
+  struct link_map *map = nullptr;
+  if (dlinfo(handle, RTLD_DI_LINKMAP, &map) == 0 && map && map->l_name && *map->l_name)
+    path = QString::fromLocal8Bit(map->l_name);
+  dlclose(handle);
+  if (path.isEmpty()) return {};
+  const QString resolved = QFileInfo(path).canonicalFilePath();
+  return resolved.isEmpty() ? path : resolved;
+}
+
 bool isInside(const QString &path, const QString &directory) {
   const QString root = QFileInfo(directory).canonicalFilePath();
   return !root.isEmpty() && path.startsWith(root + QLatin1Char('/'));
@@ -31,8 +49,12 @@ bool isInside(const QString &path, const QString &directory) {
 
 WebKitPrivateRuntime::Status WebKitPrivateRuntime::probe() {
   Status status;
-  status.webkitLibrary = mappedObjectOf(reinterpret_cast<const void *>(&webkit_get_major_version));
-  status.jscLibrary = mappedObjectOf(reinterpret_cast<const void *>(&jsc_get_major_version));
+  status.webkitLibrary = loadedObjectPath("libwebkit2gtk-4.1.so.0");
+  if (status.webkitLibrary.isEmpty())
+    status.webkitLibrary = mappedObjectOf(reinterpret_cast<const void *>(&webkit_get_major_version));
+  status.jscLibrary = loadedObjectPath("libjavascriptcoregtk-4.1.so.0");
+  if (status.jscLibrary.isEmpty())
+    status.jscLibrary = mappedObjectOf(reinterpret_cast<const void *>(&jsc_get_major_version));
   status.version = QStringLiteral("%1.%2.%3")
                        .arg(webkit_get_major_version())
                        .arg(webkit_get_minor_version())
