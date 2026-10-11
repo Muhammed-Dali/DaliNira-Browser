@@ -132,7 +132,17 @@ int main(int argc, char *argv[]) {
   hoverCard.showForTab(longTitle, youtubeUrl, rawFavicon, tabRect, [] { return dalinira::TabResourceSnapshot{}; });
 
   auto *titleLabel = hoverCard.findChild<QLabel *>(QStringLiteral("hover-title"));
-  if (!titleLabel || titleLabel->text() != longTitle) {
+  // The card shows at most two lines; how much fits depends on the installed
+  // fonts. The full title is kept either in the label or, when the label is
+  // shortened with an ellipsis, in its tooltip.
+  const auto titleRetained = [&]() {
+    if (!titleLabel) return false;
+    const QString shown = titleLabel->text();
+    if (shown == longTitle) return true;
+    return shown.endsWith(QChar(0x2026)) && longTitle.startsWith(shown.chopped(1).trimmed()) &&
+           titleLabel->toolTip() == longTitle;
+  };
+  if (!titleRetained()) {
     std::cerr << "Hover card title must retain full page title\n";
     return 1;
   }
