@@ -549,6 +549,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Container images leave out /usr/share/doc (Ubuntu's dpkg excludes,
+          # Arch's NoExtract, Fedora's tsflags=nodocs); a normal system installs
+          # it, and the validation checks the licenses and source notice there.
+          rm -f /etc/dpkg/dpkg.cfg.d/excludes
+          [ -f /etc/pacman.conf ] && sed -i -E '/^NoExtract/s#usr/share/doc/\*##' /etc/pacman.conf
+          [ -f /etc/dnf/dnf.conf ] && sed -i '/^tsflags=nodocs/d' /etc/dnf/dnf.conf
           if command -v apt-get >/dev/null; then
             apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y ./packages/*.deb
