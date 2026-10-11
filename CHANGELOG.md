@@ -12,6 +12,7 @@ All notable release-facing changes to DaliNira Browser are documented here.
 - **Auto-hiding side tabs** (Zen-inspired): visible on New Tab, hidden on websites, revealed by hovering the window edge, with a pin toggle (Settings → Appearance → Auto-hide side tabs); left, right and floating layouts; navigation controls and the main menu move into the panel; a background-aware glass look beside New Tab; event-driven pointer tracking on WebKitGTK; parity-tested on both engines.
 - **Keyboard Shortcuts** (Settings → Keyboard Shortcuts): customizable bindings with conflict detection and reassignment, reset one or reset all, live updates in every window, reserved text-editing keys, DaliNira's own key names (e.g. Ctrl+⇧+Y), and the same behavior on Chromium and WebKitGTK.
 - **Private WebKitGTK runtime**: the WebKit engine runs on DaliNira's own build of WebKitGTK 2.54.1 under `/usr/lib/dalinira-browser/webkit/`, with a fix for an `AcceleratedSurface` web-process crash (unpatched 3/40 window lifetimes crashed; patched 0/500, packaged runtime 0/500). License texts, the patch and a source notice are installed; the corresponding source is published with the release.
+- **Native window movement**: dragging by the tab strip or title area uses the window manager's move, so KDE Plasma snaps, tiles and maximizes DaliNira like other windows; new windows open at a screen-based size, centered.
 - **Unified developer build**: `./scripts/build-dalinira.sh` checks or builds the private runtime (first run: pinned download, SHA-256 check, patch, at most 3 jobs) and then builds the dual-engine application.
 - **Tab sleeping**: two-stage light/full sleep, unsaved-input protection, a sleeping-tab indicator, Wake actions, and per-tab memory in the hover card where it can be measured exactly.
 - **Privacy**: Global Privacy Control, HTTPS by default with a one-time fallback, link debouncing (`$urlskip`), fingerprinting noise, WebKitGTK third-party cookie blocking with ITP, and Chromium cache/connection partitioning.
@@ -24,6 +25,7 @@ All notable release-facing changes to DaliNira Browser are documented here.
 
 ### Known issues
 
+- Builds against Qt older than 6.8 (Debian 12 and Ubuntu 24.04 `.deb`, the portable archive and the Arch binary packages that repackage it) have no Secure DNS setting, no saved-site-permissions list, keep the OS version in client hints and detect light/dark only through the palette. The Fedora `.rpm` and the Arch source package have all features.
 - WebKitGTK 2.54.1 (upstream): when the `<video>` element itself is made fullscreen (native video controls, or `requestFullscreen()` on the video), playback stops advancing until fullscreen ends. Container fullscreen, as on YouTube, windowed playback and the Chromium engine are not affected.
 
 ### Changed

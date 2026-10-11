@@ -102,10 +102,15 @@ sudo apt install -y --no-install-recommends \
 sudo apt install -y libsecret-1-dev ffmpeg yt-dlp pulseaudio
 ```
 
-On Debian 12, replace the last line of the runtime list with `clang-16 binutils`
-and start the first build with
-`CC=clang-16 CXX=clang++-16 WEBKIT_RUNTIME_CMAKE_ARGS="-DUSE_SYSTEM_SYSPROF_CAPTURE=OFF -DUSE_JPEGXL=OFF"`
-in front of `./scripts/build-dalinira.sh`, as the package CI does. The first
+On Debian 12, Debian's clang-16 cannot compile WebKitGTK 2.54 (ANGLE). Add the
+LLVM project's repository (`deb http://apt.llvm.org/bookworm/
+llvm-toolchain-bookworm-18 main`, key <https://apt.llvm.org/llvm-snapshot.gpg.key>),
+replace the last line of the runtime list with `clang-18 binutils`, and start
+the first build with
+`CC=clang-18 CXX=clang++-18 WEBKIT_RUNTIME_CMAKE_ARGS="-DUSE_SYSTEM_SYSPROF_CAPTURE=OFF -DUSE_JPEGXL=OFF"`
+in front of `./scripts/build-dalinira.sh`, as the package CI does. Debian 12
+and Ubuntu 24.04 ship Qt 6.4; DaliNira builds with it, without the features
+that need Qt 6.6 or 6.8 (see the release notes). The first
 build records these settings in `build-webkit-runtime/env.sh`, so later builds
 do not need them.
 

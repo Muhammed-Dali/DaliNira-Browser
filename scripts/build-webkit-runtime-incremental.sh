@@ -154,6 +154,9 @@ if [ "${configure_needed}" -eq 0 ] && [ -z "${unexpected_plan}" ]; then
 fi
 
 echo "[webkit-runtime] building changed inputs with ${JOBS} jobs"
+# A generated header WebKitGTK 2.54.1 forgets to order before one of its
+# users (see packaging/webkit-runtime/build-webkit-runtime.sh).
+ninja -C "${BUILD_DIR}" WebKitGTK/DerivedSources/WebKitDirectoryInputStreamData.h > /dev/null
 cmake --build "${BUILD_DIR}" --parallel "${JOBS}"
 echo "[webkit-runtime] synchronizing ${PREFIX}"
 cmake --install "${BUILD_DIR}"

@@ -25,7 +25,9 @@
 #include <QtWebEngineCore/qwebengineglobalsettings.h>
 #endif
 #include <QRegularExpression>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
 #include <QWebEngineClientHints>
+#endif
 #include <QWebEngineProfile>
 #include <QWebEngineScript>
 #include <QWebEngineScriptCollection>
@@ -217,7 +219,10 @@ BrowserProfileService::BrowserProfileService(const QString &dataDirectory, const
     // A plain Chromium User-Agent: no "QtWebEngine/x.y" token that only this
     // embedder sends, and no OS (kernel) version in the client hints.
     profile_->setHttpUserAgent(profile_->httpUserAgent().remove(QRegularExpression(QStringLiteral("QtWebEngine/[\\d.]+ "))));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // Qt 6.8 added client hints control; older Qt sends Chromium's defaults.
     profile_->clientHints()->setPlatformVersion(QString());
+#endif
   } else {
     profile_ = nullptr;
   }

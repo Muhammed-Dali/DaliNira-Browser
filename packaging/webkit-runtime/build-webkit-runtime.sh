@@ -121,7 +121,11 @@ cmake -S "$src" -B "$obj" -G Ninja \
   > "${build_dir}/configure.log"
 
 log "building with ${jobs} jobs (log: ${build_dir}/build.log)"
-ninja -C "$obj" -j "$jobs" > "${build_dir}/build.log"
+# WebKitGTK 2.54.1 misses a dependency: WebKitNetworkProcess may compile the
+# unified source that includes this generated header before the WebKitShared
+# target has generated it. Generate it first.
+ninja -C "$obj" WebKitGTK/DerivedSources/WebKitDirectoryInputStreamData.h > "${build_dir}/build.log"
+ninja -C "$obj" -j "$jobs" >> "${build_dir}/build.log"
 
 log "installing into ${sdk}/root"
 rm -rf "${sdk}/root"
@@ -133,7 +137,10 @@ for f in "${stage}/lib/libwebkit2gtk-4.1.so.0" "${stage}/lib/libjavascriptcoregt
          "${libexec}/WebKitWebProcess" "${libexec}/WebKitNetworkProcess" "${libexec}/WebKitGPUProcess" \
          "${stage}/lib/webkit2gtk-4.1/injected-bundle/libwebkit2gtkinjectedbundle.so"; do
   [ -e "$f" ] || { echo "missing after install: $f" >&2; exit 1; }
-  if ! readelf -d "$f" | grep -Eq "\((RPATH)\).*\[${prefix}/lib\]"; then
+  # Read the section first: under pipefail, `readelf | grep -q` fails at
+  # random when grep exits before readelf has written everything (SIGPIPE).
+  dynamic="$(readelf -d "$f")"
+  if ! grep -Eq "\((RPATH)\).*\[${prefix}/lib\]" <<< "$dynamic"; then
     echo "expected DT_RPATH ${prefix}/lib in $f" >&2
     readelf -d "$f" | grep -E 'RPATH|RUNPATH' >&2 || true
     exit 1

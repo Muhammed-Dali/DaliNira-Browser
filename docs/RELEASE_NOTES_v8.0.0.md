@@ -124,6 +124,17 @@ A new **Settings → Keyboard Shortcuts** page manages the browser's shortcuts:
 - Refined New Tab page, tab strip, toolbar icons, context menus and settings
   pages.
 
+## Window behavior
+
+- Dragging the window by the tab strip or the title area now hands the move to
+  the window manager. On KDE Plasma (X11, XWayland and Wayland) the window
+  snaps to the left or right half, maximizes at the top edge and is restored
+  by dragging it away, like other windows; the same applies to other window
+  managers that support native moves.
+- A new window without saved geometry opens at about two thirds of the
+  screen's width and four fifths of its height, within 1350 x 900, centered;
+  saved size, position and maximized state are restored as before.
+
 ## Stability and quality
 
 - A shared engine abstraction (`EngineView` / `EngineBackend`) with separate
@@ -185,6 +196,15 @@ A new **Settings → Keyboard Shortcuts** page manages the browser's shortcuts:
 
 ## Known limitations
 
+- Packages built against Qt older than 6.8 have fewer privacy and settings
+  features: the Debian 12 and Ubuntu 24.04 `.deb` packages and the portable
+  archive are built against Qt 6.4, and the Arch binary packages (pacman
+  repository, AUR `dalinira-bin`) repackage the portable archive. These builds
+  have no Secure DNS setting (Qt 6.6), no list of saved site permissions (Qt 6.8;
+  permission prompts still work), do not remove the OS version from client
+  hints (Qt 6.8), and follow the system light/dark theme only through the
+  palette (Qt 6.5). The Fedora `.rpm` and the Arch source package
+  (`packaging/archlinux`) are built against current Qt and have all features.
 - WebKitGTK uses a single network cache and connection pool; it offers no API to
   partition them by site.
 - In Chromium, strict site isolation lets a third-party frame reuse the renderer

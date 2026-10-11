@@ -49,6 +49,9 @@ jobs:
         run: |
           set -euo pipefail
           pacman -Syu --noconfirm --needed base-devel git github-cli nodejs pacman-contrib
+          # No -debug split package: the jobs expect exactly the release package, as
+          # built and validated locally (makepkg.conf there has !debug).
+          sed -i -E '/^OPTIONS=/s/([( ])debug([ )])/\1!debug\2/' /etc/makepkg.conf
 
       - name: Validate release and package metadata
         env:
