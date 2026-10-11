@@ -321,7 +321,8 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             build-essential ca-certificates cmake dpkg-dev file ffmpeg git ninja-build nodejs zstd \
             libssl-dev libpsl-dev pkg-config qt6-base-dev qt6-image-formats-plugins qt6-svg-dev \
-            qt6-webengine-dev libwebkit2gtk-4.1-dev libgstreamer1.0-dev
+            qt6-webengine-dev libwebkit2gtk-4.1-dev libgstreamer1.0-dev \
+            libavif-dev
 
       - name: Install Fedora build dependencies
         if: ${{ matrix.generator == 'RPM' }}
