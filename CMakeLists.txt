@@ -499,6 +499,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_executable(dalinira-webengine-process
     browser/native/core/web_engine_process_launcher.cpp
   )
+  # A plain POSIX launcher: none of the directory-wide link_libraries (WebKitGTK,
+  # X11, libpsl, libsecret). Without --as-needed (Fedora) they became NEEDED
+  # entries of every Chromium helper process, unresolvable without an RPATH.
+  set_property(TARGET dalinira-webengine-process PROPERTY LINK_LIBRARIES "")
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(dalinira-webengine-process PRIVATE -Wall -Wextra)
   endif()
