@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(DaliNiraBrowser VERSION 8.0.0 LANGUAGES CXX)
+project(DaliNiraBrowser VERSION 8.0.1 LANGUAGES CXX)
 
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX "/usr" CACHE PATH "Default install prefix" FORCE)

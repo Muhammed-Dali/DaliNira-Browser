@@ -36,7 +36,7 @@ Seçenekler:
 Örnekler:
   $(basename "$0")
   $(basename "$0") --build
-  $(basename "$0") packaging/pacman/dalinira-8.0.0-1-x86_64.pkg.tar.zst
+  $(basename "$0") packaging/pacman/dalinira-8.0.1-1-x86_64.pkg.tar.zst
   $(basename "$0") -k ${GPG_KEY_DEFAULT}
 EOF
   exit 0

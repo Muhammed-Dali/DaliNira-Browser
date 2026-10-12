@@ -2,7 +2,22 @@
 
 All notable release-facing changes to DaliNira Browser are documented here.
 
-## [8.0.0] - 2026-10-11
+## [8.0.1] - 2026-10-12
+
+8.0.1 is the first published release of the 8.0 series. The v8.0.0 tag was
+created, but its release build failed before anything was published; 8.0.1
+contains all of 8.0.0 below plus these fixes.
+
+### Fixed
+
+- Debian 12 and Ubuntu 24.04 (Qt 6.4) build again: Qt 6.8-only client-hints code is version-guarded and `QTimeZone::UTC` became `QTimeZone::utc()`; CMake accepts FindSQLite3's pre-4.1 target name (`SQLite::SQLite3`).
+- Fedora: the private WebKitGTK runtime check asked `dladdr()` for a function address, which in a non-PIE executable names the browser itself, so the WebKit engine was disabled although the private libraries were loaded. The check now asks the dynamic loader (`dlopen(RTLD_NOLOAD)` + `dlinfo`).
+- The launcher of Chromium's helper processes no longer links WebKitGTK, X11, libpsl and libsecret; without `--as-needed` (Fedora) these were unresolvable NEEDED entries.
+- Private WebKitGTK runtime build: the generated `WebKitDirectoryInputStreamData.h` is built before the parallel build (WebKitGTK 2.54.1 does not order it before its use in WebKitNetworkProcess), and the DT_RPATH check no longer fails at random under `pipefail`.
+- Release packaging: Debian 12 builds the runtime with clang-18 (clang-16 rejects WebKitGTK 2.54's ANGLE), the runtime and native package jobs install gettext and libavif, Arch CI jobs build without a `-debug` split package, the Arch source job installs git before checkout, and fresh-install tests keep `/usr/share/doc` so the license files are checked.
+- Tests: the popup-blocking integration test waits for its own opener page, and the hover-card test accepts a shortened title with the full title in its tooltip.
+
+## [8.0.0] - 2026-10-11 (tagged, not published)
 
 ### Added
 

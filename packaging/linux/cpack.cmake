@@ -104,9 +104,9 @@ set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
     /usr/share/applications /usr/share/icons /usr/share/icons/hicolor)
 
 if(DALINIRA_PACKAGE_DISTRO MATCHES "^(debian12|ubuntu2404)$")
-  # Package version 8.0.0-1~debian12 ("~" sorts before a distribution's own
-  # 8.0.0-1). The file name avoids "~", which GitHub release assets rename:
-  # dalinira-browser_8.0.0-1.debian12_amd64.deb
+  # Package version 8.0.1-1~debian12 ("~" sorts before a distribution's own
+  # 8.0.1-1). The file name avoids "~", which GitHub release assets rename:
+  # dalinira-browser_8.0.1-1.debian12_amd64.deb
   set(CPACK_DEBIAN_PACKAGE_RELEASE "1~${DALINIRA_PACKAGE_DISTRO}")
   set(CPACK_DEBIAN_FILE_NAME "${CPACK_PACKAGE_NAME}_${CPACK_PACKAGE_VERSION}-1.${DALINIRA_PACKAGE_DISTRO}_amd64.deb")
 elseif(DALINIRA_PACKAGE_DISTRO STREQUAL "fedora")
