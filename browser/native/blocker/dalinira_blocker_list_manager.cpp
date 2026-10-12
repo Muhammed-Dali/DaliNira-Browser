@@ -1,4 +1,5 @@
 #include "dalinira_blocker_list_manager.h"
+#include "core/application_identity.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -34,13 +35,13 @@ QString DaliNiraBlockerListManager::rulesetDir() const {
   const QStringList candidates = {
       dataDir_ + QStringLiteral("/adblock/rulesets"),
       dataDir_ + QStringLiteral("/rulesets"),
-      QCoreApplication::applicationDirPath() + QStringLiteral("/resources/adblock/rulesets"),
-      QCoreApplication::applicationDirPath() + QStringLiteral("/../resources/adblock/rulesets"),
-      QCoreApplication::applicationDirPath() + QStringLiteral("/../share/dalinira-browser/resources/adblock/rulesets"),
-      QCoreApplication::applicationDirPath() + QStringLiteral("/../../share/dalinira-browser/resources/adblock/rulesets"),
+      dalinira::application_identity::applicationDirectory() + QStringLiteral("/resources/adblock/rulesets"),
+      dalinira::application_identity::applicationDirectory() + QStringLiteral("/../resources/adblock/rulesets"),
+      dalinira::application_identity::applicationDirectory() + QStringLiteral("/../share/dalinira-browser/resources/adblock/rulesets"),
+      dalinira::application_identity::applicationDirectory() + QStringLiteral("/../../share/dalinira-browser/resources/adblock/rulesets"),
       QStringLiteral("/usr/share/dalinira-browser/resources/adblock/rulesets"),
       QStringLiteral("/usr/local/share/dalinira-browser/resources/adblock/rulesets"),
-      QCoreApplication::applicationDirPath() + QStringLiteral("/../browser/resources/adblock/rulesets"),
+      dalinira::application_identity::applicationDirectory() + QStringLiteral("/../browser/resources/adblock/rulesets"),
       QDir::currentPath() + QStringLiteral("/browser/resources/adblock/rulesets"),
       QDir::currentPath() + QStringLiteral("/build/resources/adblock/rulesets")
   };

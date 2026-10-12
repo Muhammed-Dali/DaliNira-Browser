@@ -1,4 +1,5 @@
 #include "adult_content_protection.h"
+#include "core/application_identity.h"
 
 #include "compact_domain_table.h"
 
@@ -383,7 +384,7 @@ QString AdultContentProtectionService::resolveSnapshotPath() const {
     return customFilePath_;
   }
 
-  const QString appDir = QCoreApplication::applicationDirPath();
+  const QString appDir = dalinira::application_identity::applicationDirectory();
   const QStringList candidates = {
       appDir + QStringLiteral("/resources/privacy/adult_domains.bin"),
       QDir::currentPath() + QStringLiteral("/build/resources/privacy/adult_domains.bin"),
@@ -403,7 +404,7 @@ QString AdultContentProtectionService::resolveAllowlistFilePath() const {
     return customAllowlistFilePath_;
   }
 
-  const QString appDir = QCoreApplication::applicationDirPath();
+  const QString appDir = dalinira::application_identity::applicationDirectory();
   const QStringList candidates = {
       appDir + QStringLiteral("/resources/privacy/adult_allowlist.txt"),
       appDir + QStringLiteral("/../browser/resources/privacy/adult_allowlist.txt"),

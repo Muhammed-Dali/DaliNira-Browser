@@ -1,4 +1,5 @@
 #include "engine/webkit/webkit_engine_view.h"
+#include "core/application_identity.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -1539,7 +1540,7 @@ void WebKitEngineView::serveInternalAsset(WebKitURISchemeRequest *request, const
     });
     return;
   } else if (newTabStaticAsset(path, &asset)) {
-    data = readNewTabStaticAsset(asset, resolveNewTabAssetsDirectory(QCoreApplication::applicationDirPath()));
+    data = readNewTabStaticAsset(asset, resolveNewTabAssetsDirectory(dalinira::application_identity::applicationDirectory()));
     mimeType = asset.mimeType;
   } else if ((path == QLatin1String("/managed-background") || path == QLatin1String("/managed-background-thumbnail")) &&
              !internalCapability_.isEmpty() &&

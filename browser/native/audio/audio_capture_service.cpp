@@ -1,4 +1,5 @@
 #include "audio_capture_service.h"
+#include "core/application_identity.h"
 
 #include "security_utils.h"
 
@@ -14,7 +15,7 @@ AudioCaptureService::AudioCaptureService(QObject *parent)
 #else
   const QString executableName = QStringLiteral("ffmpeg");
 #endif
-  const QString appDir = QCoreApplication::applicationDirPath();
+  const QString appDir = dalinira::application_identity::applicationDirectory();
   ffmpegPath_ = BrowserSecurity::resolveTrustedExecutable(
       executableName, {QDir(appDir).filePath(executableName), QDir(appDir).filePath(QStringLiteral("bin/") + executableName)});
   levelTimer_ = new QTimer(this);

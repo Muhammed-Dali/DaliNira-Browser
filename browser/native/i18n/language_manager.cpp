@@ -1,4 +1,5 @@
 #include "language_manager.h"
+#include "core/application_identity.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -59,7 +60,7 @@ QString LanguageManager::resolveFilePath(const QString &preferredPath,
   // 2. Try application binary directory
   if (qApp) {
     const QString appDirPath =
-        QCoreApplication::applicationDirPath() + QStringLiteral("/i18n/") + fallbackSubPath;
+        dalinira::application_identity::applicationDirectory() + QStringLiteral("/i18n/") + fallbackSubPath;
     if (QFile::exists(appDirPath)) {
       return appDirPath;
     }

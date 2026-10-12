@@ -288,7 +288,7 @@ int main(int argc, char *argv[]) {
   if (initialEngine == dalinira::engine::EngineType::Chromium) {
     // Configure WebEngine subprocess allocator policy (MALLOC_ARENA_MAX=2, MALLOC_TRIM_THRESHOLD=128KB)
     // before QtWebEngine process is spawned.
-    const QString appDir = QFileInfo(QString::fromLocal8Bit(argv[0])).dir().absolutePath();
+    const QString appDir = dalinira::application_identity::applicationDirectory();
     dalinira::WebEngineMemoryPolicy::configureSubprocessLauncher(appDir);
 
     // Initialize hardware video decoding and GPU flags early before QApplication / QtWebEngine init
@@ -331,7 +331,7 @@ int main(int argc, char *argv[]) {
 
   // Load browser policy
   QString policyError;
-  const QString installedPolicyPath = QCoreApplication::applicationDirPath() + QStringLiteral("/browser_policy.json");
+  const QString installedPolicyPath = dalinira::application_identity::applicationDirectory() + QStringLiteral("/browser_policy.json");
   const QString policyPath = QFileInfo::exists(installedPolicyPath)
       ? installedPolicyPath
       : QStringLiteral(DALINIRA_BROWSER_POLICY_PATH);

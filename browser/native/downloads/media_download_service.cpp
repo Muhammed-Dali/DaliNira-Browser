@@ -1,4 +1,5 @@
 #include "media_download_service.h"
+#include "core/application_identity.h"
 
 #include "adult_content_protection.h"
 #include "security_utils.h"
@@ -120,7 +121,7 @@ QString executableName(const QString &base) {
 }
 
 QStringList defaultBundledCandidates(const QString &name) {
-  const QString appDir = QCoreApplication::applicationDirPath();
+  const QString appDir = dalinira::application_identity::applicationDirectory();
   return {QDir(appDir).filePath(name), QDir(appDir).filePath(QStringLiteral("bin/") + name)};
 }
 

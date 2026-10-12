@@ -1,4 +1,5 @@
 #include "audio_device_manager.h"
+#include "core/application_identity.h"
 
 #include "security_utils.h"
 
@@ -16,7 +17,7 @@ AudioDeviceManager::AudioDeviceManager(QObject *parent) : QObject(parent) {
 #else
   const QString executableName = QStringLiteral("pactl");
 #endif
-  const QString appDir = QCoreApplication::applicationDirPath();
+  const QString appDir = dalinira::application_identity::applicationDirectory();
   pactlPath_ = BrowserSecurity::resolveTrustedExecutable(
       executableName, {QDir(appDir).filePath(executableName), QDir(appDir).filePath(QStringLiteral("bin/") + executableName)});
   pollTimer_ = new QTimer(this);
