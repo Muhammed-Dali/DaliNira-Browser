@@ -326,9 +326,9 @@ Or from the signed DaliNira pacman repository (key
 `BC741FD0AC804351B0DDBB86FDFEC60C11202588`):
 
 ```bash
-curl -sL https://github.com/Muhammed-Dali/DaliNira-Browser/releases/download/pacman-repo/dalinira.gpg | sudo pacman-key --add -
+curl -sL https://muhammed-dali.github.io/DaliNira-Browser/dalinira.gpg | sudo pacman-key --add -
 sudo pacman-key --lsign-key BC741FD0AC804351B0DDBB86FDFEC60C11202588
-echo -e "\n[dalinira]\nSigLevel = Required DatabaseOptional\nServer = https://github.com/Muhammed-Dali/DaliNira-Browser/releases/download/pacman-repo" | sudo tee -a /etc/pacman.conf
+echo -e "\n[dalinira]\nSigLevel = Required DatabaseOptional\nServer = https://muhammed-dali.github.io/DaliNira-Browser/x86_64" | sudo tee -a /etc/pacman.conf
 sudo pacman -Syu dalinira
 ```
 

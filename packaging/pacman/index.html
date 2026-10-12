@@ -8,12 +8,12 @@
 <body>
   <h1>DaliNira Pacman Repository</h1>
   <p>All packages are cryptographically signed. First, import and trust the GPG signing key:</p>
-  <pre><code>curl -sL https://github.com/Muhammed-Dali/DaliNira-Browser/releases/download/pacman-repo/dalinira.gpg | sudo pacman-key --add -
+  <pre><code>curl -sL https://muhammed-dali.github.io/DaliNira-Browser/dalinira.gpg | sudo pacman-key --add -
 sudo pacman-key --lsign-key BC741FD0AC804351B0DDBB86FDFEC60C11202588</code></pre>
   <p>Add the following repository to <code>/etc/pacman.conf</code>:</p>
   <pre>[dalinira]
 SigLevel = Required DatabaseOptional
-Server = https://github.com/Muhammed-Dali/DaliNira-Browser/releases/download/pacman-repo</pre>
+Server = https://muhammed-dali.github.io/DaliNira-Browser/x86_64</pre>
   <p>Then install with <code>sudo pacman -Syu dalinira</code>.</p>
   <p><a href="dalinira.gpg">Download GPG Public Key (dalinira.gpg)</a> | <a href="dalinira.repo">Download dalinira.repo</a></p>
 </body>
