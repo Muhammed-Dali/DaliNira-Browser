@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases/tag/v8.0.0"><img src="https://img.shields.io/badge/release-v8.0.0-007ACC.svg?style=flat-square" alt="Release v8.0.0"></a>
+  <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases/tag/v8.0.1"><img src="https://img.shields.io/badge/release-v8.0.1-007ACC.svg?style=flat-square" alt="Release v8.0.1"></a>
   <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/actions/workflows/ci.yml"><img src="https://github.com/Muhammed-Dali/DaliNira-Browser/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-success.svg?style=flat-square" alt="License GPL-3.0-only"></a>
   <img src="https://img.shields.io/badge/platform-Linux%20x86__64-FCC624.svg?style=flat-square&logo=linux&logoColor=black" alt="Platform: Linux x86_64">
@@ -20,7 +20,7 @@
 <p align="center">
   <a href="https://github.com/Muhammed-Dali/DaliNira-Browser/releases">Download</a> ·
   <a href="https://muhammed-dali.github.io/DaliNira-Browser/">Website</a> ·
-  <a href="docs/RELEASE_NOTES_v8.0.0.md">Release notes</a> ·
+  <a href="docs/RELEASE_NOTES_v8.0.1.md">Release notes</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
@@ -36,7 +36,7 @@ tracker blocking, page translation, a download manager, a password vault and
 an audio equalizer. Your data stays on your computer, and no account is
 needed.
 
-DaliNira 8.0.0 is a dual-engine browser. One DaliNira application contains two
+DaliNira 8.0 is a dual-engine browser. One DaliNira application contains two
 complete browser engines:
 
 - **Chromium**, through Qt WebEngine;
@@ -45,7 +45,7 @@ complete browser engines:
 Both engines share the same interface, settings and browser features. You
 choose the engine during onboarding or in **Settings → System**.
 
-## What's new in 8.0.0
+## What's new in 8.0
 
 - **Dual engine:** Chromium and WebKitGTK in one application, each with its
   own tabs and session.
@@ -65,7 +65,7 @@ choose the engine during onboarding or in **Settings → System**.
   validated fix for a web-process crash. See
   [WebKit stability work](#webkit-stability-work).
 
-The full list is in the [release notes](docs/RELEASE_NOTES_v8.0.0.md).
+The full list is in the [release notes](docs/RELEASE_NOTES_v8.0.1.md).
 
 ## Two engines
 
@@ -108,7 +108,7 @@ under `/usr/lib/dalinira-browser/webkit/`:
 - `dalinira-browser --check-webkit-runtime` prints which WebKitGTK is in use.
 - The runtime's licenses, the patch and a source notice are installed in
   `/usr/share/doc/dalinira-browser/webkitgtk/`. The complete source is
-  published with each release as `dalinira-webkit-runtime-source-8.0.0.tar`.
+  published with each release as `dalinira-webkit-runtime-source-8.0.1.tar`.
 
 The runtime layout and build are described in
 [packaging/webkit-runtime/README.md](packaging/webkit-runtime/README.md).
@@ -291,16 +291,16 @@ vulnerabilities.
 
 ## Installation
 
-DaliNira supports Linux x86_64. The 8.0.0 release workflow is configured to
+DaliNira supports Linux x86_64. The 8.0.1 release workflow is configured to
 publish these packages on the
 [Releases page](https://github.com/Muhammed-Dali/DaliNira-Browser/releases):
 
 | Package                                         | Distribution       |
 |-------------------------------------------------|--------------------|
-| `dalinira-browser_8.0.0-1.debian12_amd64.deb`   | Debian 12          |
-| `dalinira-browser_8.0.0-1.ubuntu2404_amd64.deb` | Ubuntu 24.04       |
-| `dalinira-browser-8.0.0-1.fcNN.x86_64.rpm`      | Fedora             |
-| `dalinira-browser-8.0.0-linux-x86_64.tar.zst`   | Portable archive   |
+| `dalinira-browser_8.0.1-1.debian12_amd64.deb`   | Debian 12          |
+| `dalinira-browser_8.0.1-1.ubuntu2404_amd64.deb` | Ubuntu 24.04       |
+| `dalinira-browser-8.0.1-1.fcNN.x86_64.rpm`      | Fedora             |
+| `dalinira-browser-8.0.1-linux-x86_64.tar.zst`   | Portable archive   |
 
 Each package is built to include the private WebKitGTK runtime, so no system
 WebKitGTK setup is needed.
@@ -312,8 +312,8 @@ WebKitGTK setup is needed.
 > package in a clean container before publishing; until that has run, treat
 > them as not yet release-validated.
 
-Install a downloaded package with your package manager, for example `sudo apt install ./dalinira-browser_8.0.0-1.debian12_amd64.deb` or
-`sudo dnf install ./dalinira-browser-8.0.0-1.fc*.x86_64.rpm`.
+Install a downloaded package with your package manager, for example `sudo apt install ./dalinira-browser_8.0.1-1.debian12_amd64.deb` or
+`sudo dnf install ./dalinira-browser-8.0.1-1.fc*.x86_64.rpm`.
 
 ### Arch Linux
 
@@ -336,7 +336,7 @@ sudo pacman -Syu dalinira
 ### Portable archive
 
 ```bash
-tar -I zstd -xvf dalinira-browser-8.0.0-linux-x86_64.tar.zst
+tar -I zstd -xvf dalinira-browser-8.0.1-linux-x86_64.tar.zst
 sudo cp -r usr/* /usr/
 ```
 
@@ -515,7 +515,7 @@ record is in
 - [Debugging](docs/DEBUGGING.md) — diagnostics and logging
 - [Private WebKitGTK runtime](packaging/webkit-runtime/README.md)
 - [WebKitGTK media runtime](docs/webkit-media-runtime.md)
-- [Release notes 8.0.0](docs/RELEASE_NOTES_v8.0.0.md)
+- [Release notes 8.0.1](docs/RELEASE_NOTES_v8.0.1.md)
 - [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
 
 ## Contact

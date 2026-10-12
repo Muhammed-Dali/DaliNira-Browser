@@ -4,7 +4,7 @@
 # fresh-install CI jobs (.github/workflows/packages.yml); also runs against a
 # staged install (--root DIR) on a development machine.
 #
-#   validate-installed-package.sh --version 8.0.0 [--allow-partial-media] [--root DIR] [--no-start]
+#   validate-installed-package.sh --version 8.0.1 [--allow-partial-media] [--root DIR] [--no-start]
 #                                 [--system-webkit]
 #
 # Checks, in order:

@@ -1,6 +1,7 @@
 # DaliNira Browser 8.0.0
 
-Released on 5 October 2026.
+Tagged on 11 October 2026; not published. Its release build failed, and the
+8.0 series was published as [8.0.1](RELEASE_NOTES_v8.0.1.md).
 
 DaliNira Browser 8.0.0 is a major release. DaliNira now ships two complete
 browser engines, Chromium (through Qt WebEngine) and WebKitGTK, behind one
