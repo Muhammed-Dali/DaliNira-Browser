@@ -26,8 +26,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Assemble Pages content
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           page_root="${RUNNER_TEMP}/dalinira-pages"
@@ -36,18 +34,31 @@ jobs:
           install -Dm644 packaging/pacman/index.html "${page_root}/pacman.html"
           install -Dm644 packaging/pacman/dalinira.repo "${page_root}/dalinira.repo"
 
-          # Preserve the historical Pages package paths while the official
-          # pacman configuration continues to use GitHub Release assets.
-          if gh release view pacman-repo >/dev/null 2>&1; then
-            version="$(node -p "require('./package.json').version")"
-            download_dir="${RUNNER_TEMP}/pacman-assets"
-            install -dm755 "${download_dir}"
-            gh release download pacman-repo --dir "${download_dir}" \
-              --pattern 'dalinira.db*' \
-              --pattern 'dalinira.files*' \
-              --pattern "dalinira-${version}-*.pkg.tar.zst"
-            find "${download_dir}" -maxdepth 1 -type f -exec cp -f {} "${page_root}/" \;
-            find "${download_dir}" -maxdepth 1 -type f -exec cp -f {} "${page_root}/x86_64/" \;
+          # The signed pacman repository lives on these Pages (x86_64/,
+          # published by Publish Pacman Repo). A deployment replaces the whole
+          # site, so carry the repository that is online now over unchanged.
+          site="https://muhammed-dali.github.io/DaliNira-Browser"
+          carry="${RUNNER_TEMP}/pacman-repo"
+          install -dm755 "${carry}"
+          if curl -fsSL -o "${carry}/dalinira.db" "${site}/x86_64/dalinira.db"; then
+            complete=1
+            packages="$(tar -xzOf "${carry}/dalinira.db" --wildcards '*/desc' | awk 'take { print; take = 0 } /^%FILENAME%$/ { take = 1 }')"
+            for file in dalinira.db.sig dalinira.db.tar.gz dalinira.db.tar.gz.sig dalinira.files dalinira.files.tar.gz \
+                        $(for package in ${packages}; do echo "${package}" "${package}.sig"; done); do
+              if ! curl -fsSL -o "${carry}/${file}" "${site}/x86_64/${file}"; then
+                echo "::warning::${site}/x86_64/${file} is missing; the pacman repository is not carried over."
+                complete=0
+                break
+              fi
+            done
+            for file in dalinira.files.sig dalinira.files.tar.gz.sig; do
+              curl -fsSL -o "${carry}/${file}" "${site}/x86_64/${file}" || rm -f "${carry}/${file}"
+            done
+            if [ "${complete}" -eq 1 ] && curl -fsSL -o "${page_root}/dalinira.gpg" "${site}/dalinira.gpg"; then
+              cp -f "${carry}"/* "${page_root}/x86_64/"
+            else
+              rm -f "${page_root}/dalinira.gpg"
+            fi
           fi
 
       - name: Upload GitHub Pages artifact

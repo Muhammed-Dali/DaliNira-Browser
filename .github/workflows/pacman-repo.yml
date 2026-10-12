@@ -21,6 +21,8 @@ concurrency:
 
 env:
   RELEASE_TAG: ${{ inputs.release_tag || github.event.workflow_run.head_branch }}
+  # Fingerprint of the DaliNira pacman signing key (secret PACMAN_GPG_PRIVATE_KEY).
+  PACMAN_SIGNING_KEY: BC741FD0AC804351B0DDBB86FDFEC60C11202588
 
 jobs:
   publish:
@@ -38,7 +40,7 @@ jobs:
     container: archlinux:latest
     permissions:
       actions: read
-      contents: write
+      contents: read
     steps:
       - name: Checkout trusted packaging recipe
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -68,6 +70,22 @@ jobs:
           test -n "${ci_run}"
           gh run watch "${ci_run}" --exit-status --interval 60
 
+      - name: Import the repository signing key
+        env:
+          PACMAN_GPG_PRIVATE_KEY: ${{ secrets.PACMAN_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PACMAN_GPG_PRIVATE_KEY}" ]; then
+            echo "::error::The PACMAN_GPG_PRIVATE_KEY secret is not set; the repository is published signed only."
+            exit 1
+          fi
+          export GNUPGHOME="${RUNNER_TEMP}/gnupg"
+          install -dm700 "${GNUPGHOME}"
+          echo "GNUPGHOME=${GNUPGHOME}" >> "${GITHUB_ENV}"
+          printf '%s\n' "${PACMAN_GPG_PRIVATE_KEY}" | gpg --batch --quiet --import
+          # The secret must hold the key users trust (README, dalinira.repo).
+          gpg --batch --list-secret-keys --with-colons | grep -qx "fpr:::::::::${PACMAN_SIGNING_KEY}:"
+
       - name: Build native binary package
         run: |
           set -euo pipefail
@@ -75,9 +93,12 @@ jobs:
           chown -R builder:builder "${GITHUB_WORKSPACE}"
           su builder -c "cd '${GITHUB_WORKSPACE}/packaging/pacman' && makepkg -f --nodeps --noconfirm"
 
-      - name: Generate repository database and Pages content
+      - name: Generate the signed repository and Pages content
         run: |
           set -euo pipefail
+          # The repository is served from GitHub Pages (x86_64/). Releases in
+          # this repository are immutable, so a release cannot hold a database
+          # that changes with every version.
           repo_root="${GITHUB_WORKSPACE}/pacman-repo"
           out_dir="${repo_root}/x86_64"
           install -dm755 "${out_dir}"
@@ -86,37 +107,24 @@ jobs:
           install -Dm644 packaging/pacman/dalinira.repo "${repo_root}/dalinira.repo"
           pkg_path="$(find packaging/pacman -maxdepth 1 -type f -name 'dalinira-[0-9]*-x86_64.pkg.tar.zst' -print -quit)"
           test -n "${pkg_path}"
-          install -Dm644 "${pkg_path}" "${out_dir}/$(basename "${pkg_path}")"
-          repo-add "${out_dir}/dalinira.db.tar.gz" "${out_dir}"/*.pkg.tar.zst
-          rm -f "${out_dir}/dalinira.db" "${out_dir}/dalinira.files"
-          cp -f "${out_dir}/dalinira.db.tar.gz" "${out_dir}/dalinira.db"
-          cp -f "${out_dir}/dalinira.files.tar.gz" "${out_dir}/dalinira.files"
-
-          # Keep both historical Pages server layouts working. Older users may
-          # have configured the Pages root, while newer configs use /x86_64.
-          cp -f "${out_dir}/dalinira.db.tar.gz" "${repo_root}/dalinira.db.tar.gz"
-          cp -f "${out_dir}/dalinira.db" "${repo_root}/dalinira.db"
-          cp -f "${out_dir}/dalinira.files.tar.gz" "${repo_root}/dalinira.files.tar.gz"
-          cp -f "${out_dir}/dalinira.files" "${repo_root}/dalinira.files"
-          cp -f "${pkg_path}" "${repo_root}/$(basename "${pkg_path}")"
-
-      - name: Publish pacman repository release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          out_dir="${GITHUB_WORKSPACE}/pacman-repo/x86_64"
-          if ! gh release view pacman-repo >/dev/null 2>&1; then
-            gh release create pacman-repo --title "DaliNira Pacman Repo" --notes "DaliNira Browser pacman repository assets."
-          fi
-          gh release upload pacman-repo \
-            "${out_dir}/dalinira.db.tar.gz" \
-            "${out_dir}/dalinira.db" \
-            "${out_dir}/dalinira.files.tar.gz" \
-            "${out_dir}/dalinira.files" \
-            "${out_dir}"/dalinira-*.pkg.tar.zst \
-            --clobber
+          pkg_name="$(basename "${pkg_path}")"
+          install -Dm644 "${pkg_path}" "${out_dir}/${pkg_name}"
+          gpg --batch --yes --detach-sign --no-armor --local-user "${PACMAN_SIGNING_KEY}" \
+            --output "${out_dir}/${pkg_name}.sig" "${out_dir}/${pkg_name}"
+          repo-add --sign --key "${PACMAN_SIGNING_KEY}" "${out_dir}/dalinira.db.tar.gz" "${out_dir}/${pkg_name}"
+          # repo-add leaves symlinks; Pages serves regular files.
+          for name in dalinira.db dalinira.files; do
+            rm -f "${out_dir}/${name}" "${out_dir}/${name}.sig"
+            cp -f "${out_dir}/${name}.tar.gz" "${out_dir}/${name}"
+            if [ -f "${out_dir}/${name}.tar.gz.sig" ]; then
+              cp -f "${out_dir}/${name}.tar.gz.sig" "${out_dir}/${name}.sig"
+            fi
+          done
+          gpg --batch --verify "${out_dir}/${pkg_name}.sig" "${out_dir}/${pkg_name}"
+          gpg --batch --verify "${out_dir}/dalinira.db.sig" "${out_dir}/dalinira.db"
+          gpg --batch --export --armor "${PACMAN_SIGNING_KEY}" > "${repo_root}/dalinira.gpg"
+          test -s "${repo_root}/dalinira.gpg"
+          ls -l "${out_dir}"
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
