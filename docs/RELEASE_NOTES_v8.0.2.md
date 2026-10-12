@@ -199,6 +199,7 @@ A new **Settings → Keyboard Shortcuts** page manages the browser's shortcuts:
 ## Fixes in 8.0.2
 
 - Installed packages start DaliNira through `/usr/bin/dalinira-browser`, a symbolic link to `/usr/lib/dalinira-browser/dalinira-browser`. DaliNira looked for the files it installs next to its executable in `/usr/bin`, so the WebKit engine started without its web-process extension: the tab hover card kept showing "Memory usage: measuring…", network-level ad and tracker blocking was off, and the Web Audio output tuning was missing. The browser policy file, blocker lists, EQ presets, translations and New Tab assets were affected the same way. DaliNira now resolves its own executable before looking for these files. Development builds started directly from the build directory were not affected.
+- Google sign-in works on the Chromium engine. DaliNira removes Qt WebEngine's "QtWebEngine" token from the Chromium User-Agent; Google's sign-in then rejected the browser with "This browser or app may not be secure". `accounts.google.com` now gets the engine's own User-Agent back; every other site keeps the shortened one.
 - The pacman repository workflow polls the release commit's CI run once a minute instead of every few seconds, which exhausted the workflow's GitHub API rate limit.
 
 ## Fixes in 8.0.1
