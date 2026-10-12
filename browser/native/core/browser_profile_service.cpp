@@ -355,7 +355,7 @@ void BrowserProfileService::handleDownload(QWebEngineDownloadRequest *download) 
     // The native dialog already obtained explicit overwrite consent for this
     // exact path. The old file remains intact until atomic finalization.
     request.overwriteExisting = true;
-    request.userAgent = profile_ ? profile_->httpUserAgent().toUtf8() : QByteArray("DaliNira/8.0.1");
+    request.userAgent = profile_ ? profile_->httpUserAgent().toUtf8() : QByteArray("DaliNira/8.0.2");
     if (download->page()) {
       request.referrer = download->page()->url().toEncoded(QUrl::FullyEncoded);
       request.pageUrl = download->page()->url();
@@ -434,7 +434,7 @@ void BrowserProfileService::handleDownloadContext(const dalinira::engine::Engine
     request.connectionCount = 4;
     request.allowParallel = true;
     request.overwriteExisting = true;
-    request.userAgent = !context.userAgent.isEmpty() ? context.userAgent : QByteArray("DaliNira/8.0.1 (WebKit)");
+    request.userAgent = !context.userAgent.isEmpty() ? context.userAgent : QByteArray("DaliNira/8.0.2 (WebKit)");
     request.referrer = context.referrer;
     request.cookies = context.cookies;
     request.isPrivate = context.isPrivate;

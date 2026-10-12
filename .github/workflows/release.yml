@@ -8,7 +8,7 @@ on:
       release_ref:
         description: Existing v-prefixed release tag to build and publish
         required: true
-        default: v8.0.1
+        default: v8.0.2
 
 permissions:
   contents: write
