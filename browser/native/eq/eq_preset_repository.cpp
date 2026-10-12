@@ -1,4 +1,5 @@
 #include "eq_preset_repository.h"
+#include "core/application_identity.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -19,7 +20,7 @@ constexpr double kMinDb = -12.0;
 constexpr double kMaxDb = 12.0;
 
 QString presetRoot() {
-  const QDir executable(QCoreApplication::applicationDirPath());
+  const QDir executable(dalinira::application_identity::applicationDirectory());
   const QString local = executable.filePath(QStringLiteral("eq-presets"));
   if (QFile::exists(local)) return local;
   const QString share1 = executable.filePath(QStringLiteral("../share/dalinira-browser/eq-presets"));

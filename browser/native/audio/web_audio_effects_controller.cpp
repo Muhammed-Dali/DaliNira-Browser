@@ -1,4 +1,5 @@
 #include "web_audio_effects_controller.h"
+#include "core/application_identity.h"
 
 #include "audio_platform_policy.h"
 #include "engine/engine_view.h"
@@ -240,7 +241,7 @@ struct CompressorMeterAggregation {
 };
 
 QString resolveDaliModulePath(const QString &relativeSubPath) {
-  const QDir appDir(QCoreApplication::applicationDirPath());
+  const QDir appDir(dalinira::application_identity::applicationDirectory());
   const QStringList candidates{
       appDir.absoluteFilePath(relativeSubPath),
       appDir.absoluteFilePath(QStringLiteral("../lib/dalinira-browser/") + relativeSubPath),

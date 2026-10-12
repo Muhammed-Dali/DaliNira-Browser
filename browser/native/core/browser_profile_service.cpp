@@ -1,4 +1,5 @@
 #include <QNetworkCookie>
+#include "core/application_identity.h"
 #include "search_suggestion_service.h"
 #include "browser_profile_service.h"
 #include "engine/engine_backend.h"
@@ -299,7 +300,7 @@ BrowserProfileService::BrowserProfileService(const QString &dataDirectory, const
     }
 
     const QString newTabAssetsDirectory = resolveNewTabAssetsDirectory(
-        QCoreApplication::applicationDirPath());
+        dalinira::application_identity::applicationDirectory());
     profile_->installUrlSchemeHandler("dalinira", createNewTabSchemeHandler(
         newTabAssetsDirectory, newTabBackgroundStore_->managedImagePath(),
         newTabBackgroundStore_->thumbnailPath(), this, this, profile_));

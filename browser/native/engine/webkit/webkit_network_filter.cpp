@@ -1,4 +1,5 @@
 #include "engine/webkit/webkit_network_filter.h"
+#include "core/application_identity.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -205,7 +206,7 @@ WebKitNetworkFilter::~WebKitNetworkFilter() {
 }
 
 QString WebKitNetworkFilter::extensionDirectory() {
-  return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("webkit-extensions"));
+  return QDir(dalinira::application_identity::applicationDirectory()).filePath(QStringLiteral("webkit-extensions"));
 }
 
 bool WebKitNetworkFilter::start() {
