@@ -59,7 +59,7 @@ side tabs, tab sleeping, and many interface improvements.
 
 ## Side tabs
 
-Vertical side tabs gain an auto-hide mode inspired by the Zen browser:
+Vertical side tabs gain an auto-hide mode:
 
 - The side tabs stay visible on the New Tab page and slide away on websites,
   so the page gets the full window width.
@@ -88,8 +88,7 @@ A new **Settings → Keyboard Shortcuts** page manages the browser's shortcuts:
 
 - Every action has a customizable binding. Actions are grouped as windows and
   tabs, navigation, search and find, page operations, history and bookmarks,
-  media and display, and DaliNira tools, in a layout modelled on Zen's
-  shortcut settings.
+  media and display, and DaliNira tools.
 - Conflict detection: when a combination is already in use, the page names
   the action that has it and offers to reassign it. Text-editing keys such as
   Ctrl+C, Ctrl+V and Ctrl+Z, window-manager keys such as Alt+F4, and AltGr

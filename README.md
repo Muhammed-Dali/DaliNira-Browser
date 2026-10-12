@@ -57,7 +57,7 @@ choose the engine during onboarding or in **Settings → System**.
 - **Keyboard Shortcuts:** customizable bindings with conflict detection and
   reset.
 - **Side tabs:** vertical tabs on the left or right, or a floating sidebar,
-  with optional Zen-inspired auto-hiding and a pin button.
+  with optional auto-hiding and a pin button.
 - **Tab sleeping:** inactive tabs sleep in two stages to save memory.
 - **Localization:** English, Turkish, Arabic and, new in this release,
   French. The catalog grew from 209 to 2,128 strings.
@@ -147,8 +147,7 @@ Other privacy protections in both engines:
 ### Side tabs
 
 DaliNira has four layouts: classic tabs, vertical side tabs on the left or
-right, and a floating sidebar. The side-tab layouts include an auto-hide mode
-inspired by the Zen browser:
+right, and a floating sidebar. The side-tab layouts include an auto-hide mode:
 
 - **New Tab:** the side tabs stay visible on the New Tab page.
 - **Websites:** the side tabs slide away, so the page gets the full window
