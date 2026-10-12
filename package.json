@@ -1,6 +1,6 @@
 {
   "name": "dalinira-browser",
-  "version": "8.0.1",
+  "version": "8.0.2",
   "description": "DaliNira Browser - Modern Qt/C++ desktop browser with integrated privacy, advanced download manager, and audiophile sound engine",
   "private": true,
   "scripts": {

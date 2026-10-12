@@ -61,7 +61,7 @@ body:
     id: version
     attributes:
       label: DaliNira version
-      placeholder: "8.0.1"
+      placeholder: "8.0.2"
     validations:
       required: true
 

@@ -2,6 +2,13 @@
 
 All notable release-facing changes to DaliNira Browser are documented here.
 
+## [8.0.2] - 2026-10-13
+
+### Fixed
+
+- Installed packages: DaliNira is started through the `/usr/bin/dalinira-browser` symbolic link and looked for its own files (WebKit web-process extension, browser policy, blocker lists, EQ presets, translations, New Tab assets) in `/usr/bin`. On WebKit this left the tab hover card at "Memory usage: measuring…" and turned off network-level blocking and the Web Audio output tuning. DaliNira now resolves its executable's real directory (`/proc/self/exe`).
+- Pacman repository workflow: the release commit's CI run is polled once a minute instead of every few seconds, which exhausted the GitHub API rate limit.
+
 ## [8.0.1] - 2026-10-12
 
 8.0.1 is the first published release of the 8.0 series. The v8.0.0 tag was

@@ -142,7 +142,7 @@ QByteArray WebKitEngineProfile::userAgent() const {
     const char *ua = webkit_settings_get_user_agent(settings_);
     if (ua && *ua) return QByteArray(ua);
   }
-  return QByteArray("DaliNira/8.0.1 (WebKit)");
+  return QByteArray("DaliNira/8.0.2 (WebKit)");
 }
 
 void WebKitEngineProfile::setCookiePolicy(const QString &policy) {

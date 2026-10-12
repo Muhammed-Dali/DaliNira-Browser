@@ -1,7 +1,7 @@
 # Maintainer: Muhammed Dali <dali.nira.12.1453kerinyoli@gmail.com>
 
 pkgname=dalinira
-pkgver=8.0.1
+pkgver=8.0.2
 pkgrel=1
 pkgdesc="DaliNira Browser native binary package"
 arch=('x86_64')

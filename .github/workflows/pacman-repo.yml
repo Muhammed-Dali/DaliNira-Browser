@@ -9,7 +9,7 @@ on:
       release_tag:
         description: Published v-prefixed release tag to package
         required: true
-        default: v8.0.1
+        default: v8.0.2
         type: string
 
 permissions:
@@ -66,7 +66,7 @@ jobs:
           release_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq .sha)"
           ci_run="$(gh run list --workflow ci.yml --commit "${release_sha}" --event push --limit 1 --json databaseId --jq '.[0].databaseId')"
           test -n "${ci_run}"
-          gh run watch "${ci_run}" --exit-status
+          gh run watch "${ci_run}" --exit-status --interval 60
 
       - name: Build native binary package
         run: |
