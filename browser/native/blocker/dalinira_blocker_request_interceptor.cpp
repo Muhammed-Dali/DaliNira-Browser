@@ -10,6 +10,7 @@
 #include <QWebEngineUrlScheme>
 #include <atomic>
 #include "dalinira_blocker_redirect_resources.h"
+#include "core/sign_in_compatibility.h"
 #include "dalinira_blocker_service.h"
 #include "new_tab_html.h"
 
@@ -87,6 +88,8 @@ void DaliNiraBlockerRequestInterceptor::interceptRequest(QWebEngineUrlRequestInf
   // Global Privacy Control: the user does not consent to sale or sharing of
   // their data (both engines send it on every web request).
   info.setHttpHeader(QByteArrayLiteral("Sec-GPC"), QByteArrayLiteral("1"));
+  const QByteArray userAgent = dalinira::sign_in_compatibility::chromiumUserAgentOverride(requestUrl);
+  if (!userAgent.isEmpty()) info.setHttpHeader(QByteArrayLiteral("User-Agent"), userAgent);
   if (!service_) return;
 
   QUrl firstPartyUrl = info.firstPartyUrl();

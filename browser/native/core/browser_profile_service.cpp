@@ -1,5 +1,6 @@
 #include <QNetworkCookie>
 #include "core/application_identity.h"
+#include "core/sign_in_compatibility.h"
 #include "search_suggestion_service.h"
 #include "browser_profile_service.h"
 #include "engine/engine_backend.h"
@@ -218,7 +219,9 @@ BrowserProfileService::BrowserProfileService(const QString &dataDirectory, const
     settings->setUnknownUrlSchemePolicy(QWebEngineSettings::DisallowUnknownUrlSchemes);
     profile_->scripts()->insert(windowNameIsolationScript());
     // A plain Chromium User-Agent: no "QtWebEngine/x.y" token that only this
-    // embedder sends, and no OS (kernel) version in the client hints.
+    // embedder sends, and no OS (kernel) version in the client hints. Google
+    // sign-in keeps the engine's own User-Agent (core/sign_in_compatibility.h).
+    dalinira::sign_in_compatibility::setChromiumEngineUserAgent(profile_->httpUserAgent().toUtf8());
     profile_->setHttpUserAgent(profile_->httpUserAgent().remove(QRegularExpression(QStringLiteral("QtWebEngine/[\\d.]+ "))));
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     // Qt 6.8 added client hints control; older Qt sends Chromium's defaults.

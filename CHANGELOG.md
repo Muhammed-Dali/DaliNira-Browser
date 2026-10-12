@@ -7,6 +7,7 @@ All notable release-facing changes to DaliNira Browser are documented here.
 ### Fixed
 
 - Installed packages: DaliNira is started through the `/usr/bin/dalinira-browser` symbolic link and looked for its own files (WebKit web-process extension, browser policy, blocker lists, EQ presets, translations, New Tab assets) in `/usr/bin`. On WebKit this left the tab hover card at "Memory usage: measuring…" and turned off network-level blocking and the Web Audio output tuning. DaliNira now resolves its executable's real directory (`/proc/self/exe`).
+- Chromium engine: Google sign-in rejected DaliNira ("This browser or app may not be secure") because its User-Agent claims Chrome without the `QtWebEngine` token. `accounts.google.com` now gets the engine's own User-Agent; other sites keep the shortened one.
 - Pacman repository workflow: the release commit's CI run is polled once a minute instead of every few seconds, which exhausted the GitHub API rate limit.
 
 ## [8.0.1] - 2026-10-12

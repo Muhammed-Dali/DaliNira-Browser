@@ -1243,6 +1243,12 @@ add_executable(dalinira-browser-address-input-resolver-test
 target_link_libraries(dalinira-browser-address-input-resolver-test PRIVATE Qt6::Core Qt6::Network)
 add_test(NAME browser-address-input-resolver COMMAND dalinira-browser-address-input-resolver-test)
 
+# Google sign-in gets the Chromium engine's own User-Agent back.
+add_executable(dalinira-browser-sign-in-compatibility-test
+  browser/native/tests/sign_in_compatibility_test.cpp)
+target_link_libraries(dalinira-browser-sign-in-compatibility-test PRIVATE Qt6::Core)
+add_test(NAME browser-sign-in-compatibility COMMAND dalinira-browser-sign-in-compatibility-test)
+
 add_executable(dalinira-browser-omnibox-navigation-integration-test
   browser/native/core/search_engine_definition.cpp
   browser/native/tests/omnibox_navigation_integration_test.cpp
