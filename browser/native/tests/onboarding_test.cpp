@@ -736,6 +736,18 @@ static void testEngineStepSelectionAndAnimationPolicy() {
   assert(step.selectedEngine() == QStringLiteral("chromium"));
   assert(OnboardingManager::instance().selectedEngine() == QStringLiteral("chromium"));
 
+  // Setup does not offer Gecko yet: a Gecko key, from a call or saved
+  // settings, selects Chromium.
+  step.selectEngine(QStringLiteral("webkit"), false);
+  step.selectEngine(QStringLiteral(" Gecko "), false);
+  assert(step.selectedEngine() == QStringLiteral("chromium"));
+  assert(OnboardingManager::instance().selectedEngine() == QStringLiteral("chromium"));
+  OnboardingManager::instance().setSelectedEngine(QStringLiteral("gecko"));
+  step.onStepEntering();
+  assert(step.selectedEngine() == QStringLiteral("chromium"));
+  assert(OnboardingManager::instance().selectedEngine() == QStringLiteral("chromium"));
+  assert(step.findChild<QRadioButton *>(QStringLiteral("gecko-radio")) == nullptr);
+
   // Exercise the real controls: the radios are inside different card parents
   // and must still behave as one exclusive choice group.
   auto *webkitRadio = step.findChild<QRadioButton *>(QStringLiteral("webkit-radio"));

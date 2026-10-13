@@ -2400,7 +2400,8 @@ void BrowserWindow::wireEngineViewSignals(dalinira::engine::EngineView *engineVi
               && navigationUrlKey(tabs_[idx].expectedTypedUrl) == navigationUrlKey(u);
           tabs_[idx].expectedTypedUrl = QUrl{};
         }
-        services_.profileService->recordHistory(u, u.host(), isTyped, QStringLiteral("webkit"));
+        services_.profileService->recordHistory(u, u.host(), isTyped,
+                                                dalinira::engine::engineKey(engineView->engineType()));
       }
       if (services_.tabManager) services_.tabManager->updateUrl(tabs_[idx].uuid, tabs_[idx].url);
       if (isNewTabUrl(tabs_[idx].url)) applyTabFavicon(idx, engineView, QIcon(), false);
@@ -3439,12 +3440,16 @@ void BrowserWindow::onEngineFaviconLoaded(const QUrl &pageUrl, const QIcon &icon
 
 void BrowserWindow::syncNewTabViews() {
   if (!services_.profileService) return;
-  const QString chromiumScript = newTabTopSitesUpdateScript(
-      collectNewTabFrequentSites(services_.profileService, 6, QStringLiteral("chromium")),
-      collectNewTabBookmarks(services_.profileService, 6, QStringLiteral("chromium")));
-  const QString webkitScript = newTabTopSitesUpdateScript(
-      collectNewTabFrequentSites(services_.profileService, 6, QStringLiteral("webkit")),
-      collectNewTabBookmarks(services_.profileService, 6, QStringLiteral("webkit")));
+  const auto makeTopSitesScript = [&](const QString &engine) {
+    return newTabTopSitesUpdateScript(collectNewTabFrequentSites(services_.profileService, 6, engine),
+                                      collectNewTabBookmarks(services_.profileService, 6, engine));
+  };
+  const QString chromiumKey = dalinira::engine::engineKey(dalinira::engine::EngineType::Chromium);
+  const QString webkitKey = dalinira::engine::engineKey(dalinira::engine::EngineType::WebKit);
+  const QString chromiumScript = makeTopSitesScript(chromiumKey);
+  // An engine view's New Tab shows its own engine's workspace data, by engine
+  // key; another engine's is made when one of its pages needs it.
+  QHash<QString, QString> engineViewTopSitesScripts{{webkitKey, makeTopSitesScript(webkitKey)}};
   const QString protectionScript = newTabProtectionStatsUpdateScript(
       services_.profileService->totalBlockedCount(),
       services_.profileService->recentDownloadCount(),
@@ -3490,8 +3495,8 @@ void BrowserWindow::syncNewTabViews() {
         "window.daliniraFrequentSiteConfig=%1;"
         "if(typeof window.applyFrequentConfig==='function')window.applyFrequentConfig();").arg(appearanceJson);
   };
-  const QString chromiumAppearanceScript = makeAppearanceScript(QStringLiteral("chromium"));
-  const QString webkitAppearanceScript = makeAppearanceScript(QStringLiteral("webkit"));
+  const QString chromiumAppearanceScript = makeAppearanceScript(chromiumKey);
+  QHash<QString, QString> engineViewAppearanceScripts{{webkitKey, makeAppearanceScript(webkitKey)}};
 
   auto *backgroundStore = services_.profileService->newTabBackgroundStore();
   const bool backgroundAvailable = backgroundStore && backgroundStore->hasValidManagedImage();
@@ -3513,10 +3518,15 @@ void BrowserWindow::syncNewTabViews() {
       tab.view->page()->runJavaScript(QStringLiteral("if(window.daliniraSuggestionConsent)window.daliniraSuggestionConsent(%1,%2);")
           .arg(enabled ? QStringLiteral("true") : QStringLiteral("false"), tab.view->page()->profile()->isOffTheRecord() ? QStringLiteral("false") : QStringLiteral("true")));
     } else if (tab.engineView && isNewTabUrl(tab.engineView->url())) {
-      tab.engineView->runJavaScript(webkitScript);
+      const QString engine = dalinira::engine::engineKey(tab.engineView->engineType());
+      if (!engineViewTopSitesScripts.contains(engine)) {
+        engineViewTopSitesScripts.insert(engine, makeTopSitesScript(engine));
+        engineViewAppearanceScripts.insert(engine, makeAppearanceScript(engine));
+      }
+      tab.engineView->runJavaScript(engineViewTopSitesScripts.value(engine));
       tab.engineView->runJavaScript(protectionScript);
       tab.engineView->runJavaScript(cardSettingsScript);
-      tab.engineView->runJavaScript(webkitAppearanceScript);
+      tab.engineView->runJavaScript(engineViewAppearanceScripts.value(engine));
       tab.engineView->runJavaScript(backgroundScript);
       const bool enabled = services_.profileService->searchSuggestions()->isEnabled() && !isIncognito();
       tab.engineView->runJavaScript(QStringLiteral(

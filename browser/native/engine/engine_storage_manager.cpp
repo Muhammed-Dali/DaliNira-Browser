@@ -21,6 +21,8 @@ QString EngineStorageManager::engineDir(EngineType type) const {
       return baseDataDir_ + QStringLiteral("/chromium");
     case EngineType::WebKit:
       return baseDataDir_ + QStringLiteral("/webkit");
+    case EngineType::Gecko:
+      return baseDataDir_ + QStringLiteral("/gecko");
   }
   return baseDataDir_ + QStringLiteral("/unknown");
 }
