@@ -1313,8 +1313,8 @@ QWidget *SettingsPage::createSystemSection() {
   statusLabel->setStyleSheet(QStringLiteral("color: #8ab4f8; font-size: 11px; padding-top: 4px;"));
 
   auto updateStatusLabel = [statusLabel, restartBtn](const QString &engineKey) {
-    const QString runningEngine = (dalinira::engine::EngineBackend::selectedEngineType() == dalinira::engine::EngineType::WebKit)
-        ? QStringLiteral("webkit") : QStringLiteral("chromium");
+    const QString runningEngine =
+        dalinira::engine::engineKey(dalinira::engine::EngineBackend::selectedEngineType());
     const bool changed = (engineKey != runningEngine);
     restartBtn->setVisible(changed);
     if (changed) {

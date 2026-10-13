@@ -107,17 +107,10 @@ QUrl frequentSiteRootUrl(const QUrl &url) {
   return root;
 }
 
+// An empty or unknown engine means the running engine's scope.
 QString normalizeEngineScope(const QString &engine) {
-  if (!engine.isEmpty()) {
-    const QString lower = engine.toLower().trimmed();
-    if (lower == QLatin1String("webkit") || lower == QLatin1String("chromium")) {
-      return lower;
-    }
-  }
-  if (dalinira::engine::EngineBackend::selectedEngineType() == dalinira::engine::EngineType::WebKit) {
-    return QStringLiteral("webkit");
-  }
-  return QStringLiteral("chromium");
+  return dalinira::engine::engineKey(dalinira::engine::parseEngineKey(engine).value_or(
+      dalinira::engine::EngineBackend::selectedEngineType()));
 }
 
 QString frequentSitesStorageKey(const QString &engine) {

@@ -129,8 +129,7 @@ void OnboardingManager::setImportHtmlPath(const QString &path) {
 QString OnboardingManager::selectedEngine() const {
   // Nothing chosen yet: the engine this session runs (an --engine start
   // included), so finishing setup without a choice does not switch engines.
-  const QString running = dalinira::engine::EngineBackend::selectedEngineType() == dalinira::engine::EngineType::WebKit
-      ? QStringLiteral("webkit") : QStringLiteral("chromium");
+  const QString running = dalinira::engine::engineKey(dalinira::engine::EngineBackend::selectedEngineType());
   return settings()->value(QString::fromLatin1(kSettingsEngineKey), running).toString().trimmed().toLower();
 }
 

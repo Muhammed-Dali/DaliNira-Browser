@@ -4222,8 +4222,7 @@ void BrowserWindow::finishOnboarding() {
   }
 
   const QString preferredEngine = dalinira::onboarding::OnboardingManager::instance().selectedEngine();
-  const QString runningEngine = (currentWorkspaceEngine_ == dalinira::engine::EngineType::WebKit)
-      ? QStringLiteral("webkit") : QStringLiteral("chromium");
+  const QString runningEngine = dalinira::engine::engineKey(currentWorkspaceEngine_);
 
   if (!preferredEngine.isEmpty() && preferredEngine != runningEngine) {
     dalinira::engine::EngineResolver::setPersistedEngine(preferredEngine);
@@ -4451,9 +4450,7 @@ void BrowserWindow::showSettings(SettingsPage::Category category) {
     // for this process to release the browser profile and WebKit/XEmbed
     // resources before it creates the standalone onboarding window.
     const QString program = QCoreApplication::applicationFilePath();
-    const QString runningEngine =
-        currentWorkspaceEngine_ == dalinira::engine::EngineType::WebKit
-            ? QStringLiteral("webkit") : QStringLiteral("chromium");
+    const QString runningEngine = dalinira::engine::engineKey(currentWorkspaceEngine_);
     const QStringList arguments{
         QStringLiteral("--onboarding"),
         QStringLiteral("--engine"), runningEngine,
@@ -4906,8 +4903,7 @@ void BrowserWindow::saveSessionNow() {
 }
 
 QString BrowserWindow::currentEngineScope() const {
-  return (currentWorkspaceEngine_ == dalinira::engine::EngineType::WebKit)
-      ? QStringLiteral("webkit") : QStringLiteral("chromium");
+  return dalinira::engine::engineKey(currentWorkspaceEngine_);
 }
 
 void BrowserWindow::restoreSession(const QVector<SavedTab> &savedTabs) {

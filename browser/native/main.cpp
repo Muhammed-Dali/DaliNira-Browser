@@ -370,8 +370,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   TabManager tabManager(&app);
-  const QString initialEngineScope = (initialEngine == dalinira::engine::EngineType::WebKit)
-      ? QStringLiteral("webkit") : QStringLiteral("chromium");
+  const QString initialEngineScope = dalinira::engine::engineKey(initialEngine);
   // Chromium and WebKit are separate browsing workspaces with their own tabs.
   // The session saved before workspaces existed becomes Chromium's, once;
   // WebKit starts with a fresh New Tab.
@@ -482,8 +481,7 @@ int main(int argc, char *argv[]) {
                      [services, initialEngine] {
       // Check if user selected a different engine during onboarding
       const QString preferredEngine = dalinira::onboarding::OnboardingManager::instance().selectedEngine();
-      const QString runningEngine = (initialEngine == dalinira::engine::EngineType::WebKit)
-          ? QStringLiteral("webkit") : QStringLiteral("chromium");
+      const QString runningEngine = dalinira::engine::engineKey(initialEngine);
 
       if (!preferredEngine.isEmpty() && preferredEngine != runningEngine) {
         dalinira::engine::EngineResolver::setPersistedEngine(preferredEngine);

@@ -354,6 +354,43 @@ void checkProfileData() {
             << std::endl;
 }
 
+// Engine names from callers and settings select the same workspace whatever
+// their case or surrounding whitespace. An unknown name is Chromium's
+// session, but the running engine's profile data.
+void checkEngineNameNormalization() {
+  using dalinira::engine::EngineBackend;
+  using dalinira::engine::EngineType;
+  CHECK(SessionStore::normalizeEngine(QStringLiteral(" WebKit ")) == kWebKit);
+  CHECK(SessionStore::normalizeEngine(QStringLiteral("CHROMIUM")) == kChromium);
+  CHECK(SessionStore::normalizeEngine(QString()) == kChromium);
+  CHECK(SessionStore::normalizeEngine(QStringLiteral("gecko")) == kChromium);
+
+  QTemporaryDir root;
+  CHECK(root.isValid());
+  const SessionStore store(root.path(), QStringLiteral("WEBKIT"));
+  CHECK(store.sessionFilePath() == store.sessionFilePath(kWebKit));
+  CHECK(store.sessionFilePath(QStringLiteral("\twebkit\n")) == store.sessionFilePath(kWebKit));
+  CHECK(store.sessionFilePath(QStringLiteral("blink")) == store.sessionFilePath(kChromium));
+
+  BrowserProfileService service(root.path(), nullptr, nullptr, false, nullptr);
+  const QUrl cased(QStringLiteral("https://cased.example.org/"));
+  CHECK(service.addQuickAccess(cased, QStringLiteral("Cased"), QStringLiteral(" WebKit ")));
+  CHECK(service.quickAccess(kWebKit).contains(cased) && !service.quickAccess(kChromium).contains(cased));
+  for (const EngineType running : {EngineType::Chromium, EngineType::WebKit}) {
+    EngineBackend::setSelectedEngineType(running);
+    const QString runningKey = running == EngineType::WebKit ? kWebKit : kChromium;
+    const QString otherKey = running == EngineType::WebKit ? kChromium : kWebKit;
+    const QUrl unknown(QStringLiteral("https://unknown-%1.example.org/").arg(runningKey));
+    const QUrl unnamed(QStringLiteral("https://unnamed-%1.example.org/").arg(runningKey));
+    CHECK(service.addQuickAccess(unknown, QStringLiteral("Unknown"), QStringLiteral("gecko")));
+    CHECK(service.addQuickAccess(unnamed, QStringLiteral("Unnamed"), QString()));
+    CHECK(service.quickAccess(runningKey).contains(unknown) && service.quickAccess(runningKey).contains(unnamed));
+    CHECK(!service.quickAccess(otherKey).contains(unknown) && !service.quickAccess(otherKey).contains(unnamed));
+  }
+  EngineBackend::setSelectedEngineType(EngineType::Chromium);
+  std::cout << "PASS engine name normalization" << std::endl;
+}
+
 // The bookmark bar's drag-and-drop ordering, on plain widgets.
 void checkBookmarkBarReorder() {
   const QList<QUrl> urls{QUrl(QStringLiteral("https://a.example/")), QUrl(QStringLiteral("https://b.example/")),
@@ -421,6 +458,7 @@ int runLogic(int argc, char *argv[]) {
   checkWorkspaceStore();
   checkLegacyMigration();
   checkProfileData();
+  checkEngineNameNormalization();
   checkBookmarkBarReorder();
   std::cout << "=== ALL ENGINE WORKSPACE LOGIC TESTS PASSED ===" << std::endl;
   return 0;

@@ -3,6 +3,7 @@
 #include "tab_manager.h"
 #include "tab_performance_manager.h"
 #include "browser_window.h"
+#include "engine/engine_type.h"
 #include "security_utils.h"
 
 #include <QDir>
@@ -28,9 +29,7 @@ SessionStore::SessionStore(QString path, QString defaultEngine)
     : path_(std::move(path)), defaultEngine_(normalizeEngine(defaultEngine)) {}
 
 QString SessionStore::normalizeEngine(const QString &engine) {
-  const QString lower = engine.toLower().trimmed();
-  if (lower == QLatin1String("webkit")) return QStringLiteral("webkit");
-  return QStringLiteral("chromium");
+  return dalinira::engine::engineKey(dalinira::engine::engineTypeFromKey(engine));
 }
 
 bool SessionStore::migrateLegacySessionIfNeeded(const QString &baseDir) {
