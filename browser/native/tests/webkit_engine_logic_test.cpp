@@ -5,12 +5,17 @@
 // webkit_backend_test.cpp (GUI tier, scripts/safe-gui-test.sh).
 
 #include <QApplication>
+#include <QDir>
+#include <QFile>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <cassert>
+#include <cstdlib>
 #include <iostream>
 
 #include "core/adult_content_protection.h"
+#include "core/application_identity.h"
 #include "core/engine_ui_profile.h"
 #include "engine/engine_backend.h"
 #include "engine/engine_resolver.h"
@@ -23,15 +28,70 @@
 #include <unistd.h>
 #include "engine/webkit/extension/web_audio_latency.h"
 
+namespace {
+
+// Points HOME and the XDG user directories into `root`, before Qt or GLib
+// reads (and caches) them: EngineResolver writes DaliNira's own settings file
+// (browser/engine), which would otherwise be the user's real profile.
+bool isolateUserDirectories(const QString &root) {
+  // Start from a copy of the user's GStreamer plugin registry: an empty one
+  // makes GStreamer rescan every plugin, which loads nvcodec and wakes the
+  // NVIDIA GPU of hybrid machines. GStreamer updates only the copy (the
+  // moved HOME makes a few HOME-dependent plugins look changed).
+  if (qEnvironmentVariableIsEmpty("GST_REGISTRY_1_0") && qEnvironmentVariableIsEmpty("GST_REGISTRY")) {
+    const QString cache = qEnvironmentVariableIsEmpty("XDG_CACHE_HOME")
+        ? QDir::homePath() + QStringLiteral("/.cache") : qEnvironmentVariable("XDG_CACHE_HOME");
+    const QFileInfoList registries = QDir(cache + QStringLiteral("/gstreamer-1.0"))
+        .entryInfoList({QStringLiteral("registry.*.bin")}, QDir::Files);
+    const QString copy = root + QStringLiteral("/gstreamer-registry.bin");
+    if (registries.size() == 1 && QFile::copy(registries.first().absoluteFilePath(), copy))
+      qputenv("GST_REGISTRY_1_0", QFile::encodeName(copy));
+  }
+  for (const char *name : {"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"}) {
+    const QString dir = root + QLatin1Char('/') + QString::fromLatin1(name).toLower();
+    if (!QDir().mkpath(dir) || !qputenv(name, QFile::encodeName(dir))) return false;
+  }
+  return true;
+}
+
+// Every settings file and data location the test may write is below `root`.
+bool writesStayBelow(const QString &root) {
+  const QString prefix = root + QLatin1Char('/');
+  const QStringList paths{
+      QSettings().fileName(),
+      QSettings(QString::fromLatin1(dalinira::application_identity::kOrganizationName),
+                QString::fromLatin1(dalinira::application_identity::kApplicationName)).fileName(),
+      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation),
+      QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation),
+      QStandardPaths::writableLocation(QStandardPaths::CacheLocation),
+      QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)};
+  for (const QString &path : paths) {
+    if (!path.startsWith(prefix)) {
+      std::cout << "[FAIL] outside the test's own directory: " << path.toStdString() << std::endl;
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
+
 int main(int argc, char *argv[]) {
   qputenv("QT_QPA_PLATFORM", "offscreen");
+  // Removed with everything below it when the test returns.
+  QTemporaryDir isolationRoot;
+  if (!isolationRoot.isValid() || !isolateUserDirectories(isolationRoot.path())) {
+    std::cout << "[FAIL] cannot isolate the user directories" << std::endl;
+    return 1;
+  }
   QApplication app(argc, argv);
-  QTemporaryDir settingsDirectory;
-  assert(settingsDirectory.isValid());
+  const QString settingsDirectory = isolationRoot.filePath(QStringLiteral("settings"));
   QSettings::setDefaultFormat(QSettings::IniFormat);
-  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
+  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory);
+  QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settingsDirectory);
   QCoreApplication::setOrganizationName(QStringLiteral("DaliNiraTests"));
   QCoreApplication::setApplicationName(QStringLiteral("WebKitEngineLogic"));
+  if (!writesStayBelow(isolationRoot.path())) return 1;
   using namespace dalinira::engine;
   std::cout << "=== RUNNING ENGINE LOGIC TEST SUITE ===" << std::endl;
   {
