@@ -506,6 +506,15 @@ The stress validation is a one-time investigation, not a release test. Its
 record is in
 [docs/research/webkit-exit-crash/README.md](docs/research/webkit-exit-crash/README.md).
 
+## AI-Assisted Development
+
+DaliNira was started approximately three years ago, before AI tools became
+part of its development workflow. In more recent development, AI tools have
+been used extensively for code generation, debugging, refactoring and
+technical problem-solving, and have played a significant role in the project's
+progress. AI-generated code is reviewed and tested by the developer before it
+is accepted into the project.
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — subsystems, startup sequence, ownership
