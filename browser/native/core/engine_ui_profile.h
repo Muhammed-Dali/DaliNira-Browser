@@ -9,7 +9,7 @@ namespace dalinira::ui_profile {
 
 inline QString profilePrefix() {
   const auto eng = ::dalinira::engine::EngineBackend::selectedEngineType();
-  return (eng == ::dalinira::engine::EngineType::WebKit) ? QStringLiteral("ui_webkit/") : QStringLiteral("ui_chromium/");
+  return QStringLiteral("ui_") + ::dalinira::engine::engineKey(eng) + QLatin1Char('/');
 }
 
 inline QString scopedKey(const QString &baseKey) {

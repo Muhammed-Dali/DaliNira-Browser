@@ -1510,6 +1510,15 @@ if(DALINIRA_BUILD_WEBKIT)
     TIMEOUT 120)
 endif()
 
+# Engine keys (browser/engine, --engine, workspace scopes) and their
+# normalization, without any engine.
+add_executable(dalinira-browser-engine-identity-test
+  browser/native/tests/engine_identity_test.cpp)
+target_link_libraries(dalinira-browser-engine-identity-test PRIVATE Qt6::Core Qt6::Widgets)
+add_test(NAME browser-engine-identity COMMAND dalinira-browser-engine-identity-test)
+set_tests_properties(browser-engine-identity PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+
 # Chromium and WebKit browsing workspaces (tabs, session, shortcut row) are
 # independent; the bookmark library stays shared. One executable: the logic
 # checks run in the default tier; the engine switch (one child process per

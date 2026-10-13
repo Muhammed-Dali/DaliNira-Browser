@@ -2,6 +2,7 @@
 #include "modern_radio_button.h"
 #include "onboarding_manager.h"
 #include "core/browser_icons.h"
+#include "engine/engine_type.h"
 #include "i18n/i18n.h"
 
 #include <QEvent>
@@ -248,8 +249,7 @@ void EngineStep::setupUi() {
 }
 
 void EngineStep::selectEngine(const QString &engine, bool animate) {
-  selectedEngine_ = (engine.trimmed().toLower() == QLatin1String("webkit"))
-      ? QStringLiteral("webkit") : QStringLiteral("chromium");
+  selectedEngine_ = dalinira::engine::engineKey(dalinira::engine::engineTypeFromKey(engine));
 
   updateCardStyles();
   updateExplanation(animate);
