@@ -26,12 +26,14 @@ struct SavedTab final {
 
 // Persists the open tabs of a browsing workspace.
 //
-// Chromium and WebKit are two independent workspaces: each engine has its own
-// tab list, order, active tab, pinned/group state and sleeping state. A store
-// constructed with a directory (the profile's data directory) keeps them in
+// Each engine (Chromium, WebKit, Gecko) is an independent workspace with its
+// own tab list, order, active tab, pinned/group state and sleeping state. A
+// store constructed with a directory (the profile's data directory) keeps them
+// in <dir>/session/<engine key>/tabs.session.json, e.g.
 //   <dir>/session/chromium/tabs.session.json
 //   <dir>/session/webkit/tabs.session.json
-// and `engine` selects the workspace (empty: the store's default engine).
+// and `engine` selects the workspace (empty: the store's default engine; an
+// unknown key: Chromium's).
 //
 // A store constructed with a path ending in ".json" is a single session file
 // (tests, tools); `engine` is then ignored.

@@ -249,7 +249,10 @@ void EngineStep::setupUi() {
 }
 
 void EngineStep::selectEngine(const QString &engine, bool animate) {
-  selectedEngine_ = dalinira::engine::engineKey(dalinira::engine::engineTypeFromKey(engine));
+  // Setup offers Chromium and WebKit; any other engine key means Chromium.
+  const bool webkit = dalinira::engine::engineTypeFromKey(engine) == dalinira::engine::EngineType::WebKit;
+  selectedEngine_ = dalinira::engine::engineKey(webkit ? dalinira::engine::EngineType::WebKit
+                                                       : dalinira::engine::EngineType::Chromium);
 
   updateCardStyles();
   updateExplanation(animate);

@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -131,7 +132,10 @@ int main(int argc, char *argv[]) {
   assert(engineTypeName(EngineType::WebKit) == "WebKit");
   assert(engineLayoutEngineName(EngineType::WebKit) == "WebCore");
   assert(engineJsEngineName(EngineType::WebKit) == "JavaScriptCore");
-  std::cout << "[PASS] WebKit -> WebCore + JavaScriptCore, Chromium -> Blink + V8." << std::endl;
+  assert(engineTypeName(EngineType::Gecko) == "Gecko");
+  assert(engineLayoutEngineName(EngineType::Gecko) == "Gecko");
+  assert(engineJsEngineName(EngineType::Gecko) == "SpiderMonkey");
+  std::cout << "[PASS] WebKit -> WebCore + JavaScriptCore, Chromium -> Blink + V8, Gecko -> Gecko + SpiderMonkey." << std::endl;
 
   std::cout << "[TEST 2] Default engine is Chromium..." << std::endl;
   assert(EngineBackend::selectedEngineType() == EngineType::Chromium);
@@ -146,9 +150,17 @@ int main(int argc, char *argv[]) {
   assert(storage.engineDir(EngineType::WebKit).endsWith("/webkit"));
   assert(storage.cookiesPath(EngineType::WebKit).contains("/webkit/cookies"));
   assert(storage.cacheDir(EngineType::WebKit).contains("/webkit/cache"));
+  assert(storage.engineDir(EngineType::Gecko) == tempDir.path() + "/gecko");
+  assert(storage.cookiesPath(EngineType::Gecko) == tempDir.path() + "/gecko/cookies/cookies.db");
+  assert(storage.cacheDir(EngineType::Gecko) == tempDir.path() + "/gecko/cache");
+  assert(storage.siteStorageDir(EngineType::Gecko) == tempDir.path() + "/gecko/site-storage");
   storage.ensureDirectories(EngineType::WebKit);
   storage.ensureDirectories(EngineType::Chromium);
-  std::cout << "[PASS] Chromium and WebKit profile directories are isolated." << std::endl;
+  // No engine creates another engine's directory.
+  assert(!QFileInfo::exists(storage.engineDir(EngineType::Gecko)));
+  storage.ensureDirectories(EngineType::Gecko);
+  assert(QFileInfo(storage.engineDir(EngineType::Gecko)).isDir());
+  std::cout << "[PASS] Chromium, WebKit and Gecko profile directories are isolated." << std::endl;
 
   std::cout << "[TEST 4] Adult content protection domain rules..." << std::endl;
   auto &adultService = dalinira::core::AdultContentProtectionService::instance();

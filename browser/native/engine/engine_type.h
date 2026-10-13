@@ -7,7 +7,8 @@ namespace dalinira::engine {
 
 enum class EngineType {
   Chromium,
-  WebKit
+  WebKit,
+  Gecko
 };
 
 // The engine's stable key: the persisted `browser/engine` setting, the
@@ -19,6 +20,8 @@ inline QString engineKey(EngineType type) {
       return QStringLiteral("chromium");
     case EngineType::WebKit:
       return QStringLiteral("webkit");
+    case EngineType::Gecko:
+      return QStringLiteral("gecko");
   }
   return QStringLiteral("chromium");
 }
@@ -29,6 +32,7 @@ inline std::optional<EngineType> parseEngineKey(const QString &key) {
   const QString normalized = key.trimmed().toLower();
   if (normalized == engineKey(EngineType::Chromium)) return EngineType::Chromium;
   if (normalized == engineKey(EngineType::WebKit)) return EngineType::WebKit;
+  if (normalized == engineKey(EngineType::Gecko)) return EngineType::Gecko;
   return std::nullopt;
 }
 
@@ -43,6 +47,8 @@ inline QString engineTypeName(EngineType type) {
       return QStringLiteral("Chromium");
     case EngineType::WebKit:
       return QStringLiteral("WebKit");
+    case EngineType::Gecko:
+      return QStringLiteral("Gecko");
   }
   return QStringLiteral("Unknown");
 }
@@ -53,6 +59,8 @@ inline QString engineLayoutEngineName(EngineType type) {
       return QStringLiteral("Blink");
     case EngineType::WebKit:
       return QStringLiteral("WebCore");
+    case EngineType::Gecko:
+      return QStringLiteral("Gecko");
   }
   return QStringLiteral("Unknown");
 }
@@ -63,6 +71,8 @@ inline QString engineJsEngineName(EngineType type) {
       return QStringLiteral("V8");
     case EngineType::WebKit:
       return QStringLiteral("JavaScriptCore");
+    case EngineType::Gecko:
+      return QStringLiteral("SpiderMonkey");
   }
   return QStringLiteral("Unknown");
 }

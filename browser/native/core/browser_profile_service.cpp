@@ -168,12 +168,14 @@ BrowserProfileService::BrowserProfileService(const QString &dataDirectory, const
   QFile::setPermissions(dataDirectory_, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
   QFile::setPermissions(dataDirectory_ + QStringLiteral("/browser-preferences.ini"), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
   sanitizeStoredPersistentUrls();
-  const bool isChromium = (dalinira::engine::EngineBackend::selectedEngineType() == dalinira::engine::EngineType::Chromium);
+  const auto engine = dalinira::engine::EngineBackend::selectedEngineType();
+  const bool isChromium = (engine == dalinira::engine::EngineType::Chromium);
   // Managed New Tab backgrounds are visual profile data. Preserve Chromium's
-  // existing location and give WebKit an independent store.
+  // existing location and give every other engine an independent store
+  // (<engine>/ui).
   const QString appearanceDataDirectory = isChromium
       ? dataDirectory_
-      : QDir(dataDirectory_).filePath(QStringLiteral("webkit/ui"));
+      : QDir(dataDirectory_).filePath(dalinira::engine::engineKey(engine) + QStringLiteral("/ui"));
   newTabBackgroundStore_ = std::make_unique<NewTabBackgroundStore>(appearanceDataDirectory);
   if (isChromium) {
     profile_ = privateMode ? new QWebEngineProfile(this) : new QWebEngineProfile(QStringLiteral("dalinira-browser"), this);

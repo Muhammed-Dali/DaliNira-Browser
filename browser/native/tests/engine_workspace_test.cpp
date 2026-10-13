@@ -47,6 +47,7 @@
 #include "engine/chromium/chromium_backend.h"
 #include "engine/engine_backend.h"
 #include "engine/engine_storage_manager.h"
+#include "newtab/new_tab_background_store.h"
 #include "newtab/new_tab_scheme.h"
 #include "session/session_store.h"
 #if defined(DALINIRA_BUILD_WEBKIT)
@@ -65,6 +66,7 @@ namespace {
 
 const QString kChromium = QStringLiteral("chromium");
 const QString kWebKit = QStringLiteral("webkit");
+const QString kGecko = QStringLiteral("gecko");
 
 bool waitUntil(const std::function<bool()> &condition, int timeoutMs) {
   QTimer heartbeat;
@@ -362,8 +364,9 @@ void checkEngineNameNormalization() {
   using dalinira::engine::EngineType;
   CHECK(SessionStore::normalizeEngine(QStringLiteral(" WebKit ")) == kWebKit);
   CHECK(SessionStore::normalizeEngine(QStringLiteral("CHROMIUM")) == kChromium);
+  CHECK(SessionStore::normalizeEngine(QStringLiteral(" Gecko ")) == kGecko);
   CHECK(SessionStore::normalizeEngine(QString()) == kChromium);
-  CHECK(SessionStore::normalizeEngine(QStringLiteral("gecko")) == kChromium);
+  CHECK(SessionStore::normalizeEngine(QStringLiteral("blink")) == kChromium);
 
   QTemporaryDir root;
   CHECK(root.isValid());
@@ -371,24 +374,118 @@ void checkEngineNameNormalization() {
   CHECK(store.sessionFilePath() == store.sessionFilePath(kWebKit));
   CHECK(store.sessionFilePath(QStringLiteral("\twebkit\n")) == store.sessionFilePath(kWebKit));
   CHECK(store.sessionFilePath(QStringLiteral("blink")) == store.sessionFilePath(kChromium));
+  CHECK(store.sessionFilePath(QStringLiteral("GECKO")) == root.path() + QStringLiteral("/session/gecko/tabs.session.json"));
 
   BrowserProfileService service(root.path(), nullptr, nullptr, false, nullptr);
   const QUrl cased(QStringLiteral("https://cased.example.org/"));
   CHECK(service.addQuickAccess(cased, QStringLiteral("Cased"), QStringLiteral(" WebKit ")));
   CHECK(service.quickAccess(kWebKit).contains(cased) && !service.quickAccess(kChromium).contains(cased));
-  for (const EngineType running : {EngineType::Chromium, EngineType::WebKit}) {
+  for (const EngineType running : {EngineType::Chromium, EngineType::WebKit, EngineType::Gecko}) {
     EngineBackend::setSelectedEngineType(running);
-    const QString runningKey = running == EngineType::WebKit ? kWebKit : kChromium;
-    const QString otherKey = running == EngineType::WebKit ? kChromium : kWebKit;
+    const QString runningKey = dalinira::engine::engineKey(running);
     const QUrl unknown(QStringLiteral("https://unknown-%1.example.org/").arg(runningKey));
     const QUrl unnamed(QStringLiteral("https://unnamed-%1.example.org/").arg(runningKey));
-    CHECK(service.addQuickAccess(unknown, QStringLiteral("Unknown"), QStringLiteral("gecko")));
+    CHECK(service.addQuickAccess(unknown, QStringLiteral("Unknown"), QStringLiteral("blink")));
     CHECK(service.addQuickAccess(unnamed, QStringLiteral("Unnamed"), QString()));
-    CHECK(service.quickAccess(runningKey).contains(unknown) && service.quickAccess(runningKey).contains(unnamed));
-    CHECK(!service.quickAccess(otherKey).contains(unknown) && !service.quickAccess(otherKey).contains(unnamed));
+    for (const QString &key : {kChromium, kWebKit, kGecko}) {
+      const bool own = key == runningKey;
+      CHECK(service.quickAccess(key).contains(unknown) == own && service.quickAccess(key).contains(unnamed) == own);
+    }
   }
   EngineBackend::setSelectedEngineType(EngineType::Chromium);
   std::cout << "PASS engine name normalization" << std::endl;
+}
+
+// Gecko is a third workspace: its session, history, shortcut row and New Tab
+// background never read or change Chromium's or WebKit's, and theirs never
+// change it.
+void checkGeckoWorkspaceIsolation() {
+  using dalinira::engine::EngineBackend;
+  using dalinira::engine::EngineType;
+  QTemporaryDir root;
+  CHECK(root.isValid());
+  SessionStore store(root.path());
+  const QVector<SavedTab> chromium{savedTab(QStringLiteral("https://github.com/"), QStringLiteral("GitHub"), true)};
+  const QVector<SavedTab> webkit{savedTab(QStringLiteral("https://www.instagram.com/"), QStringLiteral("Instagram"), true)};
+  const QVector<SavedTab> gecko{savedTab(QStringLiteral("https://www.mozilla.org/"), QStringLiteral("Mozilla"), false, true),
+                                savedTab(QStringLiteral("https://example.org/"), QStringLiteral("Example"), true)};
+  CHECK(store.saveSavedTabs(chromium, kChromium));
+  CHECK(store.saveSavedTabs(webkit, kWebKit));
+  const QByteArray chromiumBytes = readAll(store.sessionFilePath(kChromium));
+  const QByteArray webkitBytes = readAll(store.sessionFilePath(kWebKit));
+  CHECK(store.load(kGecko).isEmpty());  // a new workspace starts empty
+  CHECK(store.saveSavedTabs(gecko, kGecko));
+  CHECK(store.sessionFilePath(kGecko) == root.path() + QStringLiteral("/session/gecko/tabs.session.json"));
+  CHECK(readAll(store.sessionFilePath(kChromium)) == chromiumBytes);
+  CHECK(readAll(store.sessionFilePath(kWebKit)) == webkitBytes);
+  CHECK(urls(store.load(kGecko)) == urls(gecko) && store.load(kGecko)[0].pinned && store.load(kGecko)[1].active);
+  const QByteArray geckoBytes = readAll(store.sessionFilePath(kGecko));
+  CHECK(store.saveSavedTabs({savedTab(QStringLiteral("https://www.amazon.com/"), QStringLiteral("Amazon"), true)}, kChromium));
+  CHECK(store.saveSavedTabs({savedTab(QStringLiteral("https://www.facebook.com/"), QStringLiteral("Facebook"), true)}, kWebKit));
+  CHECK(readAll(store.sessionFilePath(kGecko)) == geckoBytes);
+  CHECK(urls(store.load(kChromium)) == QStringList{QStringLiteral("https://www.amazon.com/")});
+
+  // Legacy migration only ever seeds Chromium.
+  QTemporaryDir legacyRoot;
+  CHECK(legacyRoot.isValid());
+  writeLegacySession(legacyRoot.path(), {QStringLiteral("https://legacy.example.org/")});
+  CHECK(SessionStore::migrateLegacySessionIfNeeded(legacyRoot.path()));
+  CHECK(SessionStore(legacyRoot.path()).load(kGecko).isEmpty());
+
+  // History and the shortcut row.
+  const QUrl mozilla(QStringLiteral("https://www.mozilla.org/"));
+  const QUrl github(QStringLiteral("https://github.com/"));
+  {
+    BrowserProfileService service(root.path(), nullptr, nullptr, false, nullptr);
+    // Chromium's and WebKit's counters exist before Gecko's first visit, as in
+    // every profile that used them. (The first Chromium counter is seeded from
+    // the shared history list, whichever engine recorded it.)
+    const QUrl instagram(QStringLiteral("https://www.instagram.com/"));
+    for (int i = 0; i < 3; ++i) {
+      service.recordHistory(github, QStringLiteral("GitHub"), true, kChromium);
+      service.recordHistory(instagram, QStringLiteral("Instagram"), true, kWebKit);
+    }
+    // Gecko's counter starts empty: it takes nothing from the shared history.
+    CHECK(service.frequentSites(10, kGecko).isEmpty());
+    for (int i = 0; i < 3; ++i) service.recordHistory(mozilla, QStringLiteral("Mozilla"), true, kGecko);
+    CHECK(!containsHost(service.frequentSites(10, kGecko), instagram.host()));
+    CHECK(containsHost(service.frequentSites(10, kWebKit), instagram.host()));
+    CHECK(containsHost(service.frequentSites(10, kGecko), mozilla.host()));
+    CHECK(!containsHost(service.frequentSites(10, kChromium), mozilla.host()));
+    CHECK(!containsHost(service.frequentSites(10, kWebKit), mozilla.host()));
+    CHECK(containsHost(service.frequentSites(10, kChromium), github.host()));
+    CHECK(!containsHost(service.frequentSites(10, kGecko), github.host()));
+    CHECK(service.hideFrequentSite(mozilla, kGecko));
+    CHECK(service.isFrequentSiteHidden(mozilla, kGecko) && !service.isFrequentSiteHidden(mozilla, kChromium));
+
+    CHECK(service.addQuickAccess(mozilla, QStringLiteral("Mozilla"), kGecko));
+    CHECK(service.quickAccess(kGecko).contains(mozilla));
+    CHECK(!service.quickAccess(kChromium).contains(mozilla) && !service.quickAccess(kWebKit).contains(mozilla));
+    CHECK(service.addQuickAccess(github, QStringLiteral("GitHub"), kChromium));
+    CHECK(!service.quickAccess(kGecko).contains(github));
+  }
+  {
+    BrowserProfileService reloaded(root.path(), nullptr, nullptr, false, nullptr);
+    CHECK(reloaded.quickAccess(kGecko).contains(mozilla) && !reloaded.quickAccess(kGecko).contains(github));
+    CHECK(reloaded.isFrequentSiteHidden(mozilla, kGecko));
+  }
+
+  // The managed New Tab background: Chromium keeps its location, WebKit and
+  // Gecko have their own.
+  const QString base = QFileInfo(root.path()).absoluteFilePath();
+  QStringList backgrounds;
+  for (const EngineType running : {EngineType::Chromium, EngineType::WebKit, EngineType::Gecko}) {
+    EngineBackend::setSelectedEngineType(running);
+    BrowserProfileService service(root.path(), nullptr, nullptr, false, nullptr);
+    CHECK(service.newTabBackgroundStore());
+    backgrounds.append(QFileInfo(service.newTabBackgroundStore()->managedImagePath()).absolutePath());
+  }
+  EngineBackend::setSelectedEngineType(EngineType::Chromium);
+  CHECK(!backgrounds[0].contains(QStringLiteral("/webkit/")) && !backgrounds[0].contains(QStringLiteral("/gecko/")));
+  CHECK(backgrounds[1].startsWith(base + QStringLiteral("/webkit/ui")));
+  CHECK(backgrounds[2].startsWith(base + QStringLiteral("/gecko/ui")));
+  CHECK(QSet<QString>(backgrounds.begin(), backgrounds.end()).size() == 3);
+  std::cout << "PASS gecko workspace isolation" << std::endl;
 }
 
 // The bookmark bar's drag-and-drop ordering, on plain widgets.
@@ -459,6 +556,7 @@ int runLogic(int argc, char *argv[]) {
   checkLegacyMigration();
   checkProfileData();
   checkEngineNameNormalization();
+  checkGeckoWorkspaceIsolation();
   checkBookmarkBarReorder();
   std::cout << "=== ALL ENGINE WORKSPACE LOGIC TESTS PASSED ===" << std::endl;
   return 0;

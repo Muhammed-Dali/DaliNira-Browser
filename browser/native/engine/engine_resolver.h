@@ -34,29 +34,50 @@ class EngineResolver {
           qWarning() << "Unknown engine option:" << eng << "- falling back to default Chromium.";
           return resolution(EngineType::Chromium, EngineResolutionSource::CliOverride);
         }
-#if !defined(DALINIRA_BUILD_WEBKIT)
-        if (*requested == EngineType::WebKit) {
-          qWarning() << "WebKit backend requested via CLI, but DaliNira was compiled without WebKit support. Falling back to Chromium.";
+        if (!isBuilt(*requested)) {
+          qWarning().noquote() << QStringLiteral("%1 backend requested via CLI, but DaliNira was compiled without %1 support. Falling back to Chromium.")
+                                      .arg(engineTypeName(*requested));
           return resolution(EngineType::Chromium, EngineResolutionSource::CliOverride);
         }
-#endif
         return resolution(*requested, EngineResolutionSource::CliOverride);
       }
     }
 
     // 2. Otherwise persisted DaliNira engine preference
     if (const auto persisted = parseEngineKey(getPersistedEngine())) {
-#if !defined(DALINIRA_BUILD_WEBKIT)
-      if (*persisted == EngineType::WebKit) {
-        qWarning() << "WebKit backend persisted in settings, but DaliNira was compiled without WebKit support. Falling back to Chromium.";
+      if (!isBuilt(*persisted)) {
+        qWarning().noquote() << QStringLiteral("%1 backend persisted in settings, but DaliNira was compiled without %1 support. Falling back to Chromium.")
+                                    .arg(engineTypeName(*persisted));
         return resolution(EngineType::Chromium, EngineResolutionSource::Settings);
       }
-#endif
       return resolution(*persisted, EngineResolutionSource::Settings);
     }
 
     // 3. Otherwise Chromium default
     return resolution(EngineType::Chromium, EngineResolutionSource::Default);
+  }
+
+  // Whether this build has the engine's backend. The Gecko backend does not
+  // exist yet: DALINIRA_BUILD_GECKO is never defined (CMake refuses
+  // DALINIRA_ENABLE_GECKO=ON), so Gecko always falls back to Chromium.
+  static constexpr bool isBuilt(EngineType engine) {
+    switch (engine) {
+      case EngineType::Chromium:
+        return true;
+      case EngineType::WebKit:
+#if defined(DALINIRA_BUILD_WEBKIT)
+        return true;
+#else
+        return false;
+#endif
+      case EngineType::Gecko:
+#if defined(DALINIRA_BUILD_GECKO)
+        return true;
+#else
+        return false;
+#endif
+    }
+    return false;
   }
 
   // As resolve(), without settings or build options; an unknown --engine

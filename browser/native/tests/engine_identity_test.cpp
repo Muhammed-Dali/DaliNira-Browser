@@ -1,15 +1,19 @@
 // One engine identity for every engine-scoped name: engineKey() is the key
 // persisted as `browser/engine`, given to --engine and used for the
 // per-engine scopes (sessions, UI settings, New Tab data); engineTypeFromKey()
-// and parseEngineKey() read such a key back.
+// and parseEngineKey() read such a key back. Three engines are known:
+// Chromium, WebKit and Gecko, whose backend is not built yet.
 //
-// Besides the API itself, every conversion that now goes through it is
-// compared with the expression it replaced (copied verbatim below as
-// legacy*), over keys that differ in case, whitespace and Unicode, empty and
-// unknown keys. SessionStore and BrowserProfileService normalization are
-// covered with the real classes by browser-engine-workspace.
+// For every key that does not name Gecko, each conversion is compared with
+// the expression it replaced (copied verbatim below as legacy*), over keys
+// that differ in case, whitespace and Unicode, empty and unknown keys: the
+// Chromium and WebKit results are unchanged. Keys naming Gecko are checked
+// against their own expected results. SessionStore, BrowserProfileService and
+// EngineStep are covered with the real classes by browser-engine-workspace
+// and browser-onboarding.
 
 #include <QCoreApplication>
+#include <QSet>
 #include <QSettings>
 #include <QString>
 #include <QStringList>
@@ -40,14 +44,15 @@ using dalinira::engine::EngineResolutionSource;
 using dalinira::engine::EngineResolver;
 using dalinira::engine::EngineType;
 
-const QList<EngineType> kEngines{EngineType::Chromium, EngineType::WebKit};
+const QList<EngineType> kEngines{EngineType::Chromium, EngineType::WebKit, EngineType::Gecko};
 
 // Keys as settings, command lines and callers may spell them.
 const QStringList kKeys{
     QStringLiteral("chromium"), QStringLiteral("webkit"), QStringLiteral("Chromium"),
     QStringLiteral("WEBKIT"), QStringLiteral("WebKit"), QStringLiteral(" webkit "),
     QStringLiteral("\twebkit\n"), QStringLiteral("  CHROMIUM"), QString(), QStringLiteral(""),
-    QStringLiteral("   "), QStringLiteral("gecko"), QStringLiteral("Gecko"), QStringLiteral("blink"),
+    QStringLiteral("   "), QStringLiteral("gecko"), QStringLiteral("Gecko"), QStringLiteral(" GECKO\t"),
+    QStringLiteral("geckoview"), QStringLiteral("firefox"), QStringLiteral("blink"),
     QStringLiteral("webkit2"), QStringLiteral("chrome"), QStringLiteral("web kit"),
     QStringLiteral("WebKit (WebCore)"), QStringLiteral("unknown"),
     // Fullwidth letters stay distinct; KELVIN SIGN lowercases to "k".
@@ -67,12 +72,6 @@ QString legacySessionEngine(const QString &engine) {
   const QString lower = engine.toLower().trimmed();
   if (lower == QLatin1String("webkit")) return QStringLiteral("webkit");
   return QStringLiteral("chromium");
-}
-
-// EngineStep::selectEngine.
-QString legacyOnboardingEngine(const QString &engine) {
-  return (engine.trimmed().toLower() == QLatin1String("webkit"))
-      ? QStringLiteral("webkit") : QStringLiteral("chromium");
 }
 
 // BrowserProfileService's normalizeEngineScope.
@@ -126,21 +125,46 @@ QStringList commandLine(const QStringList &arguments) {
 
 // --- Checks -------------------------------------------------------------------
 
+bool namesGecko(const QString &key) {
+  return dalinira::engine::parseEngineKey(key) == EngineType::Gecko;
+}
+
+// Whether the stored key or any --engine value names Gecko.
+bool involvesGecko(const QString &persisted, const QStringList &args) {
+  if (namesGecko(persisted)) return true;
+  for (int i = 1; i + 1 < args.size(); ++i) {
+    if (args[i] == QLatin1String("--engine") && namesGecko(args[i + 1])) return true;
+  }
+  return false;
+}
+
+EngineResolution expected(EngineType engine, EngineResolutionSource source) {
+  return {engine, source == EngineResolutionSource::CliOverride, source, dalinira::engine::engineKey(engine)};
+}
+
 void checkKeys() {
   CHECK(dalinira::engine::engineKey(EngineType::Chromium) == QStringLiteral("chromium"));
   CHECK(dalinira::engine::engineKey(EngineType::WebKit) == QStringLiteral("webkit"));
+  CHECK(dalinira::engine::engineKey(EngineType::Gecko) == QStringLiteral("gecko"));
+  CHECK(dalinira::engine::engineTypeName(EngineType::Gecko) == QStringLiteral("Gecko"));
+  CHECK(dalinira::engine::engineLayoutEngineName(EngineType::Gecko) == QStringLiteral("Gecko"));
+  CHECK(dalinira::engine::engineJsEngineName(EngineType::Gecko) == QStringLiteral("SpiderMonkey"));
+  QSet<QString> keys;
   for (const EngineType type : kEngines) {
     // The key is the display name in lower case, and reads back to its engine.
     CHECK(dalinira::engine::engineKey(type) == dalinira::engine::engineTypeName(type).toLower());
     CHECK(dalinira::engine::parseEngineKey(dalinira::engine::engineKey(type)) == type);
     CHECK(dalinira::engine::engineTypeFromKey(dalinira::engine::engineKey(type)) == type);
+    keys.insert(dalinira::engine::engineKey(type));
   }
+  CHECK(keys.size() == kEngines.size());
 
   CHECK(dalinira::engine::parseEngineKey(QStringLiteral(" WebKit\t")) == EngineType::WebKit);
   CHECK(dalinira::engine::parseEngineKey(QStringLiteral("CHROMIUM")) == EngineType::Chromium);
-  CHECK(dalinira::engine::parseEngineKey(QStringLiteral("WEBKIT")) == EngineType::WebKit);
-  for (const QString &unknown : {QString(), QStringLiteral("  "), QStringLiteral("gecko"),
-                                 QStringLiteral("blink"), QStringLiteral("webkit2"), QStringLiteral("web kit")}) {
+  CHECK(dalinira::engine::parseEngineKey(QStringLiteral(" GECKO\n")) == EngineType::Gecko);
+  CHECK(dalinira::engine::parseEngineKey(QStringLiteral("WEB\u212AIT")) == EngineType::WebKit);
+  for (const QString &unknown : {QString(), QStringLiteral("  "), QStringLiteral("blink"), QStringLiteral("webkit2"),
+                                 QStringLiteral("web kit"), QStringLiteral("firefox"), QStringLiteral("geckoview")}) {
     CHECK(!dalinira::engine::parseEngineKey(unknown).has_value());
     // Chromium stays the default engine for any key it does not know.
     CHECK(dalinira::engine::engineTypeFromKey(unknown) == EngineType::Chromium);
@@ -148,28 +172,73 @@ void checkKeys() {
   std::cout << "PASS engine keys" << std::endl;
 }
 
-void checkReplacedConversions() {
+void checkConversions() {
   for (const EngineType type : kEngines) {
-    CHECK(dalinira::engine::engineKey(type) == legacyRunningEngine(type));
+    const bool gecko = type == EngineType::Gecko;
+    const QString prefix = gecko ? QStringLiteral("ui_gecko/") : legacyUiPrefix(type);
+    CHECK(dalinira::engine::engineKey(type) == (gecko ? QStringLiteral("gecko") : legacyRunningEngine(type)));
     EngineBackend::setSelectedEngineType(type);
-    CHECK(dalinira::ui_profile::profilePrefix() == legacyUiPrefix(type));
-    CHECK(dalinira::ui_profile::scopedKey(QStringLiteral("appearance/accent")) ==
-          legacyUiPrefix(type) + QStringLiteral("appearance/accent"));
+    CHECK(dalinira::ui_profile::profilePrefix() == prefix);
+    CHECK(dalinira::ui_profile::scopedKey(QStringLiteral("appearance/accent")) == prefix + QStringLiteral("appearance/accent"));
+    // A key already scoped to an engine keeps that scope.
+    for (const EngineType other : kEngines) {
+      const QString scoped = dalinira::ui_profile::profilePrefix(other) + QStringLiteral("tabStyle");
+      CHECK(dalinira::ui_profile::scopedKey(scoped) == scoped);
+    }
   }
   EngineBackend::setSelectedEngineType(EngineType::Chromium);
 
+  int unchanged = 0;
   for (const QString &key : kKeys) {
-    // SessionStore::normalizeEngine and EngineStep::selectEngine.
-    const QString normalized = dalinira::engine::engineKey(dalinira::engine::engineTypeFromKey(key));
-    CHECK(normalized == legacySessionEngine(key));
-    CHECK(normalized == legacyOnboardingEngine(key));
+    // SessionStore::normalizeEngine: Gecko has its own workspace.
+    const QString session = dalinira::engine::engineKey(dalinira::engine::engineTypeFromKey(key));
+    if (namesGecko(key)) {
+      CHECK(session == QStringLiteral("gecko"));
+    } else {
+      CHECK(session == legacySessionEngine(key));
+      ++unchanged;
+    }
     // BrowserProfileService: an unknown key means the running engine.
     for (const EngineType selected : kEngines) {
-      CHECK(dalinira::engine::engineKey(dalinira::engine::parseEngineKey(key).value_or(selected)) ==
-            legacyProfileScope(key, selected));
+      const auto parsed = dalinira::engine::parseEngineKey(key);
+      const QString scope = dalinira::engine::engineKey(parsed.value_or(selected));
+      if (namesGecko(key)) {
+        CHECK(scope == QStringLiteral("gecko"));
+      } else if (selected != EngineType::Gecko) {
+        CHECK(scope == legacyProfileScope(key, selected));
+        ++unchanged;
+      } else {
+        CHECK(scope == (parsed ? dalinira::engine::engineKey(*parsed) : QStringLiteral("gecko")));
+      }
     }
   }
-  std::cout << "PASS replaced conversions match their previous results" << std::endl;
+  std::cout << "PASS conversions; " << unchanged << " Chromium/WebKit results match their previous ones" << std::endl;
+}
+
+// The appearance settings of each engine stay apart; settings from before
+// engine profiles belong to Chromium only.
+void checkUiProfiles() {
+  QSettings settings;
+  settings.setValue(QStringLiteral("legacyVisualIsolationProbe"), QStringLiteral("chromium-legacy"));
+  EngineBackend::setSelectedEngineType(EngineType::Chromium);
+  CHECK(dalinira::ui_profile::getVisualValue(QStringLiteral("legacyVisualIsolationProbe")).toString() ==
+        QStringLiteral("chromium-legacy"));
+  EngineBackend::setSelectedEngineType(EngineType::Gecko);
+  CHECK(dalinira::ui_profile::getVisualValue(QStringLiteral("legacyVisualIsolationProbe"),
+                                             QStringLiteral("gecko-default")).toString() == QStringLiteral("gecko-default"));
+  dalinira::ui_profile::setVisualValue(QStringLiteral("tabStyle"), QStringLiteral("gecko-style"));
+  CHECK(settings.value(QStringLiteral("ui_gecko/tabStyle")).toString() == QStringLiteral("gecko-style"));
+  for (const EngineType other : {EngineType::Chromium, EngineType::WebKit}) {
+    EngineBackend::setSelectedEngineType(other);
+    CHECK(dalinira::ui_profile::getVisualValue(QStringLiteral("tabStyle"), QStringLiteral("none")).toString() ==
+          QStringLiteral("none"));
+    dalinira::ui_profile::setVisualValue(QStringLiteral("tabStyle"), dalinira::engine::engineKey(other));
+  }
+  EngineBackend::setSelectedEngineType(EngineType::Gecko);
+  CHECK(dalinira::ui_profile::getVisualValue(QStringLiteral("tabStyle")).toString() == QStringLiteral("gecko-style"));
+  EngineBackend::setSelectedEngineType(EngineType::Chromium);
+  settings.remove(QStringLiteral("legacyVisualIsolationProbe"));
+  std::cout << "PASS UI profiles of the three engines stay apart" << std::endl;
 }
 
 void checkResolvePure() {
@@ -180,16 +249,39 @@ void checkResolvePure() {
     commandLines.append(commandLine({QStringLiteral("https://example.org/"), QStringLiteral("--engine"), key}));
     // A later --engine is still honoured after one with an unknown value.
     commandLines.append(commandLine({QStringLiteral("--engine"), key, QStringLiteral("--engine"), QStringLiteral("webkit")}));
-    commandLines.append(commandLine({QStringLiteral("--engine"), QStringLiteral("gecko"), QStringLiteral("--engine"), key}));
+    commandLines.append(commandLine({QStringLiteral("--engine"), QStringLiteral("blink"), QStringLiteral("--engine"), key}));
   }
-  int compared = 0;
+  int unchanged = 0, gecko = 0;
   for (const QString &persisted : kKeys) {
     for (const QStringList &arguments : std::as_const(commandLines)) {
-      CHECK(sameResolution(EngineResolver::resolvePure(persisted, arguments), legacyResolvePure(persisted, arguments)));
-      ++compared;
+      const EngineResolution actual = EngineResolver::resolvePure(persisted, arguments);
+      if (involvesGecko(persisted, arguments)) {
+        ++gecko;
+        continue;
+      }
+      CHECK(sameResolution(actual, legacyResolvePure(persisted, arguments)));
+      ++unchanged;
     }
   }
-  std::cout << "PASS resolvePure matches its previous result for " << compared << " inputs" << std::endl;
+  // resolvePure ignores build options: a Gecko key resolves to Gecko.
+  const QStringList plain = commandLine({});
+  CHECK(sameResolution(EngineResolver::resolvePure(QStringLiteral("gecko"), plain),
+                       expected(EngineType::Gecko, EngineResolutionSource::Settings)));
+  CHECK(sameResolution(EngineResolver::resolvePure(QStringLiteral("chromium"),
+                                                   commandLine({QStringLiteral("--engine"), QStringLiteral(" GECKO ")})),
+                       expected(EngineType::Gecko, EngineResolutionSource::CliOverride)));
+  CHECK(sameResolution(EngineResolver::resolvePure(QStringLiteral("gecko"),
+                                                   commandLine({QStringLiteral("--engine"), QStringLiteral("webkit")})),
+                       expected(EngineType::WebKit, EngineResolutionSource::CliOverride)));
+  CHECK(sameResolution(EngineResolver::resolvePure(QStringLiteral("webkit"),
+                                                   commandLine({QStringLiteral("--engine"), QStringLiteral("blink"),
+                                                                QStringLiteral("--engine"), QStringLiteral("gecko")})),
+                       expected(EngineType::Gecko, EngineResolutionSource::CliOverride)));
+  CHECK(sameResolution(EngineResolver::resolvePure(QStringLiteral("gecko"),
+                                                   commandLine({QStringLiteral("--engine"), QStringLiteral("blink")})),
+                       expected(EngineType::Gecko, EngineResolutionSource::Settings)));
+  std::cout << "PASS resolvePure: " << unchanged << " inputs match their previous result, "
+            << gecko << " involve Gecko" << std::endl;
 }
 
 // resolve() reads `browser/engine` from DaliNira's own settings file, which
@@ -201,57 +293,47 @@ void checkResolve() {
 #else
   const EngineType webkitOrFallback = EngineType::Chromium;
 #endif
+  CHECK(EngineResolver::isBuilt(EngineType::Chromium));
+  CHECK(EngineResolver::isBuilt(EngineType::WebKit) == (webkitOrFallback == EngineType::WebKit));
+  // No Gecko backend exists yet.
+  CHECK(!EngineResolver::isBuilt(EngineType::Gecko));
 
   // Nothing stored reads as the stored default, "chromium": a Settings
   // resolution. Only an unknown stored key resolves as Default (below).
   CHECK(EngineResolver::getPersistedEngine() == QStringLiteral("chromium"));
-  {
-    const auto r = EngineResolver::resolve(plain);
-    CHECK(r.engine == EngineType::Chromium && !r.isCliOverride &&
-          r.source == EngineResolutionSource::Settings && r.engineName == QStringLiteral("chromium"));
-  }
+  CHECK(sameResolution(EngineResolver::resolve(plain), expected(EngineType::Chromium, EngineResolutionSource::Settings)));
 
   // A stored key is normalized when written.
   EngineResolver::setPersistedEngine(QStringLiteral(" WebKit "));
   CHECK(EngineResolver::getPersistedEngine() == QStringLiteral("webkit"));
-  {
-    const auto r = EngineResolver::resolve(plain);
-    CHECK(r.engine == webkitOrFallback && !r.isCliOverride && r.source == EngineResolutionSource::Settings &&
-          r.engineName == dalinira::engine::engineKey(webkitOrFallback));
-  }
+  CHECK(sameResolution(EngineResolver::resolve(plain), expected(webkitOrFallback, EngineResolutionSource::Settings)));
 
   // The command line wins over the stored engine.
-  {
-    const auto r = EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral("CHROMIUM")}));
-    CHECK(r.engine == EngineType::Chromium && r.isCliOverride &&
-          r.source == EngineResolutionSource::CliOverride && r.engineName == QStringLiteral("chromium"));
-  }
+  CHECK(sameResolution(EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral("CHROMIUM")})),
+                       expected(EngineType::Chromium, EngineResolutionSource::CliOverride)));
   // An unknown --engine value starts Chromium (resolvePure ignores it instead).
-  {
-    const auto r = EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral("gecko")}));
-    CHECK(r.engine == EngineType::Chromium && r.isCliOverride &&
-          r.source == EngineResolutionSource::CliOverride && r.engineName == QStringLiteral("chromium"));
-  }
+  CHECK(sameResolution(EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral("blink")})),
+                       expected(EngineType::Chromium, EngineResolutionSource::CliOverride)));
+  // --engine gecko starts Chromium while Gecko is not built.
+  CHECK(sameResolution(EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral(" Gecko ")})),
+                       expected(EngineType::Chromium, EngineResolutionSource::CliOverride)));
 
   EngineResolver::setPersistedEngine(QStringLiteral("chromium"));
-  {
-    const auto r = EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral(" webkit ")}));
-    CHECK(r.engine == webkitOrFallback && r.isCliOverride &&
-          r.source == EngineResolutionSource::CliOverride && r.engineName == dalinira::engine::engineKey(webkitOrFallback));
-  }
-  {
-    const auto r = EngineResolver::resolve(plain);
-    CHECK(r.engine == EngineType::Chromium && r.source == EngineResolutionSource::Settings);
-  }
+  CHECK(sameResolution(EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral(" webkit ")})),
+                       expected(webkitOrFallback, EngineResolutionSource::CliOverride)));
+  CHECK(sameResolution(EngineResolver::resolve(plain), expected(EngineType::Chromium, EngineResolutionSource::Settings)));
+
+  // A stored Gecko is kept, and starts Chromium while Gecko is not built.
+  EngineResolver::setPersistedEngine(QStringLiteral(" GECKO "));
+  CHECK(EngineResolver::getPersistedEngine() == QStringLiteral("gecko"));
+  CHECK(sameResolution(EngineResolver::resolve(plain), expected(EngineType::Chromium, EngineResolutionSource::Settings)));
+  CHECK(sameResolution(EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral("webkit")})),
+                       expected(webkitOrFallback, EngineResolutionSource::CliOverride)));
 
   // An unknown stored key counts as nothing stored.
-  EngineResolver::setPersistedEngine(QStringLiteral("gecko"));
-  CHECK(EngineResolver::getPersistedEngine() == QStringLiteral("gecko"));
-  {
-    const auto r = EngineResolver::resolve(plain);
-    CHECK(r.engine == EngineType::Chromium && !r.isCliOverride &&
-          r.source == EngineResolutionSource::Default && r.engineName == QStringLiteral("chromium"));
-  }
+  EngineResolver::setPersistedEngine(QStringLiteral("blink"));
+  CHECK(EngineResolver::getPersistedEngine() == QStringLiteral("blink"));
+  CHECK(sameResolution(EngineResolver::resolve(plain), expected(EngineType::Chromium, EngineResolutionSource::Default)));
   std::cout << "PASS resolve precedence, normalization and fallback" << std::endl;
 }
 
@@ -264,18 +346,22 @@ int main(int argc, char *argv[]) {
   CHECK(settingsRoot.isValid());
   qputenv("XDG_CONFIG_HOME", settingsRoot.path().toLocal8Bit());
   QCoreApplication app(argc, argv);
+  QCoreApplication::setOrganizationName(QStringLiteral("DaliNiraTests"));
+  QCoreApplication::setApplicationName(QStringLiteral("EngineIdentity"));
   QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settingsRoot.path());
   QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
   {
-    // The settings file EngineResolver uses; stop before writing anywhere else.
-    const QSettings resolverSettings(QString::fromLatin1(dalinira::application_identity::kOrganizationName),
-                                     QString::fromLatin1(dalinira::application_identity::kApplicationName));
-    CHECK(resolverSettings.fileName().startsWith(settingsRoot.path() + QLatin1Char('/')));
+    // The settings files the test writes; stop before writing anywhere else.
+    const QString prefix = settingsRoot.path() + QLatin1Char('/');
+    CHECK(QSettings().fileName().startsWith(prefix));
+    CHECK(QSettings(QString::fromLatin1(dalinira::application_identity::kOrganizationName),
+                    QString::fromLatin1(dalinira::application_identity::kApplicationName)).fileName().startsWith(prefix));
   }
 
   std::cout << "=== ENGINE IDENTITY ===" << std::endl;
   checkKeys();
-  checkReplacedConversions();
+  checkConversions();
+  checkUiProfiles();
   checkResolvePure();
   checkResolve();
   std::cout << "=== ALL ENGINE IDENTITY TESTS PASSED ===" << std::endl;

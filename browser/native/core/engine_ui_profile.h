@@ -7,14 +7,19 @@
 
 namespace dalinira::ui_profile {
 
+inline QString profilePrefix(::dalinira::engine::EngineType engine) {
+  return QStringLiteral("ui_") + ::dalinira::engine::engineKey(engine) + QLatin1Char('/');
+}
+
 inline QString profilePrefix() {
-  const auto eng = ::dalinira::engine::EngineBackend::selectedEngineType();
-  return QStringLiteral("ui_") + ::dalinira::engine::engineKey(eng) + QLatin1Char('/');
+  return profilePrefix(::dalinira::engine::EngineBackend::selectedEngineType());
 }
 
 inline QString scopedKey(const QString &baseKey) {
-  if (baseKey.startsWith(QLatin1String("ui_webkit/")) || baseKey.startsWith(QLatin1String("ui_chromium/"))) {
-    return baseKey;
+  // A key already scoped to an engine keeps that scope.
+  for (const auto engine : {::dalinira::engine::EngineType::Chromium, ::dalinira::engine::EngineType::WebKit,
+                            ::dalinira::engine::EngineType::Gecko}) {
+    if (baseKey.startsWith(profilePrefix(engine))) return baseKey;
   }
   return profilePrefix() + baseKey;
 }
@@ -26,7 +31,7 @@ inline QVariant getVisualValue(const QString &key, const QVariant &defaultValue 
     return s.value(scoped);
   }
   // Unscoped values predate engine profiles and belong to the original
-  // Chromium UI. Never leak them into a fresh WebKit appearance profile.
+  // Chromium UI. Never leak them into another engine's appearance profile.
   if (::dalinira::engine::EngineBackend::selectedEngineType() ==
           ::dalinira::engine::EngineType::Chromium && s.contains(key)) {
     return s.value(key);

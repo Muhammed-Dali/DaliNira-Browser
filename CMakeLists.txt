@@ -475,6 +475,16 @@ endif()
 set(DALINIRA_BUILD_WEBKIT ${DALINIRA_BUILD_WEBKIT} CACHE INTERNAL
   "Whether the WebKit backend is compiled into DaliNira" FORCE)
 
+# Gecko is known as an engine identity ("gecko" workspace, --engine gecko),
+# but its backend does not exist yet: every Gecko request falls back to
+# Chromium. The option is reserved for the backend (M3-B2).
+option(DALINIRA_ENABLE_GECKO "Enable the Gecko backend (not implemented yet)" OFF)
+if(DALINIRA_ENABLE_GECKO)
+  message(FATAL_ERROR
+    "DALINIRA_ENABLE_GECKO=ON: the Gecko backend is not implemented yet. "
+    "Configure with -DDALINIRA_ENABLE_GECKO=OFF.")
+endif()
+
 set(BROWSER_SOURCES
   ${CORE_SOURCES}
   ${NEWTAB_SOURCES}
