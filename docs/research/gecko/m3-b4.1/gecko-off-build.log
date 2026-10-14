@@ -1,0 +1,14 @@
+[1/21] Obtaining pinned Adult Protection production source
+-- Adult Protection production source is present and verified
+[2/16] cd <workspace>/build-gecko-off && /usr/bin/cmake -E copy_directory <workspace>/browser/resources/eq-presets <workspace>/build-gecko-off/eq-presets
+[3/16] cd <workspace>/build-gecko-off && /usr/bin/cmake -E make_directory <workspace>/build-gecko-off/resources/privacy && /usr/bin/cmake -E copy_if_different <workspace>/build-gecko-off/generated/privacy/adult_domains.bin <workspace>/build-gecko-off/resources/privacy/adult_domains.bin && /usr/bin/cmake -E copy_if_different <workspace>/browser/resources/privacy/adult_allowlist.txt <workspace>/build-gecko-off/resources/privacy/adult_allowlist.txt
+[4/16] Automatic MOC and UIC for target dalinira-browser-tab-manager-test
+[5/15] Automatic MOC and UIC for target dalinira-browser
+[6/14] Automatic MOC and UIC for target dalinira-browser-internal-tab-test
+[7/13] Building CXX object CMakeFiles/dalinira-browser.dir/browser/native/main.cpp.o
+[8/13] Building CXX object CMakeFiles/dalinira-browser.dir/browser/native/browser_window.cpp.o
+[9/13] Building CXX object CMakeFiles/dalinira-browser-tab-manager-test.dir/browser/native/browser_window.cpp.o
+[10/13] Linking CXX executable dalinira-browser
+[11/13] Linking CXX executable dalinira-browser-tab-manager-test
+[12/13] Building CXX object CMakeFiles/dalinira-browser-internal-tab-test.dir/browser/native/browser_window.cpp.o
+[13/13] Linking CXX executable dalinira-browser-internal-tab-test

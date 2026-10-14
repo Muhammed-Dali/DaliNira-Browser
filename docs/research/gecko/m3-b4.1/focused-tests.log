@@ -1,0 +1,106 @@
+UpdateCTestConfiguration  from :<workspace>/build-gecko/DartConfiguration.tcl
+Test project <workspace>/build-gecko
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start  1: browser-gecko-adapter
+
+1: Test command: <workspace>/build-gecko/dalinira-browser-gecko-adapter-test
+1: Working Directory: <workspace>/build-gecko
+1: Environment variables:
+1:  QT_QPA_PLATFORM=offscreen
+1:  DALINIRA_UI_LANGUAGE=tr
+1: Test timeout computed to be: 120
+1: === GECKO ADAPTER ===
+1: INFO development runtime '<gecko-dev>/firefox/obj-x86_64-pc-linux-gnu/dist/bin': usable
+1: PASS runtime validation
+1: PASS launch environment
+1: PASS ipc transport
+1: PASS x11 embedder refuses without xcb
+1: PASS session refuses unsafe paths before launching
+1: PASS session lifecycle against the fake host
+1: PASS shortcuts kept from the page and reported; key input for tests only
+1: PASS persistent profile
+1: PASS host and content die with a killed parent
+1: === ALL GECKO ADAPTER TESTS PASSED ===
+1/3 Test  #1: browser-gecko-adapter ............   Passed    1.63 sec
+test 2
+    Start  2: browser-gecko-host
+
+2: Test command: <workspace>/build-gecko/dalinira-browser-gecko-host-test
+2: Working Directory: <workspace>/build-gecko
+2: Environment variables:
+2:  QT_QPA_PLATFORM=offscreen
+2:  DALINIRA_UI_LANGUAGE=tr
+2: Test timeout computed to be: 300
+2: === GECKO HOST (headless) on Gecko 160.0a1 ===
+2: PASS startup and authentication
+2: PASS cross-site documents in separate sandboxed content processes
+2: PASS history
+2: PASS browser shortcuts kept from the page and reported; typing and Ctrl+C reach the page
+2: PASS beforeunload guards
+2: PASS content crash and explicit recovery
+2: PASS no GPU device opened by 6 host processes
+2: PASS guarded shutdown; no host process left
+2: PASS the Gecko runtime is unchanged (9243 entries)
+2: === ALL GECKO HOST TESTS PASSED ===
+2/3 Test  #2: browser-gecko-host ...............   Passed    7.26 sec
+test 51
+    Start 51: browser-gecko-window
+
+51: Test command: <workspace>/build-gecko/dalinira-browser-gecko-window-test
+51: Working Directory: <workspace>/build-gecko
+51: Environment variables:
+51:  QT_QPA_PLATFORM=offscreen
+51:  DALINIRA_UI_LANGUAGE=tr
+51: Test timeout computed to be: 120
+51: === GECKO IN BROWSERWINDOW (off screen, fake host) ===
+51: PASS backend started; private Gecko storage
+51: PASS every browser shortcut has a host name and is given to the host
+51: PASS tabs bind host tabs; switching selects them
+51: PASS queued navigation and history
+51: PASS page-opened tab adopted; closing a tab closes its host tab
+51: PASS guarded close: cancelled, then confirmed
+51: PASS crash shown; reload recovers
+51: PASS one window
+51: PASS Ctrl+T and Ctrl+W from the page: one action each
+51: PASS Ctrl+Tab and Ctrl+Shift+Tab from the page
+51: PASS Ctrl+R and Alt+Left from the page
+51: PASS page keys stay the page's; Ctrl+L focuses the address bar
+51: PASS shortcuts of a background tab or hidden window are dropped
+51: PASS rebinding takes effect in the page at once
+51: PASS fail-closed close-error; retry remains guarded
+51: PASS fail-closed close-ipc-failure; retry remains guarded
+51: PASS fail-closed close-timeout; retry remains guarded
+51: PASS fail-closed close-cancel; retry remains guarded
+51: PASS fail-closed close-ack-without-close; retry remains guarded
+51: PASS fail-closed close-unload-refused; retry remains guarded
+51: PASS fail-closed close-missing-tab; retry remains guarded
+51: PASS fail-closed close-missing-document; retry remains guarded
+51: PASS fail-closed close-wrong-command; retry remains guarded
+51: PASS fail-closed close-wrong-document; retry remains guarded
+51: PASS document-bound confirmation and destroyed-widget retention
+51: PASS asynchronous widget disposal retains the newly created document
+51: PASS cancelled late creation retained and not recycled into a different widget
+51: PASS shutdown/window/application quit denial keeps the live session
+51: PASS the Gecko session file only
+51: PASS IPC failure, definitive host death, and stale session generation
+51: PASS exit: no host process, run directory removed, profile kept
+51: === ALL GECKO BROWSERWINDOW TESTS PASSED ===
+3/3 Test #51: browser-gecko-window .............   Passed   13.43 sec
+
+The following tests passed:
+	browser-gecko-adapter
+	browser-gecko-host
+	browser-gecko-window
+
+100% tests passed out of 3
+
+Label Time Summary:
+gecko    =   7.26 sec*proc (1 test)
+
+Total Test time (real) =  22.33 sec

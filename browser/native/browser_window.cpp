@@ -26,6 +26,7 @@
 #endif
 #if defined(DALINIRA_BUILD_GECKO)
 #include "engine/gecko/gecko_backend.h"
+#include "engine/gecko/gecko_session.h"
 #include "engine/gecko/gecko_engine_view.h"
 #endif
 #include <QNetworkAccessManager>
@@ -5046,6 +5047,17 @@ void BrowserWindow::openStartupUrl(const QUrl &url) {
 // Window events, Edge Resizing & Window Caption Controls
 // -----------------------------------------------------------------
 void BrowserWindow::closeEvent(QCloseEvent *event) {
+#if defined(DALINIRA_BUILD_GECKO)
+  if (auto *gecko = qobject_cast<dalinira::engine::GeckoBackend *>(
+          dalinira::engine::EngineBackend::backendForType(dalinira::engine::EngineType::Gecko));
+      gecko && gecko->session()->hostIsRunning() && gecko->session()->state() != dalinira::engine::GeckoSession::State::Stopping) {
+    event->ignore();
+    gecko->requestShutdown(this, [window = QPointer<BrowserWindow>(this)](bool allowed) {
+      if (allowed && window) window->close();
+    });
+    return;
+  }
+#endif
   if (hoverCard_) hoverCard_->hideCard();
   if (services_.songRecognition && services_.songRecognition->isListening()) {
     const bool ownsOpenPulsePage = std::any_of(tabs_.cbegin(), tabs_.cend(), [](const BrowserTabInfo &tab) {

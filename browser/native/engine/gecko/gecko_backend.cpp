@@ -1,5 +1,7 @@
 #include "engine/gecko/gecko_backend.h"
 
+#include <QApplication>
+#include <QEvent>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
@@ -44,6 +46,7 @@ bool ownDirectory(const QString &path, bool privateOnly, QString *error) {
 
 GeckoBackend::GeckoBackend(Config config, QObject *parent)
     : EngineBackend(parent), config_(std::move(config)), session_(new GeckoSession(this)) {
+  if (qApp) qApp->installEventFilter(this);
   surface_ = new GeckoPresentationSurface(session_, this);
   shortcutRouter_ = new GeckoShortcutRouter(this);
   connect(session_, &GeckoSession::viewCreated, this, &GeckoBackend::onViewCreated);
@@ -54,6 +57,7 @@ GeckoBackend::GeckoBackend(Config config, QObject *parent)
 }
 
 GeckoBackend::~GeckoBackend() {
+  if (qApp) qApp->removeEventFilter(this);
   // Views are gone by now (main.cpp deletes the windows first).
   delete surface_;
   surface_ = nullptr;
@@ -148,12 +152,13 @@ GeckoSessionView *GeckoBackend::takeHostTab(GeckoEngineView *view) {
   return hostTab && !viewShowing(id) ? hostTab : nullptr;
 }
 
-void GeckoBackend::expectCreatedTab(const QString &requestId, GeckoEngineView *view) {
+void GeckoBackend::expectCreatedTab(GeckoRequest *request, GeckoEngineView *view) {
+  const QString requestId = request->id();
   expectedCreations_.insert(requestId, view);
   // Forget it once the request is over (the creation event came, or never will).
-  connect(session_, &GeckoSession::requestFinished, view, [this, requestId](const QString &id) {
-    if (id == requestId) expectedCreations_.remove(requestId);
-  });
+  connect(request, &GeckoRequest::finished, this, [this, requestId] {
+    expectedCreations_.remove(requestId);
+  }, Qt::SingleShotConnection);
 }
 
 void GeckoBackend::onViewCreated(GeckoSessionView *view, const QString &source) {
@@ -164,8 +169,13 @@ void GeckoBackend::onViewCreated(GeckoSessionView *view, const QString &source) 
     if (owner && !owner->view_) {
       owner->bind(view);
     } else if (!owner) {
-      view->close(true, view->documentId());  // its tab closed before it existed
+      qCWarning(lcGeckoBackend) << "retaining host tab whose widget disappeared" << view->tabId();
     }
+    return;
+  }
+  if (!requestId.isEmpty()) {
+    // A late creation after timeout/cancellation is not a reusable empty tab.
+    qCWarning(lcGeckoBackend) << "retaining late host creation" << view->tabId();
     return;
   }
   if (source == QLatin1String("content")) {
@@ -189,23 +199,74 @@ bool GeckoBackend::confirmDiscard(QWidget *parent, const QString &title) const {
   return box.exec() == QMessageBox::Discard;
 }
 
+void GeckoBackend::requestShutdown(QWidget *parent, std::function<void(bool)> done) {
+  if (session_->state() == GeckoSession::State::Stopping || !session_->hostIsRunning()) { done(true); return; }
+  if (shutdownPending_ || session_->state() != GeckoSession::State::Ready) { done(false); return; }
+  shutdownPending_ = true;
+  const quint64 generation = session_->generation();
+  const QJsonObject documents = session_->documentSnapshot();
+  QPointer<GeckoBackend> self(this);
+  QPointer<QWidget> owner(parent);
+  auto finish = [self, done](bool allowed) {
+    if (!self) return;
+    self->shutdownPending_ = false;
+    done(allowed);
+  };
+  GeckoRequest *request = session_->shutdown();
+  connect(request, &GeckoRequest::finished, this,
+          [self, owner, generation, documents, finish](const QString &status, const QJsonObject &result) {
+    if (!self) return;
+    if (self->session_->generation() != generation) { finish(false); return; }
+    if (status == QLatin1String("completed") || !self->session_->hostIsRunning()) { finish(true); return; }
+    if (status != QLatin1String("rejected") ||
+        result.value(QStringLiteral("code")).toString() != QLatin1String("beforeunload-confirmation-required") ||
+        result.value(QStringLiteral("documents")).toObject() != documents ||
+        self->session_->documentSnapshot() != documents) { finish(false); return; }
+    const bool confirmed = self->confirmDiscard(owner, QStringLiteral("Open Gecko pages"));
+    if (!self) return;
+    if (!confirmed || self->session_->generation() != generation ||
+        self->session_->state() != GeckoSession::State::Ready || self->session_->documentSnapshot() != documents) {
+      finish(false); return;
+    }
+    GeckoRequest *discard = self->session_->shutdown(true, documents);
+    connect(discard, &GeckoRequest::finished, self.data(),
+            [finish](const QString &status, const QJsonObject &) { finish(status == QLatin1String("completed")); });
+  });
+}
+
+bool GeckoBackend::eventFilter(QObject *watched, QEvent *event) {
+  if (watched == qApp && event->type() == QEvent::Quit && session_->hostIsRunning() &&
+      session_->state() != GeckoSession::State::Stopping) {
+    // Covers menu/shortcut quit as well as window-manager close. Refusal keeps
+    // the event loop and all windows alive; no destructor is used as consent.
+    requestShutdown(QApplication::activeWindow(), [](bool allowed) {
+      if (allowed && qApp) QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+    });
+    return true;
+  }
+  return EngineBackend::eventFilter(watched, event);
+}
+
 bool GeckoBackend::shutdownHost(int timeoutMs) {
   if (!session_) return true;
-  if (session_->state() == GeckoSession::State::Ready) {
-    GeckoRequest *request = session_->shutdown(true, session_->documentSnapshot());
+  if (session_->hostIsRunning() && session_->state() != GeckoSession::State::Stopping) {
+    struct Decision { bool accepted = false; bool finished = false; };
+    auto decision = std::make_shared<Decision>();
     QEventLoop loop;
     QTimer timeout;
     timeout.setSingleShot(true);
     connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-    connect(request, &GeckoRequest::finished, &loop, &QEventLoop::quit);
-    connect(session_, &GeckoSession::hostExited, &loop, &QEventLoop::quit);
+    QPointer<QEventLoop> waiting(&loop);
+    requestShutdown(QApplication::activeWindow(), [decision, waiting](bool allowed) {
+      decision->accepted = allowed;
+      decision->finished = true;
+      if (waiting) waiting->quit();
+    });
     timeout.start(timeoutMs);
-    if (!request->isFinished()) loop.exec(QEventLoop::ExcludeUserInputEvents);
-    if (request->status() != QLatin1String("completed"))
-      qCWarning(lcGeckoBackend) << "the Gecko host did not accept its shutdown:" << request->status() << request->result();
+    if (!decision->finished) loop.exec(QEventLoop::ExcludeUserInputEvents);
+    if (!decision->finished) { qCWarning(lcGeckoBackend) << "shutdown still pending"; return false; }
+    if (!decision->accepted) return false;
   }
-  // Accepted: waits for the host, then ends what is left of its tree.
-  // Refused or no answer: the session is ended when the backend is destroyed.
   const QJsonObject cleanup = session_->stopHost(timeoutMs);
   qCInfo(lcGeckoBackend) << "Gecko host stopped" << cleanup;
   return cleanup.value(QStringLiteral("leftoversKilled")).toArray().isEmpty() &&

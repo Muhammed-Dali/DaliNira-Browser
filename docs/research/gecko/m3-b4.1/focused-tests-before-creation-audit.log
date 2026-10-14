@@ -1,0 +1,14 @@
+Test project <workspace>/build-gecko
+    Start  1: browser-gecko-adapter
+1/3 Test  #1: browser-gecko-adapter ............   Passed    1.62 sec
+    Start  2: browser-gecko-host
+2/3 Test  #2: browser-gecko-host ...............   Passed    6.35 sec
+    Start 51: browser-gecko-window
+3/3 Test #51: browser-gecko-window .............   Passed   12.71 sec
+
+100% tests passed out of 3
+
+Label Time Summary:
+gecko    =   6.35 sec*proc (1 test)
+
+Total Test time (real) =  20.69 sec

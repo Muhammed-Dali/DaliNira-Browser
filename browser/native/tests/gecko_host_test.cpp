@@ -177,7 +177,7 @@ int main(int argc, char *argv[]) {
               << problems.join(QStringLiteral("\n  ")).toStdString() << std::endl;
     return 77;
   }
-  QTemporaryDir root;
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/gc-XXXXXX"));
   CHECK(root.isValid());
   const QString base = QFileInfo(root.path()).canonicalFilePath();
   for (const char *dir : {"/runtime", "/ipc"}) {

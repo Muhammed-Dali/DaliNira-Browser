@@ -160,6 +160,7 @@ class GeckoSession : public QObject {
   quint64 generation() const { return generation_; }
   QString runDirectory() const { return runDir_; }
   qint64 hostPid() const;
+  bool hostIsRunning() const;
   QString windowTag() const;
   int protocol() const;
   QList<GeckoHostProcess::ProcessId> hostProcesses() const;

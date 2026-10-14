@@ -162,7 +162,8 @@ void GeckoPresentationSurface::tryEmbed() {
 }
 
 bool GeckoPresentationSurface::eventFilter(QObject *watched, QEvent *event) {
-  if (event->type() == QEvent::Close && watched == owner_ && container_) {
+  if (event->type() == QEvent::Close && watched == owner_ && container_ &&
+      session_ && (session_->state() == GeckoSession::State::Stopping || !session_->hostIsRunning())) {
     // The window is about to be destroyed (BrowserWindow accepts every close):
     // take the host's window out of it first.
     container_->hide();

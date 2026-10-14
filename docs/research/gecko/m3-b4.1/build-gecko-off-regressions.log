@@ -1,0 +1,15 @@
+Test project <workspace>/build-gecko-off
+    Start 48: browser-engine-identity
+1/5 Test #48: browser-engine-identity ..........   Passed    0.05 sec
+    Start 51: browser-window-platform
+2/5 Test #51: browser-window-platform ..........   Passed    0.12 sec
+    Start 73: browser-tab-manager
+3/5 Test #73: browser-tab-manager ..............   Passed    0.19 sec
+    Start 74: browser-internal-tab
+4/5 Test #74: browser-internal-tab .............   Passed    0.19 sec
+    Start 95: browser-webkit-engine-logic
+5/5 Test #95: browser-webkit-engine-logic ......   Passed    1.56 sec
+
+100% tests passed out of 5
+
+Total Test time (real) =   2.12 sec

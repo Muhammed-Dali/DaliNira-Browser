@@ -581,15 +581,18 @@ int main(int argc, char *argv[]) {
     QTimer::singleShot(1200, window, [window] { checkDefaultBrowser(window); });
   }
 
-  const int exitCode = app.exec();
+  int exitCode = app.exec();
 
 #if defined(DALINIRA_BUILD_GECKO)
-  // The Gecko host first: closed (its pages' unsaved changes discarded, as
-  // the browser is quitting), its process tree ended, its run directory
-  // removed. Its tabs then find no host to close.
+  // Final cleanup follows guarded Gecko shutdown, never implicit discard.
   if (auto *gecko = qobject_cast<dalinira::engine::GeckoBackend *>(
           dalinira::engine::EngineBackend::backendForType(dalinira::engine::EngineType::Gecko))) {
-    if (!gecko->shutdownHost(10000)) qWarning() << "The Gecko host did not stop cleanly.";
+    while (!gecko->shutdownHost(10000)) {
+      // QCoreApplication::exit() bypasses Quit events. A denied/unresolved
+      // Gecko shutdown must not fall through to window/backend destruction.
+      qWarning() << "Gecko shutdown was not approved; keeping the browser session alive.";
+      exitCode = app.exec();
+    }
   }
 #endif
 

@@ -23,6 +23,7 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QTimer>
 
 #include <csignal>
 #include <functional>
@@ -39,6 +40,7 @@
 #include "engine/gecko/gecko_backend.h"
 #include "engine/gecko/gecko_engine_view.h"
 #include "engine/gecko/gecko_session.h"
+#include "engine/gecko/gecko_ipc_server.h"
 #include "engine/gecko/gecko_shortcut_router.h"
 #include "i18n/i18n.h"
 #include "session/session_store.h"
@@ -50,6 +52,15 @@
       std::_Exit(1);                                                                        \
     }                                                                                       \
   } while (false)
+
+namespace dalinira::engine {
+class GeckoSessionTestAccess {
+ public:
+  static QJsonObject pending(GeckoSession *session, const QString &id) { return session->pending_.value(id).message; }
+  static void receive(GeckoSession *session, quint64 generation, const QJsonObject &message) { session->receive(generation, message); }
+  static void disconnect(GeckoSession *session) { session->ipc_->shutdown(); }
+};
+}
 
 namespace {
 
@@ -116,7 +127,7 @@ int main(int argc, char *argv[]) {
   EngineBackend::setSelectedEngineType(EngineType::Gecko);
   QCoreApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
   QApplication app(argc, argv);
-  QTemporaryDir root;
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/gc-XXXXXX"));
   CHECK(root.isValid());
   const QString base = QFileInfo(root.path()).canonicalFilePath();
   QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, base + QStringLiteral("/settings"));
@@ -402,6 +413,144 @@ int main(int argc, char *argv[]) {
   CHECK(waitUntil([&] { return published == 2 && router->hostShortcuts().contains(QStringLiteral("Ctrl+T")); }));
   std::cout << "PASS rebinding takes effect in the page at once" << std::endl;
 
+  // M3-B4.1: failed close attempts never remove a live host document.
+  for (const QString &fault : {QStringLiteral("close-error"), QStringLiteral("close-ipc-failure"),
+                              QStringLiteral("close-timeout"), QStringLiteral("close-cancel"),
+                              QStringLiteral("close-ack-without-close"), QStringLiteral("close-unload-refused"),
+                              QStringLiteral("close-missing-tab"), QStringLiteral("close-missing-document"),
+                              QStringLiteral("close-wrong-command"), QStringLiteral("close-wrong-document")}) {
+    window->addNewTab(QUrl(QStringLiteral("http://fake.test/dirty-%1").arg(fault)));
+    auto *v = current();
+    CHECK(v && waitUntil([&] { return !v->hostTabId().isEmpty() && session->view(v->hostTabId())->hasBeforeUnload(); }));
+    const QString id = v->hostTabId();
+    const QString document = session->view(id)->documentId();
+    int results = 0;
+    auto sent = QObject::connect(session, &GeckoSession::requestSent, &app, [&](const QString &requestId) {
+      const auto msg = GeckoSessionTestAccess::pending(session, requestId);
+      if (fault == QLatin1String("close-cancel") && msg.value("type") == "close_tab" && msg.value("tabId") == id)
+        session->cancel(requestId);
+    });
+    v->requestClose([&](bool allowed) { CHECK(!allowed); ++results; });
+    // A second close while unresolved is denied, without another host command.
+    if (fault == QLatin1String("close-timeout")) {
+      bool duplicate = true;
+      v->requestClose([&](bool allowed) { duplicate = allowed; });
+      CHECK(!duplicate);
+    }
+    CHECK(waitUntil([&] { return results == 1; }));
+    QObject::disconnect(sent);
+    CHECK(session->view(id) && session->view(id)->documentId() == document && indexOfHostTab(window, id) >= 0);
+    // No stuck pending flag: retry requires the real beforeunload decision.
+    const int previousAsked = asked;
+    discard = false;
+    window->closeTab(indexOfHostTab(window, id));
+    CHECK(waitUntil([&] { return asked == previousAsked + 1; }));
+    CHECK(indexOfHostTab(window, id) >= 0 && session->view(id));
+    discard = true;
+    window->closeTab(indexOfHostTab(window, id));
+    CHECK(waitUntil([&] { return !session->view(id) && indexOfHostTab(window, id) < 0; }));
+    std::cout << "PASS fail-closed " << fault.toStdString() << "; retry remains guarded" << std::endl;
+  }
+
+  // Confirmation binds to the requesting document, not a later one.
+  window->addNewTab(QUrl(QStringLiteral("http://fake.test/dirty-stale-confirmation")));
+  auto *staleView = current();
+  CHECK(staleView && waitUntil([&] { return !staleView->hostTabId().isEmpty() && session->view(staleView->hostTabId())->hasBeforeUnload(); }));
+  const QString staleId = staleView->hostTabId();
+  const auto original = session->view(staleId)->snapshot();
+  const quint64 generation = session->generation();
+  gecko->setDiscardConfirmation([&](QWidget *, const QString &) {
+    auto changed = original;
+    changed.insert("documentId", "replacement-document");
+    GeckoSessionTestAccess::receive(session, generation, changed);
+    return true;
+  });
+  bool staleDone = false;
+  staleView->requestClose([&](bool allowed) { CHECK(!allowed); staleDone = true; });
+  CHECK(waitUntil([&] { return staleDone; }));
+  CHECK(session->view(staleId));
+  GeckoSessionTestAccess::receive(session, generation, original);
+  // Destroying a widget in a nested confirmation does not dereference it or
+  // discard the host document. Its tab remains session-owned (not spare/reused).
+  auto *detached = qobject_cast<GeckoEngineView *>(gecko->createView(window));
+  detached->load(QUrl(QStringLiteral("http://fake.test/dirty-destroy")));
+  CHECK(waitUntil([&] { return !detached->hostTabId().isEmpty() && session->view(detached->hostTabId())->hasBeforeUnload(); }));
+  const QString detachedId = detached->hostTabId();
+  QPointer<GeckoEngineView> detachedGuard(detached);
+  bool detachedCallback = false;
+  gecko->setDiscardConfirmation([&](QWidget *widget, const QString &) { delete widget; return true; });
+  detached->requestClose([&](bool) { detachedCallback = true; });
+  CHECK(waitUntil([&] { return detachedGuard.isNull(); }, 100));
+  settle();
+  CHECK(!detachedCallback && session->view(detachedId));
+  gecko->setDiscardConfirmation([&](QWidget *, const QString &) { ++asked; return discard; });
+  discard = true;
+  window->closeTab(indexOfHostTab(window, staleId));
+  CHECK(waitUntil([&] { return !session->view(staleId); }));
+  std::cout << "PASS document-bound confirmation and destroyed-widget retention" << std::endl;
+
+  // Destruction before asynchronous creation neither force-closes nor reuses
+  // the resulting host document.
+  QPointer<EngineView> unbound(gecko->createView(window));
+  unbound->load(QUrl(QStringLiteral("http://fake.test/dirty-orphan")));
+  auto disposeOnSend = QObject::connect(session, &GeckoSession::requestSent, &app, [&](const QString &id) {
+    const auto msg = GeckoSessionTestAccess::pending(session, id);
+    if (msg.value("type") == "create_tab" && msg.value("url") == "http://fake.test/dirty-orphan") delete unbound.data();
+  });
+  CHECK(waitUntil([&] { return unbound.isNull(); }));
+  QObject::disconnect(disposeOnSend);
+  CHECK(waitUntil([&] {
+    for (auto *v : session->views()) if (v->url() == QUrl("http://fake.test/dirty-orphan")) return v->hasBeforeUnload();
+    return false;
+  }));
+  CHECK(session->state() == GeckoSession::State::Ready);
+  std::cout << "PASS asynchronous widget disposal retains the newly created document" << std::endl;
+
+  auto *cancelledCreation = qobject_cast<GeckoEngineView *>(gecko->createView(window));
+  cancelledCreation->load(QUrl("http://fake.test/dirty-late-creation"));
+  auto cancelCreation = QObject::connect(session, &GeckoSession::requestSent, &app, [&](const QString &id) {
+    if (GeckoSessionTestAccess::pending(session, id).value("url") == "http://fake.test/dirty-late-creation") session->cancel(id);
+  });
+  QString lateId;
+  CHECK(waitUntil([&] {
+    for (auto *v : session->views()) if (v->url() == QUrl("http://fake.test/dirty-late-creation")) { lateId = v->tabId(); return true; }
+    return false;
+  }));
+  QObject::disconnect(cancelCreation);
+  CHECK(cancelledCreation->hostTabId().isEmpty());
+  delete cancelledCreation;
+  auto *fresh = qobject_cast<GeckoEngineView *>(gecko->createView(window));
+  CHECK(waitUntil([&] { return !fresh->hostTabId().isEmpty(); }));
+  CHECK(fresh->hostTabId() != lateId && session->view(lateId)->hasBeforeUnload());
+  delete fresh;
+  CHECK(session->view(lateId));
+  std::cout << "PASS cancelled late creation retained and not recycled into a different widget" << std::endl;
+
+  // A stale/forged shutdown acknowledgement cannot authorize cleanup.
+  GeckoSessionTestAccess::receive(session, generation,
+      {{"type", "ack"}, {"command", "shutdown"}, {"requestId", "nobody-sent-this"}});
+  CHECK(session->state() == GeckoSession::State::Ready);
+  discard = false;
+  bool shutdownAnswered = false;
+  gecko->requestShutdown(window, [&](bool allowed) { CHECK(!allowed); shutdownAnswered = true; });
+  CHECK(waitUntil([&] { return shutdownAnswered; }));
+  CHECK(session->hostPid() > 0 && session->view(detachedId));
+  window->close();
+  settle();
+  CHECK(window->isVisible() && session->state() == GeckoSession::State::Ready);
+  QEvent quit(QEvent::Quit);
+  QCoreApplication::sendEvent(&app, &quit);
+  settle();
+  CHECK(session->state() == GeckoSession::State::Ready && window->isVisible());
+  const int asksBeforeQuit = asked;
+  bool guardedLoopStayedAlive = false;
+  QTimer::singleShot(0, &app, &QCoreApplication::quit);
+  QTimer::singleShot(300, &app, [&] { guardedLoopStayedAlive = true; app.exit(7); });
+  CHECK(app.exec() == 7 && guardedLoopStayedAlive && asked > asksBeforeQuit);
+  CHECK(window->isVisible() && session->state() == GeckoSession::State::Ready);
+  discard = true;
+  std::cout << "PASS shutdown/window/application quit denial keeps the live session" << std::endl;
+
   // The Gecko workspace's session file only.
   window->saveSessionNow();
   QFile sessionFile(dataDir + QStringLiteral("/session/gecko/tabs.session.json"));
@@ -424,6 +573,55 @@ int main(int argc, char *argv[]) {
   // No host, no shortcuts: nothing of the old set is acted on.
   CHECK(router->hostShortcuts().isEmpty());
   delete window;
+  // Real transport loss and host death: deny while the live parent remains;
+  // permit disposal only after it has definitively exited. A new launch cannot
+  // make old widget/request identities target its tabs.
+  {
+    auto extraConfig = config;
+    extraConfig.dataDirectory = base + QStringLiteral("/extra-gecko");
+    GeckoBackend extra(extraConfig, &app);
+    extra.setDiscardConfirmation([](QWidget *, const QString &) { return false; });
+    CHECK(extra.initialize(storage));
+    auto *extraSession = extra.session();
+    CHECK(waitUntil([&] { return extraSession->state() == GeckoSession::State::Ready; }));
+    auto *v = qobject_cast<GeckoEngineView *>(extra.createView(nullptr));
+    v->load(QUrl("http://fake.test/dirty-close-timeout"));
+    CHECK(waitUntil([&] { return !v->hostTabId().isEmpty() && extraSession->view(v->hostTabId())->hasBeforeUnload(); }));
+    bool answered = false;
+    auto disconnectOnClose = QObject::connect(extraSession, &GeckoSession::requestSent, &app, [&](const QString &id) {
+      if (GeckoSessionTestAccess::pending(extraSession, id).value("type") == "close_tab")
+        GeckoSessionTestAccess::disconnect(extraSession);
+    });
+    v->requestClose([&](bool allowed) { CHECK(!allowed); answered = true; });
+    CHECK(waitUntil([&] { return answered; }));
+    QObject::disconnect(disconnectOnClose);
+    CHECK(waitUntil([&] { return !extraSession->hostIsRunning(); }));
+    bool ceased = false;
+    v->requestClose([&](bool allowed) { ceased = allowed; });
+    CHECK(ceased && extra.shutdownHost(1000));
+    const quint64 oldGeneration = extraSession->generation();
+    CHECK(extra.initialize(storage));
+    CHECK(waitUntil([&] { return extraSession->state() == GeckoSession::State::Ready; }));
+    GeckoSessionTestAccess::receive(extraSession, oldGeneration,
+        {{"type", "ack"}, {"command", "shutdown"}, {"requestId", "stale-generation"}});
+    CHECK(extraSession->state() == GeckoSession::State::Ready);
+    bool oldAllowed = true;
+    bool oldAnswered = false;
+    v->requestClose([&](bool allowed) { oldAllowed = allowed; oldAnswered = true; });
+    CHECK(waitUntil([&] { return oldAnswered; }) && !oldAllowed);
+    delete v;
+    auto *live = qobject_cast<GeckoEngineView *>(extra.createView(nullptr));
+    live->load(QUrl("http://fake.test/dirty-host-crash"));
+    CHECK(waitUntil([&] { return !live->hostTabId().isEmpty() && extraSession->view(live->hostTabId())->hasBeforeUnload(); }));
+    const qint64 ownedHost = extraSession->hostPid();
+    CHECK(ownedHost > 0 && ::kill(static_cast<pid_t>(ownedHost), SIGKILL) == 0);
+    CHECK(waitUntil([&] { return !extraSession->hostIsRunning(); }));
+    bool deadAllowed = false;
+    live->requestClose([&](bool allowed) { deadAllowed = allowed; });
+    CHECK(deadAllowed && extra.shutdownHost(1000));
+    delete live;
+    std::cout << "PASS IPC failure, definitive host death, and stale session generation" << std::endl;
+  }
   EngineBackend::shutdown();
   std::cout << "PASS exit: no host process, run directory removed, profile kept" << std::endl;
   std::cout << "=== ALL GECKO BROWSERWINDOW TESTS PASSED ===" << std::endl;
