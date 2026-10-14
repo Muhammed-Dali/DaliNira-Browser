@@ -1,0 +1,47 @@
+Test project <workspace>/build-gecko
+    Start  1: browser-gecko-adapter
+1/3 Test  #1: browser-gecko-adapter ............   Passed    1.55 sec
+    Start  2: browser-gecko-host
+2/3 Test  #2: browser-gecko-host ...............   Passed    3.54 sec
+    Start 51: browser-gecko-window
+3/3 Test #51: browser-gecko-window .............***Failed   18.21 sec
+=== GECKO IN BROWSERWINDOW (off screen, fake host) ===
+PASS backend started; private Gecko storage
+PASS every browser shortcut has a host name and is given to the host
+PASS tabs bind host tabs; switching selects them
+PASS queued navigation and history
+PASS page-opened tab adopted; closing a tab closes its host tab
+PASS guarded close: cancelled, then confirmed
+PASS crash shown; reload recovers
+PASS one window
+PASS Ctrl+T and Ctrl+W from the page: one action each
+PASS Ctrl+Tab and Ctrl+Shift+Tab from the page
+PASS Ctrl+R and Alt+Left from the page
+PASS page keys stay the page's; Ctrl+L focuses the address bar
+PASS shortcuts of a background tab or hidden window are dropped
+PASS rebinding takes effect in the page at once
+PASS fail-closed close-error; retry remains guarded
+PASS fail-closed close-ipc-failure; retry remains guarded
+PASS fail-closed close-timeout; retry remains guarded
+PASS fail-closed close-cancel; retry remains guarded
+PASS fail-closed close-missing-tab; retry remains guarded
+PASS fail-closed close-missing-document; retry remains guarded
+PASS fail-closed close-wrong-command; retry remains guarded
+PASS fail-closed close-wrong-document; retry remains guarded
+PASS document-bound confirmation and destroyed-widget retention
+PASS asynchronous widget disposal retains the newly created document
+PASS shutdown/window/application quit denial keeps the live session
+PASS the Gecko session file only
+[FAIL] <workspace>/browser/native/tests/gecko_browser_window_test.cpp:570: waitUntil([&] { return extraSession->hostPid() == 0; })
+
+
+67% tests passed, 1 tests failed out of 3
+
+Label Time Summary:
+gecko    =   3.54 sec*proc (1 test)
+
+Total Test time (real) =  23.30 sec
+
+The following tests FAILED:
+	 51 - browser-gecko-window (Failed)
+Errors while running CTest

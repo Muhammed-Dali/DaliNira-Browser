@@ -881,7 +881,7 @@ int main(int argc, char *argv[]) {
     for (;;) ::pause();
   }
 
-  QTemporaryDir root;
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/gc-XXXXXX"));
   CHECK(root.isValid());
   const QString base = QFileInfo(root.path()).canonicalFilePath();
   Paths paths{makeFakeRuntime(base + QStringLiteral("/gre")), makePrivateDirectory(base + QStringLiteral("/runtime")),

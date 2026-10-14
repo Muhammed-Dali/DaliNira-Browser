@@ -1,0 +1,14 @@
+{
+  "focused-tests.log": {
+    "allPassed": true,
+    "failed": false
+  },
+  "build-gecko-regressions.log": {
+    "allPassed": true,
+    "failed": false
+  },
+  "build-gecko-off-regressions.log": {
+    "allPassed": true,
+    "failed": false
+  }
+}

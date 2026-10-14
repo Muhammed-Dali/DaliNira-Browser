@@ -1,0 +1,10 @@
+[1/20] Automatic MOC and UIC for target dalinira-gecko-fake-host
+[2/19] Obtaining pinned Adult Protection production source
+-- Adult Protection production source is present and verified
+[3/10] cd <workspace>/build-gecko && /usr/bin/cmake -E copy_directory <workspace>/browser/resources/eq-presets <workspace>/build-gecko/eq-presets
+[4/10] cd <workspace>/build-gecko && /usr/bin/cmake -E make_directory <workspace>/build-gecko/resources/privacy && /usr/bin/cmake -E copy_if_different <workspace>/build-gecko/generated/privacy/adult_domains.bin <workspace>/build-gecko/resources/privacy/adult_domains.bin && /usr/bin/cmake -E copy_if_different <workspace>/browser/resources/privacy/adult_allowlist.txt <workspace>/build-gecko/resources/privacy/adult_allowlist.txt
+[5/10] Building CXX object CMakeFiles/dalinira-gecko-fake-host.dir/browser/native/tests/gecko_fake_host.cpp.o
+[6/10] Linking CXX executable dalinira-gecko-fake-host
+[7/10] Automatic MOC and UIC for target dalinira-browser-gecko-window-test
+[8/9] Building CXX object CMakeFiles/dalinira-browser-gecko-window-test.dir/browser/native/tests/gecko_browser_window_test.cpp.o
+[9/9] Linking CXX executable dalinira-browser-gecko-window-test

@@ -101,10 +101,9 @@ GeckoRequest *GeckoSessionView::setEngineActive(bool active) {
 }
 
 GeckoRequest *GeckoSessionView::close(bool discard, const QString &confirmedDocumentId) {
-  QJsonObject fields;
+  QJsonObject fields{{QStringLiteral("documentId"), discard ? confirmedDocumentId : (confirmedDocumentId.isEmpty() ? documentId() : confirmedDocumentId)}};
   if (discard) {
     fields.insert(QStringLiteral("discard"), true);
-    fields.insert(QStringLiteral("documentId"), confirmedDocumentId);
   }
   return command(QStringLiteral("close_tab"), fields);
 }
@@ -143,6 +142,7 @@ void GeckoSession::releasePresentation(QWidget *owner) {
 }
 
 qint64 GeckoSession::hostPid() const { return host_ ? host_->pid() : 0; }
+bool GeckoSession::hostIsRunning() const { return host_ && host_->isRunning(); }
 QString GeckoSession::windowTag() const { return ipc_ ? ipc_->windowTag() : QString(); }
 int GeckoSession::protocol() const { return ipc_ ? ipc_->protocol() : 0; }
 
@@ -322,11 +322,8 @@ GeckoRequest *GeckoSession::setShortcuts(const QStringList &shortcuts) {
 }
 
 GeckoRequest *GeckoSession::shutdown(bool discard, const QJsonObject &confirmedDocuments) {
-  QJsonObject fields;
-  if (discard) {
-    fields.insert(QStringLiteral("discard"), true);
-    fields.insert(QStringLiteral("documents"), confirmedDocuments);
-  }
+  QJsonObject fields{{QStringLiteral("documents"), discard ? confirmedDocuments : documentSnapshot()}};
+  if (discard) fields.insert(QStringLiteral("discard"), true);
   return submit(QStringLiteral("shutdown"), fields);
 }
 
@@ -424,10 +421,6 @@ void GeckoSession::receive(quint64 generation, const QJsonObject &message) {
   if (type == QLatin1String("ack") || type == QLatin1String("error") ||
       (type == QLatin1String("tabs-list") && message.contains(QStringLiteral("requestId")))) {
     const QString requestId = message.value(QStringLiteral("requestId")).toString();
-    if (type == QLatin1String("ack") && message.value(QStringLiteral("command")).toString() == QLatin1String("shutdown")) {
-      stopping_ = true;
-      state_ = State::Stopping;
-    }
     if (!pending_.contains(requestId)) {
       // Cancelled, timed out or of an earlier session: dropped before any UI.
       qCDebug(lcGeckoSession) << "dropped a stale reply" << requestId << type;
@@ -437,14 +430,24 @@ void GeckoSession::receive(quint64 generation, const QJsonObject &message) {
     const QString command = message.value(QStringLiteral("command")).toString();
     if ((type == QLatin1String("tabs-list") && expected.type != QLatin1String("list_tabs")) ||
         (type != QLatin1String("tabs-list") && command != expected.type) ||
-        (!expected.tabId.isEmpty() && message.contains(QStringLiteral("tabId")) &&
-         message.value(QStringLiteral("tabId")).toString() != expected.tabId)) {
+        (!expected.tabId.isEmpty() && message.value(QStringLiteral("tabId")).toString() != expected.tabId) ||
+        (expected.type == QLatin1String("close_tab") &&
+         (type == QLatin1String("ack") || message.value(QStringLiteral("code")) == QLatin1String("beforeunload-confirmation-required")) &&
+         (expected.message.value(QStringLiteral("documentId")).toString().isEmpty() ||
+          message.value(QStringLiteral("documentId")) != expected.message.value(QStringLiteral("documentId")))) ||
+        (expected.type == QLatin1String("shutdown") &&
+         (type == QLatin1String("ack") || message.value(QStringLiteral("code")) == QLatin1String("beforeunload-confirmation-required")) &&
+         message.value(QStringLiteral("documents")) != expected.message.value(QStringLiteral("documents")))) {
       finish(requestId, QStringLiteral("rejected"), {{"code", "invalid-reply"}});
       return;
     }
     if (expected.request && expected.request->deadline_.hasExpired()) {
       finish(requestId, QStringLiteral("timed-out"), {{"code", "deadline-exceeded"}, {"mayHaveApplied", true}});
       return;
+    }
+    if (type == QLatin1String("ack") && expected.type == QLatin1String("shutdown")) {
+      stopping_ = true;
+      state_ = State::Stopping;
     }
     // The observed state first: a callback may open a modal loop, and a newer
     // operation inside it must not be overwritten by this older reply.

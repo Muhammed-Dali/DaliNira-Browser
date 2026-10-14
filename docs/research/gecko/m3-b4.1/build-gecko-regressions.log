@@ -1,0 +1,104 @@
+UpdateCTestConfiguration  from :<workspace>/build-gecko/DartConfiguration.tcl
+Test project <workspace>/build-gecko
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 50
+    Start 50: browser-engine-identity
+
+50: Test command: <workspace>/build-gecko/dalinira-browser-engine-identity-test
+50: Working Directory: <workspace>/build-gecko
+50: Environment variables:
+50:  QT_QPA_PLATFORM=offscreen
+50:  DALINIRA_UI_LANGUAGE=tr
+50: Test timeout computed to be: 30
+50: === ENGINE IDENTITY ===
+50: PASS engine keys
+50: PASS conversions; 66 Chromium/WebKit results match their previous ones
+50: PASS UI profiles of the three engines stay apart
+50: PASS resolvePure: 2002 inputs match their previous result, 573 involve Gecko
+50: PASS resolve precedence, normalization and fallback
+50: === ALL ENGINE IDENTITY TESTS PASSED ===
+1/5 Test #50: browser-engine-identity ..........   Passed    0.04 sec
+test 55
+    Start 55: browser-window-platform
+
+55: Test command: <workspace>/build-gecko/dalinira-browser-window-platform-test "--logic"
+55: Working Directory: <workspace>/build-gecko
+55: Environment variables:
+55:  QT_QPA_PLATFORM=offscreen
+55:  DALINIRA_UI_LANGUAGE=tr
+55: Test timeout computed to be: 30
+55: [PASS] display platform plan
+2/5 Test #55: browser-window-platform ..........   Passed    0.12 sec
+test 77
+    Start 77: browser-tab-manager
+
+77: Test command: <workspace>/build-gecko/dalinira-browser-tab-manager-test
+77: Working Directory: <workspace>/build-gecko
+77: Environment variables:
+77:  QT_QPA_PLATFORM=offscreen
+77:  QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu
+77:  QTWEBENGINE_DISABLE_SANDBOX=1
+77:  DALINIRA_UI_LANGUAGE=tr
+77: Test timeout computed to be: 10000000
+77: tab manager ownership invariants: ok
+77: tab manager icon persistence: ok
+77: tab manager empty owner invariants: ok
+3/5 Test #77: browser-tab-manager ..............   Passed    0.22 sec
+test 78
+    Start 78: browser-internal-tab
+
+78: Test command: <workspace>/build-gecko/dalinira-browser-internal-tab-test
+78: Working Directory: <workspace>/build-gecko
+78: Environment variables:
+78:  QT_QPA_PLATFORM=offscreen
+78:  QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu
+78:  QTWEBENGINE_DISABLE_SANDBOX=1
+78:  DALINIRA_UI_LANGUAGE=tr
+78: Test timeout computed to be: 10000000
+78: internal settings and incognito isolation lifecycle: ok
+4/5 Test #78: browser-internal-tab .............   Passed    0.21 sec
+test 99
+    Start 99: browser-webkit-engine-logic
+
+99: Test command: <workspace>/build-gecko/dalinira-browser-webkit-engine-logic-test
+99: Working Directory: <workspace>/build-gecko
+99: Environment variables:
+99:  QT_QPA_PLATFORM=offscreen
+99:  DALINIRA_UI_LANGUAGE=tr
+99: Test timeout computed to be: 30
+99: === RUNNING ENGINE LOGIC TEST SUITE ===
+99: [PASS] Only Web Audio output buffers are reduced before playback.
+99: [TEST 1] Engine identities...
+99: [PASS] WebKit -> WebCore + JavaScriptCore, Chromium -> Blink + V8, Gecko -> Gecko + SpiderMonkey.
+99: [TEST 2] Default engine is Chromium...
+99: [PASS] Chromium is the default engine.
+99: [TEST 3] Profile storage isolation...
+99: [PASS] Chromium, WebKit and Gecko profile directories are isolated.
+99: [TEST 4] Adult content protection domain rules...
+99: [PASS] Hosts, subdomains, lookalikes, queries and the allowlist behave correctly.
+99: [TEST 5] Engine settings persistence...
+99: [PASS] browser/engine persists.
+99: [TEST 6] Engine UI profile visual setting isolation...
+99: [PASS] Visual settings are isolated between Chromium and WebKit.
+99: [TEST 7] EngineResolver precedence and persistence...
+99: [PASS] CLI > Settings > Default, with persistence.
+99: [TEST 8] WebKit page -> web process registry (tab memory attribution)...
+99: [PASS] Kernel-authenticated page ownership, removals, exits, and protocol bounds enforced.
+99: === ALL ENGINE LOGIC TESTS PASSED ===
+5/5 Test #99: browser-webkit-engine-logic ......   Passed    2.20 sec
+
+The following tests passed:
+	browser-engine-identity
+	browser-window-platform
+	browser-tab-manager
+	browser-internal-tab
+	browser-webkit-engine-logic
+
+100% tests passed out of 5
+
+Total Test time (real) =   2.80 sec

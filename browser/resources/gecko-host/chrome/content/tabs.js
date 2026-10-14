@@ -131,14 +131,16 @@ const DngTabs = (() => {
       if (msg.protocol === 3 && "discard" in msg && typeof msg.discard !== "boolean") throw new Error("invalid-argument");
       if (msg.type === "shutdown") {
         if (msg.protocol === 3) {
+          response.documents = Object.fromEntries([...tabs.values()].map(t => [t.id, documentId(t)]));
+          if (!msg.documents || typeof msg.documents !== "object" || Array.isArray(msg.documents) ||
+              Object.keys(msg.documents).length !== tabs.size ||
+              [...tabs.values()].some(t => !msg.documents[t.id] || msg.documents[t.id] !== documentId(t)))
+            throw new Error("stale-document");
           const protectedTabs = [...tabs.values()].filter(t => !t.crashed && t.browser.hasBeforeUnload);
           if (protectedTabs.length && msg.discard !== true) throw new Error("beforeunload-confirmation-required");
-          if (msg.discard === true && (!msg.documents || typeof msg.documents !== "object" || Array.isArray(msg.documents) ||
-              Object.keys(msg.documents).length > MAX_TABS || [...tabs.values()].some(t => msg.documents[t.id] !== documentId(t))))
-            throw new Error("stale-document");
           if (msg.discard === true) {
             for (const tab of protectedTabs) if (!(await tab.browser.asyncPermitUnload("unload")).permitUnload) throw new Error("unload-refused");
-            if ([...tabs.values()].some(t => msg.documents[t.id] !== documentId(t))) throw new Error("stale-document");
+            if (Object.keys(msg.documents).length !== tabs.size || [...tabs.values()].some(t => msg.documents[t.id] !== documentId(t))) throw new Error("stale-document");
           }
         }
         DngIpc.send("ack", response);
@@ -150,6 +152,11 @@ const DngTabs = (() => {
       if (!t) throw new Error("unknown-tab");
       response.tabId = t.id;
       if (msg.protocol === 3) {
+        if (msg.type === "close_tab") {
+          response.documentId = documentId(t);
+          if (typeof msg.documentId !== "string" || !msg.documentId || msg.documentId !== documentId(t))
+            throw new Error("stale-document");
+        }
         if (t.crashed && !["recover_tab", "close_tab", "activate_tab", "stop"].includes(msg.type)) throw new Error("recovery-required");
         if (["load_url", "back", "forward", "reload"].includes(msg.type) && t.browser.hasBeforeUnload)
           throw new Error("beforeunload-navigation-blocked");

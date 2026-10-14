@@ -36,6 +36,7 @@
 #include <QProcessEnvironment>
 #include <QRandomGenerator>
 #include <QSet>
+#include <QTimer>
 #include <QtEndian>
 
 #include <csignal>
@@ -165,6 +166,8 @@ class FakeHost : public QObject {
   void ack(const QJsonObject &command, const QString &tabId = {}) {
     QJsonObject reply{{"type", "ack"}, {"command", command.value("type")}, {"requestId", command.value("requestId")}};
     if (!tabId.isEmpty()) reply.insert(QStringLiteral("tabId"), tabId);
+    if (command.value("type") == QLatin1String("close_tab")) reply.insert("documentId", command.value("documentId"));
+    if (command.value("type") == QLatin1String("shutdown")) reply.insert("documents", command.value("documents"));
     send(reply);
   }
 
@@ -172,6 +175,13 @@ class FakeHost : public QObject {
     QJsonObject reply{{"type", "error"}, {"command", command.value("type")}, {"requestId", command.value("requestId")},
                       {"code", code}};
     if (command.contains(QStringLiteral("tabId"))) reply.insert(QStringLiteral("tabId"), command.value("tabId"));
+    if (command.value("type") == QLatin1String("close_tab") && tabs_.contains(command.value("tabId").toString()))
+      reply.insert("documentId", tabs_.value(command.value("tabId").toString()).documentId);
+    if (command.value("type") == QLatin1String("shutdown")) {
+      QJsonObject documents;
+      for (const Tab &tab : std::as_const(tabs_)) documents.insert(tab.id, tab.documentId);
+      reply.insert("documents", documents);
+    }
     send(reply);
   }
 
@@ -215,6 +225,13 @@ class FakeHost : public QObject {
       return;
     }
     if (type == QLatin1String("create_tab")) {
+      if (message.value("url") == QLatin1String("http://fake.test/dirty-late-creation")) {
+        QTimer::singleShot(50, this, [this, message] {
+          Tab &tab = createTab(message.value("url").toString(), QStringLiteral("embedder"), message.value("requestId").toString());
+          ack(message, tab.id);
+        });
+        return;
+      }
       Tab &tab = createTab(message.value(QStringLiteral("url")).toString(), QStringLiteral("embedder"),
                            message.value(QStringLiteral("requestId")).toString());
       ack(message, tab.id);
@@ -292,6 +309,22 @@ class FakeHost : public QObject {
       send({{"type", "tabs-list"}, {"tabs", tabs}, {"activeTabId", active_}, {"requestId", message.value("requestId")}});
     } else if (type == QLatin1String("close_tab")) {
       Tab &tab = tabs_[tabId];
+      if (message.value("documentId").toString().isEmpty() || message.value("documentId").toString() != tab.documentId)
+        return error(message, QStringLiteral("stale-document"));
+      if (tab.url.contains("close-") && !closeFaults_.contains(tabId)) {
+        closeFaults_.insert(tabId);
+        if (tab.url.contains("close-timeout") || tab.url.contains("close-cancel")) return;
+        if (tab.url.contains("close-unload-refused")) return error(message, QStringLiteral("unload-refused"));
+        if (tab.url.contains("close-error")) return error(message, QStringLiteral("command-failed"));
+        if (tab.url.contains("close-ipc-failure")) return error(message, QStringLiteral("send-failed"));
+        QJsonObject reply{{"type", "ack"}, {"command", "close_tab"}, {"requestId", message.value("requestId")},
+                          {"tabId", tabId}, {"documentId", tab.documentId}};
+        if (tab.url.contains("close-missing-tab")) reply.remove("tabId");
+        if (tab.url.contains("close-missing-document")) reply.remove("documentId");
+        if (tab.url.contains("close-wrong-command")) reply.insert("command", "reload");
+        if (tab.url.contains("close-wrong-document")) reply.insert("documentId", "other-document");
+        send(reply); return;
+      }
       if (message.value(QStringLiteral("discard")).toBool()) {
         if (message.value(QStringLiteral("documentId")).toString() != tab.documentId)
           return error(message, QStringLiteral("stale-document"));
@@ -358,6 +391,7 @@ class FakeHost : public QObject {
   QHash<QString, Tab> tabs_;
   QStringList order_;
   QSet<QString> shortcuts_;
+  QSet<QString> closeFaults_;
   qint64 sequence_ = 0;
   qint64 commandSequence_ = 0;
   bool welcomed_ = false;

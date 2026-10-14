@@ -1,0 +1,28 @@
+Test project <workspace>/build-gecko
+    Start  1: browser-gecko-adapter
+1/2 Test  #1: browser-gecko-adapter ............***Failed    0.25 sec
+=== GECKO ADAPTER ===
+INFO development runtime '<gecko-dev>/firefox/obj-x86_64-pc-linux-gnu/dist/bin': usable
+PASS runtime validation
+PASS launch environment
+PASS ipc transport
+PASS x11 embedder refuses without xcb
+PASS session refuses unsafe paths before launching
+the IPC socket path is too long for Gecko: /tmp/dn-close-tests-witm6pq4/tmp/dalinira-browser-gecko-adapter-test-tJcaRF/ipc/dalinira-gecko-1debc8536d734a51/host.sock
+[FAIL] <workspace>/browser/native/tests/gecko_adapter_test.cpp:452: session.hostPid() > 0
+
+    Start 51: browser-gecko-window
+2/2 Test #51: browser-gecko-window .............***Failed    0.52 sec
+=== GECKO IN BROWSERWINDOW (off screen, fake host) ===
+the IPC socket path is too long for Gecko: /tmp/dn-close-tests-witm6pq4/tmp/dalinira-browser-gecko-window-test-PqwPvc/ipc/dalinira-gecko-29ef6ce410c64b14/host.sock
+[FAIL] <workspace>/browser/native/tests/gecko_browser_window_test.cpp:158: initialized
+
+
+0% tests passed, 2 tests failed out of 2
+
+Total Test time (real) =   0.77 sec
+
+The following tests FAILED:
+	  1 - browser-gecko-adapter (Failed)
+	 51 - browser-gecko-window (Failed)
+Errors while running CTest

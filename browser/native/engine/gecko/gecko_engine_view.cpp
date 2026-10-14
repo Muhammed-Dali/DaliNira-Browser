@@ -5,6 +5,7 @@
 #include <QPaintEvent>
 #include <QResizeEvent>
 #include <QTimer>
+#include <memory>
 
 #include "engine/gecko/gecko_backend.h"
 #include "engine/gecko/gecko_presentation_surface.h"
@@ -39,12 +40,12 @@ GeckoEngineView::~GeckoEngineView() {
   if (!backend_) return;
   backend_->surface()->release(this);
   backend_->unregisterView(this);
-  // The tab is closing (or its window): the host closes the page without
-  // asking again, as Chromium and WebKit do for a closing window.
-  if (view_ && !closing_ && view_->lifecycleState() != GeckoSessionView::State::Closed &&
-      view_->lifecycleState() != GeckoSessionView::State::Lost && backend_->session()->state() == GeckoSession::State::Ready) {
-    view_->close(true, view_->documentId());
-  }
+  // Widget disposal is not permission to destroy a live host document.
+  // Detached tabs stay owned by the session until an explicit close/shutdown.
+  if (view_ && view_->lifecycleState() != GeckoSessionView::State::Closed &&
+      view_->lifecycleState() != GeckoSessionView::State::Lost)
+    qCWarning(lcGeckoView) << "view disposed; retaining host document" << view_->tabId();
+
 }
 
 QString GeckoEngineView::hostTabId() const { return view_ ? view_->tabId() : QString(); }
@@ -81,7 +82,7 @@ void GeckoEngineView::createHostTab() {
   creating_ = true;
   GeckoRequest *request = session->createView(initialUrl_, engineActive_);
   initialUrl_.clear();
-  backend_->expectCreatedTab(request->id(), this);
+  backend_->expectCreatedTab(request, this);
   connect(request, &GeckoRequest::finished, this, [this](const QString &status, const QJsonObject &result) {
     creating_ = false;
     if (view_) return;  // bound already, from the creation event
@@ -210,35 +211,68 @@ void GeckoEngineView::present() {
 }
 
 void GeckoEngineView::requestClose(std::function<void(bool allowed)> done) {
-  if (!view_ || closing_ || view_->lifecycleState() == GeckoSessionView::State::Closed ||
-      view_->lifecycleState() == GeckoSessionView::State::Lost) {
-    done(true);
-    return;
-  }
+  const auto gone = [this] {
+    return (view_ && view_->lifecycleState() == GeckoSessionView::State::Closed) ||
+           (backend_ && !backend_->session()->hostIsRunning() &&
+            (backend_->session()->state() == GeckoSession::State::Disconnected ||
+             backend_->session()->state() == GeckoSession::State::Stopped));
+  };
+  if (gone()) { done(true); return; }
+  // No observed document yet, or another close is pending: no permission.
+  if (!view_ || closing_ || !backend_ || view_->documentId().isEmpty()) { done(false); return; }
   closing_ = true;
   QPointer<GeckoEngineView> self(this);
-  GeckoRequest *request = view_->close();
-  connect(request, &GeckoRequest::finished, this, [self, done](const QString &status, const QJsonObject &result) {
+  QPointer<GeckoSessionView> target(view_);
+  const quint64 generation = target->generation();
+  const QString document = target->documentId();
+  auto answered = std::make_shared<bool>(false);
+  auto finish = [self, target, generation, answered, done](bool allowed) {
+    if (!self || *answered) return;
+    *answered = true;
+    self->closing_ = false;
+    done(allowed && self->view_ == target && target && target->generation() == generation &&
+         self->backend_ && self->backend_->session()->generation() == generation &&
+         (target->lifecycleState() == GeckoSessionView::State::Closed ||
+          (target->lifecycleState() == GeckoSessionView::State::Lost && !self->backend_->session()->hostIsRunning())));
+  };
+  auto awaitClosure = [self, target, finish] {
+    if (!self || !target) return;
+    if (target->lifecycleState() == GeckoSessionView::State::Closed) { finish(true); return; }
+    connect(target, &GeckoSessionView::lifecycleStateChanged, self.data(),
+            [finish](GeckoSessionView::State state) {
+      if (state == GeckoSessionView::State::Closed) finish(true);
+      else if (state == GeckoSessionView::State::Lost) finish(false);
+    });
+    QTimer::singleShot(5000, self.data(), [finish] { finish(false); });
+  };
+  GeckoRequest *request = target->close(false, document);
+  if (!request) { finish(false); return; }
+  connect(request, &GeckoRequest::finished, this,
+          [self, target, generation, document, finish, awaitClosure](const QString &status, const QJsonObject &result) {
     if (!self) return;
-    if (result.value(QStringLiteral("code")).toString() != QLatin1String("beforeunload-confirmation-required")) {
-      // Closed, or nothing left to close (session gone, tab already closed).
-      self->closing_ = status == QLatin1String("completed");
-      done(true);
-      return;
+    if (!target || self->view_ != target || target->generation() != generation) { finish(false); return; }
+    const bool ceased = target->lifecycleState() == GeckoSessionView::State::Closed ||
+        (self->backend_ && !self->backend_->session()->hostIsRunning() &&
+         target->lifecycleState() == GeckoSessionView::State::Lost);
+    if (ceased) { finish(true); return; }
+    if (status == QLatin1String("completed")) { awaitClosure(); return; }
+    if (status != QLatin1String("rejected") ||
+        result.value(QStringLiteral("code")).toString() != QLatin1String("beforeunload-confirmation-required") ||
+        result.value(QStringLiteral("documentId")).toString() != document || target->documentId() != document ||
+        !self->backend_) { finish(false); return; }
+    // Confirmation may enter a nested loop, navigate, or delete this widget.
+    const bool confirmed = self->backend_->confirmDiscard(self, self->title());
+    if (!self) return;
+    if (!confirmed || !target || self->view_ != target || target->generation() != generation ||
+        target->documentId() != document || target->lifecycleState() == GeckoSessionView::State::Lost) {
+      finish(false); return;
     }
-    // The page has unsaved changes: the user decides, bound to this document.
-    const QString document = self->view_ ? self->view_->documentId() : QString();
-    if (!self->backend_ || !self->view_ || !self->backend_->confirmDiscard(self, self->title())) {
-      self->closing_ = false;
-      done(false);
-      return;
-    }
-    GeckoRequest *discard = self->view_->close(true, document);
-    connect(discard, &GeckoRequest::finished, self.data(), [self, done](const QString &status, const QJsonObject &) {
-      if (!self) return;
-      self->closing_ = status == QLatin1String("completed");
-      // A different document by now ("stale-document"): keep the tab.
-      done(status == QLatin1String("completed"));
+    GeckoRequest *discard = target->close(true, document);
+    if (!discard) { finish(false); return; }
+    connect(discard, &GeckoRequest::finished, self.data(),
+            [finish, awaitClosure](const QString &status, const QJsonObject &) {
+      if (status == QLatin1String("completed")) awaitClosure();
+      else finish(false);
     });
   });
 }

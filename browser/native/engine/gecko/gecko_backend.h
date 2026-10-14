@@ -13,6 +13,7 @@
 namespace dalinira::engine {
 
 class GeckoEngineView;
+class GeckoRequest;
 class GeckoPresentationSurface;
 class GeckoSession;
 class GeckoSessionView;
@@ -65,14 +66,19 @@ class GeckoBackend : public EngineBackend {
 
   // The next createView() shows this host tab (one a page opened).
   void adoptHostTab(const QString &tabId) { adoptNext_ = tabId; }
-  // At exit: closes the host, discarding unsaved documents (the browser is
-  // quitting), waits up to `timeoutMs` and removes its whole process tree.
+  // Guarded session shutdown, separate from final resource cleanup.
+  void requestShutdown(QWidget *parent, std::function<void(bool)> done);
+  // At exit: guarded shutdown, then bounded cleanup only after acceptance.
   bool shutdownHost(int timeoutMs);
 
   void setDiscardConfirmation(DiscardConfirmation confirmation) { confirmation_ = std::move(confirmation); }
   bool confirmDiscard(QWidget *parent, const QString &title) const;
 
+ protected:
+  bool eventFilter(QObject *watched, QEvent *event) override;
+
  private:
+  bool shutdownPending_ = false;
   friend class GeckoEngineView;
   friend class GeckoShortcutRouter;
   void registerView(GeckoEngineView *view);
@@ -80,7 +86,7 @@ class GeckoBackend : public EngineBackend {
   // A host tab no view shows yet for `view` (its adopted tab, else the host's
   // own first tab); null: create one.
   GeckoSessionView *takeHostTab(GeckoEngineView *view);
-  void expectCreatedTab(const QString &requestId, GeckoEngineView *view);
+  void expectCreatedTab(GeckoRequest *request, GeckoEngineView *view);
   void onViewCreated(GeckoSessionView *view, const QString &source);
   GeckoEngineView *viewShowing(const QString &tabId) const;
 
