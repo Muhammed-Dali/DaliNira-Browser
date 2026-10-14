@@ -42,7 +42,17 @@ class GeckoHostProcess : public QObject {
     QString socketPath;    // GeckoIpcServer
     QString tokenFile;     // GeckoIpcServer
     Display display = Display::X11;
+    // The Gecko profile to keep across launches: created private (0700), or
+    // an existing private directory of this user. Empty: a fresh profile in
+    // the run directory. Its user.js is DaliNira's (marked) and rewritten at
+    // every launch; a user.js DaliNira did not write is left alone and the
+    // launch refused, as is a profile another Gecko holds.
+    QString profileDirectory;
+    // The host's output; empty: <run directory>/host-output.log. Private (0600).
+    QString logFile;
   };
+
+  static constexpr char kUserJsMarker[] = "// Written by DaliNira for its Gecko host at every launch.\n";
 
   struct ProcessId {
     qint64 pid = 0;

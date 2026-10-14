@@ -51,6 +51,10 @@ class EngineView : public QWidget {
   // mechanism stay Active and refuse other states.
   virtual TabLifecycleState lifecycleState() const { return TabLifecycleState::Active; }
   virtual bool setLifecycleState(TabLifecycleState state) { return state == TabLifecycleState::Active; }
+  // Asks whether the tab may close. Engines whose pages can veto it (an
+  // unsaved document's beforeunload) answer later, after asking the user;
+  // the default allows it at once, from within this call.
+  virtual void requestClose(std::function<void(bool allowed)> done) { done(true); }
   // Whether the page is currently producing sound.
   virtual bool isAudible() const { return false; }
   // A modal page dialog (alert/confirm/prompt/beforeunload) is open.

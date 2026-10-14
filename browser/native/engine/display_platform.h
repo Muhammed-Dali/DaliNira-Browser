@@ -22,6 +22,10 @@ namespace dalinira::engine {
 //   X server; a native Wayland surface cannot host a foreign GTK window. On a
 //   Wayland session WebKit therefore always runs through XWayland, and when
 //   the session has no XWayland at all WebKit is unavailable.
+//
+//   Gecko (experimental) runs in a separate host process whose X11 window is
+//   embedded into a Qt window: Qt on xcb, XWayland on Wayland sessions, and
+//   unavailable without an X server, as WebKit.
 enum class DisplayServer { X11, Wayland, Unknown };
 
 struct DisplayEnvironment {

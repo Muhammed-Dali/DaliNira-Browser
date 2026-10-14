@@ -45,6 +45,11 @@ class EngineResolver {
 
     // 2. Otherwise persisted DaliNira engine preference
     if (const auto persisted = parseEngineKey(getPersistedEngine())) {
+      // Gecko is experimental: only --engine gecko starts it.
+      if (*persisted == EngineType::Gecko) {
+        qWarning() << "The Gecko engine is experimental: start it with --engine gecko. Starting Chromium.";
+        return resolution(EngineType::Chromium, EngineResolutionSource::Settings);
+      }
       if (!isBuilt(*persisted)) {
         qWarning().noquote() << QStringLiteral("%1 backend persisted in settings, but DaliNira was compiled without %1 support. Falling back to Chromium.")
                                     .arg(engineTypeName(*persisted));
@@ -57,9 +62,8 @@ class EngineResolver {
     return resolution(EngineType::Chromium, EngineResolutionSource::Default);
   }
 
-  // Whether this build has the engine's backend. Gecko is not a backend yet:
-  // DALINIRA_BUILD_GECKO is never defined (DALINIRA_ENABLE_GECKO builds only
-  // the separate adapter library), so Gecko always falls back to Chromium.
+  // Whether this build has the engine's backend. Gecko's exists with
+  // DALINIRA_ENABLE_GECKO (it defines DALINIRA_BUILD_GECKO).
   static constexpr bool isBuilt(EngineType engine) {
     switch (engine) {
       case EngineType::Chromium:

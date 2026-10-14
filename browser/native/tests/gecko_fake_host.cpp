@@ -13,7 +13,8 @@
 // beforeunload handler; ".../silent" is never answered; ".../stale" is
 // answered twice, first for a request id nobody sent; ".../wrong-command"
 // is answered as another command; ".../break-sequence" sends an event out of
-// sequence; ".../exit" ends the host.
+// sequence; ".../exit" ends the host; ".../open-popup" opens a tab of its
+// own (source "content", with its opener) at http://fake.test/popup.
 
 #include <QCoreApplication>
 #include <QDir>
@@ -127,7 +128,7 @@ class FakeHost : public QObject {
     send({{"type", "progress"}, {"tabId", tab.id}, {"phase", "stop"}, {"value", 1}, {"status", "0x0"}, {"ok", true}});
   }
 
-  Tab &createTab(const QString &url, const QString &source, const QString &requestId) {
+  Tab &createTab(const QString &url, const QString &source, const QString &requestId, const QString &opener = {}) {
     Tab tab;
     tab.id = QStringLiteral("tab-") + randomHex(16);
     tab.documentId = randomHex(8);
@@ -136,6 +137,7 @@ class FakeHost : public QObject {
     QJsonObject created{{"type", "tab-created"}, {"tabId", tab.id}, {"url", tab.url}, {"title", ""},
                         {"loading", false}, {"active", false}, {"source", source}};
     if (!requestId.isEmpty()) created.insert(QStringLiteral("requestId"), requestId);
+    if (!opener.isEmpty()) created.insert(QStringLiteral("openerTabId"), opener);
     send(created);
     Tab &stored = tabs_[tab.id];
     if (!url.isEmpty()) navigate(stored, url);
@@ -235,6 +237,10 @@ class FakeHost : public QObject {
       tab.back.append(tab.url);
       ack(message, tabId);
       navigate(tab, url);
+      if (url.endsWith(QLatin1String("/open-popup"))) {
+        const QString popup = createTab(QStringLiteral("http://fake.test/popup"), QStringLiteral("content"), {}, tabId).id;
+        activate(popup);
+      }
     } else if (type == QLatin1String("back") || type == QLatin1String("forward")) {
       Tab &tab = tabs_[tabId];
       QStringList &from = type == QLatin1String("back") ? tab.back : tab.forward;

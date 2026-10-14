@@ -323,7 +323,7 @@ void BrowserWindow::onTabContextMenuRequested(int index, const QPoint &globalPos
 
   // 4. Sekmeyi yeni pencereye taşı
   QAction *moveWindow = menu.addAction(BrowserIcons::icon(BrowserIcon::Window), I18n::text(QStringLiteral("tab.context.move_to_new_window")));
-  moveWindow->setEnabled(tabs_.size() > 1);
+  moveWindow->setEnabled(tabs_.size() > 1 && canMoveTabToAnotherWindow(tabId));
   connect(moveWindow, &QAction::triggered, this, [this, tabId] {
     auto *newWin = createWindow(services_);
     newWin->show();

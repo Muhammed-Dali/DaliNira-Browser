@@ -182,6 +182,7 @@ public:
                 const QString &initialTitle = QString{});
   int addInternalTab(QWidget *page, const QString &title, const QIcon &icon,
                      const QString &internalId, int insertIndex = -1);
+  // Closes the tab once its page allows it (see EngineView::requestClose).
   void closeTab(int index);
   void restoreLastClosedTab();
   void switchTab(int index);
@@ -192,6 +193,9 @@ public:
                      int targetIndex);
   void adoptTab(BrowserTabInfo info, int targetIndex);
   int findIndexByTabId(uint64_t tabId) const;
+  // Whether the tab's page can move to another window. The experimental
+  // Gecko engine presents one window only.
+  bool canMoveTabToAnotherWindow(uint64_t tabId) const;
   int indexOfEngineView(const dalinira::engine::EngineView *view) const;
   uint64_t findTabIdByIndex(int index) const;
 
@@ -482,6 +486,7 @@ private:
   bool isSwitchingTab_ = false;
   bool adoptingEnginePopup_ = false;  // addNewTab() for a page-opened WebKit popup: WebKit loads it
   void closeTabForWindowClose(uint64_t tabId);
+  void closeTabNow(int index);
   QList<BrowserTabInfo> tabs_;
 
   dalinira::engine::EngineType currentWorkspaceEngine_ = dalinira::engine::EngineType::Chromium;

@@ -184,6 +184,7 @@ bool GeckoSession::start(const Config &config, QString *error) {
   if (!privateRoot(config.runtimeRoot, error) || !privateRoot(ipcRoot, error)) return false;
 
   if (host_ || ipc_) stopHost(0);
+  runtimeRoot_ = QDir::cleanPath(config.runtimeRoot);
   stopping_ = false;
   ++generation_;
   requestNumber_ = 0;
@@ -200,6 +201,7 @@ bool GeckoSession::start(const Config &config, QString *error) {
                 .arg(randomId(8));
   if (::mkdir(QFile::encodeName(runDir_).constData(), 0700) != 0) {
     *error = QStringLiteral("cannot create the run directory %1").arg(runDir_);
+    runDir_.clear();
     state_ = State::Stopped;
     return false;
   }
@@ -213,6 +215,7 @@ bool GeckoSession::start(const Config &config, QString *error) {
           [this, generation](const QString &why) { loseSession(generation, why); });
   if (!ipc_->listen(QDir::cleanPath(ipcRoot) + QStringLiteral("/dalinira-gecko-") + randomId(16), error)) {
     ipc_->shutdown();
+    removeRunDirectory();
     state_ = State::Stopped;
     return false;
   }
@@ -232,8 +235,11 @@ bool GeckoSession::start(const Config &config, QString *error) {
   launch.socketPath = ipc_->socketPath();
   launch.tokenFile = ipc_->tokenFilePath();
   launch.display = config.display;
+  launch.profileDirectory = config.profileDirectory;
+  launch.logFile = config.logFile;
   if (!host_->start(launch, error)) {
     ipc_->shutdown();
+    removeRunDirectory();
     state_ = State::Stopped;
     return false;
   }
@@ -476,7 +482,24 @@ QJsonObject GeckoSession::stopHost(int graceMs) {
     host_->deleteLater();
     host_ = nullptr;
   }
+  removeRunDirectory();
   return result;
+}
+
+void GeckoSession::removeRunDirectory() {
+  if (runDir_.isEmpty()) return;
+  const QString directory = runDir_;
+  runDir_.clear();
+  // Only the directory start() made: directly in the runtime root, a real
+  // directory of this user (QDir::removeRecursively does not follow links).
+  struct stat st {};
+  if (QFileInfo(directory).path() != runtimeRoot_ ||
+      ::lstat(QFile::encodeName(directory).constData(), &st) != 0 || !S_ISDIR(st.st_mode) ||
+      st.st_uid != ::getuid()) {
+    qCWarning(lcGeckoSession) << "left the run directory alone:" << directory;
+    return;
+  }
+  if (!QDir(directory).removeRecursively()) qCWarning(lcGeckoSession) << "could not remove" << directory;
 }
 
 }  // namespace dalinira::engine

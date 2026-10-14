@@ -28,6 +28,7 @@
 
 #include <csignal>
 #include <cstdlib>
+#include <fcntl.h>
 #include <functional>
 #include <iostream>
 #include <sys/stat.h>
@@ -677,6 +678,83 @@ void checkSession(const Paths &paths) {
   std::cout << "PASS session lifecycle against the fake host" << std::endl;
 }
 
+// A profile kept across launches: created private, reused, never deleted;
+// DaliNira's user.js only; not started while another Gecko holds it.
+void checkPersistentProfile(const QString &base, const Paths &paths) {
+  const QString profile = base + QStringLiteral("/kept-profile");
+  const QString log = base + QStringLiteral("/host.log");
+  GeckoSession::Config config = sessionConfig(paths);
+  config.profileDirectory = profile;
+  config.logFile = log;
+  QString error;
+  {
+    GeckoSession session;
+    if (!session.start(config, &error)) std::cout << error.toStdString() << std::endl;
+    CHECK(waitUntil([&] { return session.state() == GeckoSession::State::Ready; }));
+    CHECK(modeOf(profile) == 0700 && modeOf(log) == 0600 && modeOf(profile + QStringLiteral("/user.js")) == 0600);
+    QFile userJs(profile + QStringLiteral("/user.js"));
+    CHECK(userJs.open(QIODevice::ReadOnly));
+    const QByteArray content = userJs.readAll();
+    CHECK(content.startsWith(GeckoHostProcess::kUserJsMarker) && content.contains("browser.policies.alternatePath"));
+    QFile report(profile + QStringLiteral("/fake-host-report.json"));
+    CHECK(waitUntil([&] { return report.exists(); }) && report.open(QIODevice::ReadOnly));
+    CHECK(QJsonDocument::fromJson(report.readAll()).object().value("arguments").toArray().contains(profile));
+    const QString run = session.runDirectory();
+    CHECK(QFileInfo(run).isDir() && !run.startsWith(profile));
+    result(session.shutdown());
+    session.stopHost(3000);
+    CHECK(!QFileInfo::exists(run) && QFileInfo(profile + QStringLiteral("/user.js")).isFile());
+    CHECK(QDir(paths.runtimeRoot).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty());
+  }
+  // Reused at the next launch: nothing of it is removed.
+  CHECK(writeFile(profile + QStringLiteral("/kept.txt"), "user data", kFileMode));
+  {
+    GeckoSession session;
+    CHECK(session.start(config, &error));
+    CHECK(waitUntil([&] { return session.state() == GeckoSession::State::Ready; }));
+    result(session.shutdown());
+    session.stopHost(3000);
+  }
+  CHECK(QFileInfo(profile + QStringLiteral("/kept.txt")).isFile());
+
+  // A user.js DaliNira did not write stays as it is; the launch is refused.
+  QFile ours(profile + QStringLiteral("/user.js"));
+  CHECK(ours.open(QIODevice::ReadOnly));
+  const QByteArray oursContent = ours.readAll();
+  ours.close();
+  const QByteArray foreign = "user_pref(\"someone.else\", true);\n";
+  CHECK(writeFile(profile + QStringLiteral("/user.js"), foreign, QFile::ReadOwner | QFile::WriteOwner));
+  {
+    GeckoSession session;
+    CHECK(!session.start(config, &error) && error.contains(QStringLiteral("not written by DaliNira")));
+    QFile kept(profile + QStringLiteral("/user.js"));
+    CHECK(kept.open(QIODevice::ReadOnly) && kept.readAll() == foreign);
+  }
+  CHECK(writeFile(profile + QStringLiteral("/user.js"), oursContent, QFile::ReadOwner | QFile::WriteOwner));
+
+  // A profile another Gecko holds (its lock on .parentlock) is not started.
+  {
+    QProcess holder;
+    holder.setProgram(QCoreApplication::applicationFilePath());
+    holder.setArguments({QStringLiteral("--hold-lock"), profile + QStringLiteral("/.parentlock")});
+    holder.start();
+    CHECK(holder.waitForStarted(5000) && holder.waitForReadyRead(5000) && holder.readLine().trimmed() == "locked");
+    GeckoSession session;
+    CHECK(!session.start(config, &error) && error.contains(QStringLiteral("in use")));
+    holder.kill();
+    holder.waitForFinished(5000);
+  }
+  // A profile others could read is refused.
+  CHECK(::chmod(QFile::encodeName(profile).constData(), 0755) == 0);
+  {
+    GeckoSession session;
+    CHECK(!session.start(config, &error) && error.contains(QStringLiteral("not a private directory")));
+  }
+  CHECK(::chmod(QFile::encodeName(profile).constData(), 0700) == 0);
+  CHECK(QDir(paths.runtimeRoot).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty());
+  std::cout << "PASS persistent profile" << std::endl;
+}
+
 // The host never outlives its parent: a helper process starts a session and
 // is killed.
 void checkOrphanPrevention(const QString &base, const Paths &paths) {
@@ -720,6 +798,16 @@ int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
   const QStringList args = app.arguments().mid(1);
   if (args.size() == 5 && args.first() == QLatin1String("--orphan-parent")) return orphanParent(args.mid(1));
+  if (args.size() == 2 && args.first() == QLatin1String("--hold-lock")) {
+    // Holds a write lock on the file, as a running Gecko holds .parentlock.
+    const int fd = ::open(QFile::encodeName(args.at(1)).constData(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+    struct flock lock {};
+    lock.l_type = F_WRLCK;
+    lock.l_whence = SEEK_SET;
+    if (fd < 0 || ::fcntl(fd, F_SETLKW, &lock) != 0) return 2;
+    std::cout << "locked" << std::endl;
+    for (;;) ::pause();
+  }
 
   QTemporaryDir root;
   CHECK(root.isValid());
@@ -733,6 +821,7 @@ int main(int argc, char *argv[]) {
   checkEmbedderWithoutXcb();
   checkSessionRefusals(base, paths);
   checkSession(paths);
+  checkPersistentProfile(base, paths);
   checkOrphanPrevention(base, paths);
   std::cout << "=== ALL GECKO ADAPTER TESTS PASSED ===" << std::endl;
   return 0;

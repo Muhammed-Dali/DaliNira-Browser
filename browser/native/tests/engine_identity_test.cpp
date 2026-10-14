@@ -293,10 +293,14 @@ void checkResolve() {
 #else
   const EngineType webkitOrFallback = EngineType::Chromium;
 #endif
+#if defined(DALINIRA_BUILD_GECKO)
+  const EngineType geckoOrFallback = EngineType::Gecko;
+#else
+  const EngineType geckoOrFallback = EngineType::Chromium;
+#endif
   CHECK(EngineResolver::isBuilt(EngineType::Chromium));
   CHECK(EngineResolver::isBuilt(EngineType::WebKit) == (webkitOrFallback == EngineType::WebKit));
-  // No Gecko backend exists yet.
-  CHECK(!EngineResolver::isBuilt(EngineType::Gecko));
+  CHECK(EngineResolver::isBuilt(EngineType::Gecko) == (geckoOrFallback == EngineType::Gecko));
 
   // Nothing stored reads as the stored default, "chromium": a Settings
   // resolution. Only an unknown stored key resolves as Default (below).
@@ -314,16 +318,17 @@ void checkResolve() {
   // An unknown --engine value starts Chromium (resolvePure ignores it instead).
   CHECK(sameResolution(EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral("blink")})),
                        expected(EngineType::Chromium, EngineResolutionSource::CliOverride)));
-  // --engine gecko starts Chromium while Gecko is not built.
+  // --engine gecko starts Gecko where it is built, Chromium elsewhere.
   CHECK(sameResolution(EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral(" Gecko ")})),
-                       expected(EngineType::Chromium, EngineResolutionSource::CliOverride)));
+                       expected(geckoOrFallback, EngineResolutionSource::CliOverride)));
 
   EngineResolver::setPersistedEngine(QStringLiteral("chromium"));
   CHECK(sameResolution(EngineResolver::resolve(commandLine({QStringLiteral("--engine"), QStringLiteral(" webkit ")})),
                        expected(webkitOrFallback, EngineResolutionSource::CliOverride)));
   CHECK(sameResolution(EngineResolver::resolve(plain), expected(EngineType::Chromium, EngineResolutionSource::Settings)));
 
-  // A stored Gecko is kept, and starts Chromium while Gecko is not built.
+  // A stored Gecko is kept, but starts Chromium: Gecko is experimental, only
+  // --engine gecko starts it (and Settings never stores it).
   EngineResolver::setPersistedEngine(QStringLiteral(" GECKO "));
   CHECK(EngineResolver::getPersistedEngine() == QStringLiteral("gecko"));
   CHECK(sameResolution(EngineResolver::resolve(plain), expected(EngineType::Chromium, EngineResolutionSource::Settings)));

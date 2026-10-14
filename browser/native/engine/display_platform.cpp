@@ -66,6 +66,26 @@ DisplayPlan planDisplay(EngineType engine, const DisplayEnvironment &environment
     return plan;
   }
 
+  // Gecko runs in its own host process, whose X11 window is embedded into a
+  // Qt window: Qt must be on the same X server (XWayland on Wayland sessions).
+  if (engine == EngineType::Gecko) {
+    if (requested == "offscreen" || requested == "minimal") return plan;  // headless tooling
+    if (!hasX11) {
+      plan.engineSupported = false;
+      addNote(plan, QStringLiteral("Gecko needs an X11 display (XWayland on Wayland sessions); none is available."));
+      return plan;
+    }
+    if (requested != "xcb") {
+      plan.qpaPlatform = "xcb";
+      if (!requested.isEmpty())
+        addNote(plan, QStringLiteral("Gecko pages are embedded through X11; using xcb instead of QT_QPA_PLATFORM=%1.")
+                          .arg(QString::fromLatin1(environment.qpaPlatform)));
+    }
+    // Qt's GTK dialogs on the same X server (the host chooses its own backend).
+    if (environment.gdkBackend.isEmpty()) plan.gdkBackend = "x11";
+    return plan;
+  }
+
   // Chromium: honour an explicit platform choice; otherwise prefer XWayland on
   // a Wayland session when it exists, and let Qt pick (native Wayland) when not.
   QByteArray platform = requested;
