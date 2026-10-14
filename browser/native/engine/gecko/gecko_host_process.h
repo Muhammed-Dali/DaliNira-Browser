@@ -50,6 +50,9 @@ class GeckoHostProcess : public QObject {
     QString profileDirectory;
     // The host's output; empty: <run directory>/host-output.log. Private (0600).
     QString logFile;
+    // Tests only: the host accepts "test_key", which types into its focused
+    // page as a keyboard would (DNG_TEST_INPUT=1). Never set by the browser.
+    bool testInput = false;
   };
 
   static constexpr char kUserJsMarker[] = "// Written by DaliNira for its Gecko host at every launch.\n";

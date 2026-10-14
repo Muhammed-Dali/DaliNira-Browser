@@ -46,12 +46,57 @@ const QSet<QString> &hostMessageTypes() {
       QStringLiteral("ack"), QStringLiteral("error"), QStringLiteral("content-crashed"),
       QStringLiteral("recovered"), QStringLiteral("tab-created"), QStringLiteral("tab-closed"),
       QStringLiteral("active-tab-changed"), QStringLiteral("tabs-list"),
-      QStringLiteral("session-state-lost"), QStringLiteral("view-close-requested"),
+      QStringLiteral("session-state-lost"), QStringLiteral("view-close-requested"), QStringLiteral("shortcut"),
   };
   return types;
 }
 
+const QSet<QString> &namedShortcutKeys() {
+  static const QSet<QString> keys = {
+      QStringLiteral("Tab"), QStringLiteral("Enter"), QStringLiteral("Escape"), QStringLiteral("Backspace"),
+      QStringLiteral("Delete"), QStringLiteral("Insert"), QStringLiteral("Home"), QStringLiteral("End"),
+      QStringLiteral("PageUp"), QStringLiteral("PageDown"), QStringLiteral("ArrowLeft"), QStringLiteral("ArrowRight"),
+      QStringLiteral("ArrowUp"), QStringLiteral("ArrowDown"), QStringLiteral("Space"),
+  };
+  return keys;
+}
+
+// As KeyboardShortcutService's reserved keys: they stay with the page.
+const QSet<QString> &reservedShortcuts() {
+  static const QSet<QString> reserved = [] {
+    QSet<QString> set;
+    for (const char *key : {"A", "C", "V", "X", "Y", "Z", "Insert", "Backspace", "Delete", "ArrowLeft", "ArrowRight",
+                            "ArrowUp", "ArrowDown", "Home", "End"})
+      set.insert(QStringLiteral("Ctrl+") + QLatin1String(key));
+    for (const char *key : {"Z", "V", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"})
+      set.insert(QStringLiteral("Ctrl+Shift+") + QLatin1String(key));
+    for (const char *shortcut : {"Shift+F10", "Alt+F4", "Alt+Tab", "Alt+Shift+Tab"}) set.insert(QLatin1String(shortcut));
+    return set;
+  }();
+  return reserved;
+}
+
 }  // namespace
+
+bool GeckoIpcServer::isValidShortcut(const QString &shortcut) {
+  static const QRegularExpression pattern(QStringLiteral("^(Ctrl\\+)?(Alt\\+)?(Shift\\+)?(.+)$"));
+  static const QRegularExpression functionKey(QStringLiteral("^F([1-9]|1[0-9]|2[0-4])$"));
+  if (shortcut.size() > 32 || reservedShortcuts().contains(shortcut)) return false;
+  const auto match = pattern.match(shortcut);
+  if (!match.hasMatch()) return false;
+  const bool ctrl = match.hasCaptured(1);
+  const bool alt = match.hasCaptured(2);
+  const bool shift = match.hasCaptured(3);
+  const QString key = match.captured(4);
+  const bool isFunctionKey = functionKey.match(key).hasMatch();
+  if ((!ctrl && !alt && !isFunctionKey) || (ctrl && alt)) return false;
+  if (isFunctionKey || namedShortcutKeys().contains(key)) return true;
+  // One printable ASCII character, upper case; Shift only with a letter or digit.
+  if (key.size() != 1) return false;
+  const char16_t c = key.front().unicode();
+  if (c < u'!' || c > u'~' || (c >= u'a' && c <= u'z')) return false;
+  return (c >= u'A' && c <= u'Z') || (c >= u'0' && c <= u'9') || !shift;
+}
 
 GeckoIpcServer::GeckoIpcServer(QObject *parent) : QObject(parent) {
   server_.setSocketOptions(QLocalServer::UserAccessOption);
@@ -230,7 +275,8 @@ bool GeckoIpcServer::handleFrame(const QByteArray &payload) {
   static const QSet<QString> tabEvents = {
       QStringLiteral("state"), QStringLiteral("progress"), QStringLiteral("load-error"),
       QStringLiteral("content-crashed"), QStringLiteral("recovered"), QStringLiteral("tab-created"),
-      QStringLiteral("tab-closed"), QStringLiteral("active-tab-changed"), QStringLiteral("view-close-requested")};
+      QStringLiteral("tab-closed"), QStringLiteral("active-tab-changed"), QStringLiteral("view-close-requested"),
+      QStringLiteral("shortcut")};
   bool valid = !tabEvents.contains(type) || validTabId(msg.value(QStringLiteral("tabId")));
   const auto stringOrNull = [&](const char *key) {
     const auto value = msg.value(QString::fromLatin1(key));
@@ -277,6 +323,8 @@ bool GeckoIpcServer::handleFrame(const QByteArray &payload) {
             boolean("loading") && boolean("active") && msg.value(QStringLiteral("source")).isString();
   } else if (type == QLatin1String("window-tagged")) {
     valid = msg.value(QStringLiteral("tag")).toString() == windowTag_;
+  } else if (type == QLatin1String("shortcut")) {
+    valid = valid && isValidShortcut(msg.value(QStringLiteral("shortcut")).toString()) && boolean("repeat");
   } else if (type == QLatin1String("focus")) {
     valid = boolean("active") && msg.value(QStringLiteral("reason")).isString();
   } else if (type == QLatin1String("geometry")) {

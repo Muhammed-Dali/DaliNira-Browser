@@ -678,6 +678,78 @@ void checkSession(const Paths &paths) {
   std::cout << "PASS session lifecycle against the fake host" << std::endl;
 }
 
+// Browser shortcuts: the names both sides accept, the host keeping the keys
+// of the set it was given (and only those) from its pages, the test-only key
+// input only when asked for, and a malformed report ending the session.
+void checkShortcuts(const Paths &paths) {
+  for (const char *name : {"Ctrl+T", "Ctrl+Shift+Tab", "Alt+ArrowLeft", "F5", "Shift+F3", "Ctrl++", "Ctrl+=", "Ctrl+1",
+                           "Alt+Shift+P", "Ctrl+PageDown", "Alt+Home", "F11", "Ctrl+Shift+T"})
+    CHECK(GeckoIpcServer::isValidShortcut(QLatin1String(name)));
+  // Plain or Shift-only keys, AltGr, editing and window-manager keys, other
+  // spellings and orders, symbols with Shift, non-ASCII keys.
+  for (const char *name : {"T", "Shift+T", "Ctrl+Alt+Q", "Ctrl+C", "Ctrl+V", "Ctrl+A", "Ctrl+Z", "Ctrl+Shift+Z",
+                           "Ctrl+ArrowLeft", "Alt+F4", "Alt+Tab", "Shift+F10", "Ctrl+t", "Ctrl+Shift++", "Shift+Ctrl+T",
+                           "Ctrl+", "", "Meta+T", "Ctrl+F25", "Ctrl+Tab+X", "Ctrl+Space+", "Ctrl+\xc3\x96"})
+    CHECK(!GeckoIpcServer::isValidShortcut(QString::fromUtf8(name)));
+
+  GeckoSession session;
+  GeckoSession::Config config = sessionConfig(paths);
+  config.testInput = true;
+  QString error;
+  CHECK(session.start(config, &error));
+  CHECK(waitUntil([&] { return session.state() == GeckoSession::State::Ready; }));
+  CHECK(launchReport(session).value("environment").toObject().value("DNG_TEST_INPUT") == "1");
+  QStringList pressed;
+  QObject::connect(&session, &GeckoSession::shortcutPressed, [&](const QString &tab, const QString &name, bool repeat) {
+    pressed << tab + QLatin1Char(' ') + name + (repeat ? QStringLiteral(" repeat") : QString());
+  });
+  // Refused before anything is sent: one invalid name spoils the set.
+  int sent = 0;
+  QObject::connect(&session, &GeckoSession::requestSent, [&] { ++sent; });
+  CHECK(result(session.setShortcuts({QStringLiteral("Ctrl+T"), QStringLiteral("Ctrl+C")}), "rejected").value("code") ==
+        "invalid-shortcuts");
+  CHECK(sent == 0);
+  result(session.setShortcuts({QStringLiteral("Ctrl+T"), QStringLiteral("Ctrl+Shift+Tab"), QStringLiteral("Alt+ArrowLeft")}));
+  View *page = session.view(session.activeTabId());
+  result(page->load(QUrl(QStringLiteral("http://fake.test/keys"))));
+  loaded(page, "/keys");
+  const auto type = [&](const QString &key, const QStringList &modifiers) {
+    return session.submit(QStringLiteral("test_key"), {{QStringLiteral("tabId"), page->tabId()}, {QStringLiteral("key"), key},
+                                                     {QStringLiteral("code"), QString()},
+                                                     {QStringLiteral("modifiers"), QJsonArray::fromStringList(modifiers)}});
+  };
+  result(type(QStringLiteral("t"), {QStringLiteral("Control")}));
+  result(type(QStringLiteral("Tab"), {QStringLiteral("Control"), QStringLiteral("Shift")}));
+  result(type(QStringLiteral("c"), {QStringLiteral("Control")}));
+  result(type(QStringLiteral("a"), {}));
+  CHECK(waitUntil([&] { return page->title() == QStringLiteral("keys:Ctrl+C,A"); }));
+  CHECK(pressed == QStringList({page->tabId() + QStringLiteral(" Ctrl+T"), page->tabId() + QStringLiteral(" Ctrl+Shift+Tab")}));
+  // A new set replaces the old one.
+  result(session.setShortcuts({QStringLiteral("Alt+ArrowLeft")}));
+  result(type(QStringLiteral("t"), {QStringLiteral("Control")}));
+  result(type(QStringLiteral("ArrowLeft"), {QStringLiteral("Alt")}));
+  CHECK(waitUntil([&] { return page->title() == QStringLiteral("keys:Ctrl+C,A,Ctrl+T"); }));
+  CHECK(pressed.size() == 3 && pressed.last() == page->tabId() + QStringLiteral(" Alt+ArrowLeft"));
+  // A report that is no browser shortcut ends the session.
+  bool lost = false;
+  QObject::connect(&session, &GeckoSession::disconnected, [&](const QString &why) {
+    lost = why.contains(QStringLiteral("invalid shortcut event"));
+  });
+  page->load(QUrl(QStringLiteral("http://fake.test/bad-shortcut")));
+  CHECK(waitUntil([&] { return lost && session.state() == GeckoSession::State::Disconnected; }));
+  CHECK(pressed.size() == 3);
+  session.stopHost(1000);
+
+  // Without testInput, the host has no key input at all.
+  startReady(session, paths);
+  CHECK(!launchReport(session).value("environment").toObject().contains("DNG_TEST_INPUT"));
+  page = session.view(session.activeTabId());
+  CHECK(result(type(QStringLiteral("a"), {}), "rejected").value("code") == "unknown-command");
+  result(session.shutdown(true, session.documentSnapshot()));
+  session.stopHost(3000);
+  std::cout << "PASS shortcuts kept from the page and reported; key input for tests only" << std::endl;
+}
+
 // A profile kept across launches: created private, reused, never deleted;
 // DaliNira's user.js only; not started while another Gecko holds it.
 void checkPersistentProfile(const QString &base, const Paths &paths) {
@@ -821,6 +893,7 @@ int main(int argc, char *argv[]) {
   checkEmbedderWithoutXcb();
   checkSessionRefusals(base, paths);
   checkSession(paths);
+  checkShortcuts(paths);
   checkPersistentProfile(base, paths);
   checkOrphanPrevention(base, paths);
   std::cout << "=== ALL GECKO ADAPTER TESTS PASSED ===" << std::endl;

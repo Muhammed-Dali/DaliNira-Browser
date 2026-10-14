@@ -14,7 +14,14 @@
 // answered twice, first for a request id nobody sent; ".../wrong-command"
 // is answered as another command; ".../break-sequence" sends an event out of
 // sequence; ".../exit" ends the host; ".../open-popup" opens a tab of its
-// own (source "content", with its opener) at http://fake.test/popup.
+// own (source "content", with its opener) at http://fake.test/popup;
+// ".../bad-shortcut" reports a shortcut that is no shortcut;
+// ".../shortcut-from-background" reports Ctrl+T for that tab, active or not.
+//
+// Keys: "set_shortcuts" as the real host; with DNG_TEST_INPUT=1, "test_key"
+// is a key typed into the tab: a key of the shortcut set is reported as a
+// "shortcut" event of that tab, any other key goes to the page, whose title
+// then lists the keys it received ("keys:Ctrl+C,A").
 
 #include <QCoreApplication>
 #include <QDir>
@@ -28,6 +35,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRandomGenerator>
+#include <QSet>
 #include <QtEndian>
 
 #include <csignal>
@@ -51,6 +59,7 @@ struct Tab {
   QStringList forward;
   bool dirty = false;
   bool crashed = false;
+  QStringList typed;  // keys the page received
 };
 
 class FakeHost : public QObject {
@@ -112,7 +121,8 @@ class FakeHost : public QObject {
   }
 
   void sendState(const Tab &tab) {
-    send({{"type", "state"}, {"tabId", tab.id}, {"url", tab.url}, {"title", tab.url.section('/', -1)},
+    const QString title = tab.typed.isEmpty() ? tab.url.section('/', -1) : QStringLiteral("keys:") + tab.typed.join(',');
+    send({{"type", "state"}, {"tabId", tab.id}, {"url", tab.url}, {"title", title},
           {"loading", false}, {"canGoBack", !tab.back.isEmpty()}, {"canGoForward", !tab.forward.isEmpty()},
           {"documentURI", tab.url}, {"contentPid", tab.crashed ? QJsonValue() : QJsonValue(contentPid())},
           {"remoteType", "webIsolated=http://fake.test"}, {"mediaPlaying", false}, {"mediaAudible", false},
@@ -123,6 +133,7 @@ class FakeHost : public QObject {
     tab.url = url;
     tab.documentId = randomHex(8);
     tab.dirty = url.contains(QLatin1String("/dirty"));
+    tab.typed.clear();
     send({{"type", "progress"}, {"tabId", tab.id}, {"phase", "start"}, {"value", 0}});
     sendState(tab);
     send({{"type", "progress"}, {"tabId", tab.id}, {"phase", "stop"}, {"value", 1}, {"status", "0x0"}, {"ok", true}});
@@ -237,6 +248,14 @@ class FakeHost : public QObject {
       tab.back.append(tab.url);
       ack(message, tabId);
       navigate(tab, url);
+      if (url.endsWith(QLatin1String("/shortcut-from-background"))) {
+        send({{"type", "shortcut"}, {"tabId", tabId}, {"shortcut", "Ctrl+T"}, {"repeat", false}});
+        return;
+      }
+      if (url.endsWith(QLatin1String("/bad-shortcut"))) {
+        send({{"type", "shortcut"}, {"tabId", tabId}, {"shortcut", "Ctrl+Alt+Q"}, {"repeat", false}});
+        return;
+      }
       if (url.endsWith(QLatin1String("/open-popup"))) {
         const QString popup = createTab(QStringLiteral("http://fake.test/popup"), QStringLiteral("content"), {}, tabId).id;
         activate(popup);
@@ -285,6 +304,31 @@ class FakeHost : public QObject {
       send({{"type", "tab-closed"}, {"tabId", tabId}});
       if (order_.isEmpty()) activate(createTab({}, QStringLiteral("embedder"), {}).id);
       else if (active_ == tabId) activate(order_.last());
+    } else if (type == QLatin1String("set_shortcuts")) {
+      const QJsonValue list = message.value(QStringLiteral("shortcuts"));
+      if (!list.isArray() || list.toArray().size() > 256) return error(message, QStringLiteral("invalid-argument"));
+      shortcuts_.clear();
+      for (const QJsonValue &shortcut : list.toArray()) shortcuts_.insert(shortcut.toString());
+      ack(message);
+    } else if (type == QLatin1String("test_key") && qEnvironmentVariable("DNG_TEST_INPUT") == QLatin1String("1")) {
+      // A simplified name (see keys.js for the real one): modifiers, then the
+      // key upper case; no Shift with a symbol.
+      Tab &tab = tabs_[tabId];
+      if (tabId != active_) return error(message, QStringLiteral("invalid-argument"));
+      const QStringList modifiers = message.value(QStringLiteral("modifiers")).toVariant().toStringList();
+      QString key = message.value(QStringLiteral("key")).toString();
+      if (key.size() == 1) key = key.toUpper();
+      const bool symbol = key.size() == 1 && !key.front().isLetterOrNumber();
+      const QString name = QString(modifiers.contains(QLatin1String("Control")) ? "Ctrl+" : "") +
+                           (modifiers.contains(QLatin1String("Alt")) ? "Alt+" : "") +
+                           (modifiers.contains(QLatin1String("Shift")) && !symbol ? "Shift+" : "") + key;
+      if (shortcuts_.contains(name)) {
+        send({{"type", "shortcut"}, {"tabId", tabId}, {"shortcut", name}, {"repeat", false}});
+      } else {
+        tab.typed.append(name);
+        sendState(tab);
+      }
+      ack(message, tabId);
     } else if (type == QLatin1String("cancel_request")) {
       send({{"type", "ack"}, {"command", "cancel_request"}, {"requestId", message.value("requestId")}, {"cancelled", false}});
     } else if (type == QLatin1String("shutdown")) {
@@ -313,6 +357,7 @@ class FakeHost : public QObject {
   QString active_;
   QHash<QString, Tab> tabs_;
   QStringList order_;
+  QSet<QString> shortcuts_;
   qint64 sequence_ = 0;
   qint64 commandSequence_ = 0;
   bool welcomed_ = false;

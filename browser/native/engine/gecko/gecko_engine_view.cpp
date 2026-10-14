@@ -203,6 +203,9 @@ void GeckoEngineView::setEngineActive(bool active) {
 void GeckoEngineView::present() {
   if (!backend_) return;
   backend_->surface()->present(this);
+  // Qt's focus may have reached this view before it showed the page (a tab
+  // switch hides the old view first).
+  if (hasFocus()) backend_->surface()->focusPage(this);
   if (view_ && view_->lifecycleState() != GeckoSessionView::State::Active) view_->setEngineActive(true);
 }
 
@@ -263,6 +266,14 @@ void GeckoEngineView::resizeEvent(QResizeEvent *event) {
 void GeckoEngineView::focusInEvent(QFocusEvent *event) {
   EngineView::focusInEvent(event);
   if (backend_) backend_->surface()->focusPage(this);
+}
+
+void GeckoEngineView::hideEvent(QHideEvent *event) {
+  // The page's window is unmapped with this view; while the page still holds
+  // the keyboard, the window's top level takes it (otherwise X11 already gave
+  // it to the nearest viewable window of DaliNira's).
+  if (backend_) backend_->surface()->viewHidden(this);
+  EngineView::hideEvent(event);
 }
 
 }  // namespace dalinira::engine

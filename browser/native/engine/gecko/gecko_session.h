@@ -148,6 +148,7 @@ class GeckoSession : public QObject {
     // fresh one per launch) and the host's log (empty: in the run directory).
     QString profileDirectory;
     QString logFile;
+    bool testInput = false;  // GeckoHostProcess::Config::testInput (tests only)
   };
 
   explicit GeckoSession(QObject *parent = nullptr);
@@ -172,6 +173,10 @@ class GeckoSession : public QObject {
   GeckoSessionView *view(const QString &id) const;
   GeckoRequest *createView(const QUrl &url = {}, bool activate = true);
   GeckoRequest *listViews();
+  // The browser shortcuts the host keeps from its pages and reports as
+  // shortcutPressed() instead (GeckoIpcServer::isValidShortcut; at most 256).
+  // Every call replaces the previous set; an invalid set is rejected here.
+  GeckoRequest *setShortcuts(const QStringList &shortcuts);
   GeckoRequest *submit(const QString &type, QJsonObject fields = {}, int timeoutMs = 5000);
   // Closes the whole host; with beforeunload documents open it needs
   // `discard` and documentSnapshot() of exactly the documents confirmed.
@@ -192,6 +197,9 @@ class GeckoSession : public QObject {
   void viewClosed(dalinira::engine::GeckoSessionView *view);
   void viewCreated(dalinira::engine::GeckoSessionView *view, const QString &source);
   void activeViewChanged(dalinira::engine::GeckoSessionView *view);
+  // A key of the set given to setShortcuts() was pressed in the tab's page;
+  // the page did not receive it.
+  void shortcutPressed(const QString &tabId, const QString &shortcut, bool repeat);
   void disconnected(const QString &reason);
   void sessionStateLost(const QJsonArray &views, const QString &reason);
   void hostExited(int exitCode, QProcess::ExitStatus status);

@@ -35,7 +35,13 @@ class GeckoPresentationSurface : public QObject {
   bool present(GeckoEngineView *view);
   bool isPresenting(const GeckoEngineView *view) const;
   void viewResized(GeckoEngineView *view);
+  // Keyboard focus follows Qt's focus widget: the page gets the X11 input
+  // focus while its view has Qt's focus (a click on the page gives the view
+  // Qt's focus), and Qt gets it back when Qt's focus moves to another widget
+  // of the window or the view is hidden. Only while the page holds the X11
+  // focus is it ever moved, so no other application loses the keyboard.
   void focusPage(GeckoEngineView *view);
+  void viewHidden(GeckoEngineView *view);
   void release(GeckoEngineView *view);
   QWidget *ownerWindow() const { return owner_; }
   // Where the host's window is in the X11 window tree (diagnostics, tests);
@@ -54,6 +60,8 @@ class GeckoPresentationSurface : public QObject {
   void park();
   QWidget *parking();
   void setStatus(const QString &status);
+  void returnKeyboardToQt();
+  void onFocusChanged(QWidget *old, QWidget *now);
 
   QPointer<GeckoSession> session_;
   GeckoX11Embedder *embedder_ = nullptr;

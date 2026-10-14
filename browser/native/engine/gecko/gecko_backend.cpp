@@ -15,6 +15,7 @@
 #include "engine/gecko/gecko_engine_view.h"
 #include "engine/gecko/gecko_presentation_surface.h"
 #include "engine/gecko/gecko_session.h"
+#include "engine/gecko/gecko_shortcut_router.h"
 
 Q_LOGGING_CATEGORY(lcGeckoBackend, "dalinira.gecko.backend")
 
@@ -44,6 +45,7 @@ bool ownDirectory(const QString &path, bool privateOnly, QString *error) {
 GeckoBackend::GeckoBackend(Config config, QObject *parent)
     : EngineBackend(parent), config_(std::move(config)), session_(new GeckoSession(this)) {
   surface_ = new GeckoPresentationSurface(session_, this);
+  shortcutRouter_ = new GeckoShortcutRouter(this);
   connect(session_, &GeckoSession::viewCreated, this, &GeckoBackend::onViewCreated);
   connect(session_, &GeckoSession::viewClosed, this, [this](GeckoSessionView *view) {
     spareTabs_.removeAll(view->tabId());
@@ -97,6 +99,7 @@ bool GeckoBackend::initialize(const EngineStorageManager &storage) {
   session.display = config_.display;
   session.profileDirectory = profileDirectory;
   session.logFile = dataDirectory_ + QStringLiteral("/host-output.log");
+  session.testInput = config_.testInput;
   if (!session_->start(session, &error)) {
     lastError_ = error;
     qCWarning(lcGeckoBackend) << "the Gecko host did not start:" << error;

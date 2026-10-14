@@ -53,6 +53,14 @@ class GeckoIpcServer : public QObject {
   int protocol() const { return authenticated_ ? kProtocol : 0; }
   bool isAuthenticated() const { return authenticated_; }
 
+  // A browser shortcut as DaliNira and the host name it: "Ctrl+T",
+  // "Ctrl+Shift+Tab", "Alt+ArrowLeft", "F5", "Ctrl++". Modifiers in that
+  // order, Ctrl or Alt (not both: AltGr) unless the key is F1-F24, one named
+  // key or one printable ASCII character (upper case); no Shift with a symbol
+  // (the symbol is the key). Text editing and window-manager keys are never
+  // shortcuts. browser/resources/gecko-host/chrome/content/keys.js agrees.
+  static bool isValidShortcut(const QString &shortcut);
+
   // Sends one command to the authenticated host; false if that is not possible.
   bool send(const QJsonObject &message);
   // Handles every frame the host already wrote (e.g. before it exited).

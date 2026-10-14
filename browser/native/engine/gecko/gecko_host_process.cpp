@@ -170,6 +170,7 @@ QProcessEnvironment GeckoHostProcess::environmentFor(const QProcessEnvironment &
   env.insert(QStringLiteral("DNG_START_URL"), QStringLiteral("about:blank"));
   env.insert(QStringLiteral("DNG_IPC_SOCKET"), config.socketPath);
   env.insert(QStringLiteral("DNG_IPC_TOKEN_FILE"), config.tokenFile);
+  if (config.testInput) env.insert(QStringLiteral("DNG_TEST_INPUT"), QStringLiteral("1"));
   if (config.display == Display::Headless) {
     env.remove(QStringLiteral("DISPLAY"));
     env.remove(QStringLiteral("XAUTHORITY"));
