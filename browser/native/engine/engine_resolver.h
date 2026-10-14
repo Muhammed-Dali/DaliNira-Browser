@@ -57,9 +57,9 @@ class EngineResolver {
     return resolution(EngineType::Chromium, EngineResolutionSource::Default);
   }
 
-  // Whether this build has the engine's backend. The Gecko backend does not
-  // exist yet: DALINIRA_BUILD_GECKO is never defined (CMake refuses
-  // DALINIRA_ENABLE_GECKO=ON), so Gecko always falls back to Chromium.
+  // Whether this build has the engine's backend. Gecko is not a backend yet:
+  // DALINIRA_BUILD_GECKO is never defined (DALINIRA_ENABLE_GECKO builds only
+  // the separate adapter library), so Gecko always falls back to Chromium.
   static constexpr bool isBuilt(EngineType engine) {
     switch (engine) {
       case EngineType::Chromium:

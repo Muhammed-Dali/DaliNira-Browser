@@ -1,0 +1,6 @@
+content dng chrome/content/
+
+# App Fluent source (resource://app/ is this directory). Firefox registers the
+# equivalent from browser/components/l10n-registry.manifest, which is not
+# loaded for this application.
+category l10n-registry 5-dng resource://app/localization/{locale}/ backgroundtask=0
