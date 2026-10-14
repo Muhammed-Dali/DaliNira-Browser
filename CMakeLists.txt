@@ -476,13 +476,63 @@ set(DALINIRA_BUILD_WEBKIT ${DALINIRA_BUILD_WEBKIT} CACHE INTERNAL
   "Whether the WebKit backend is compiled into DaliNira" FORCE)
 
 # Gecko is known as an engine identity ("gecko" workspace, --engine gecko),
-# but its backend does not exist yet: every Gecko request falls back to
-# Chromium. The option is reserved for the backend (M3-B2).
-option(DALINIRA_ENABLE_GECKO "Enable the Gecko backend (not implemented yet)" OFF)
+# but it is not a backend of the browser yet: DALINIRA_BUILD_GECKO is never
+# defined, so every Gecko request starts Chromium. DALINIRA_ENABLE_GECKO
+# builds only the separate Gecko adapter library (the out-of-process Gecko
+# host's launcher, authenticated IPC, session and X11 embedder) and its
+# tests; dalinira-browser neither compiles nor links any of it.
+option(DALINIRA_ENABLE_GECKO "Build the optional Gecko adapter library and its tests (not used by the browser yet)" OFF)
+set(DALINIRA_GECKO_DEVELOPMENT_RUNTIME "" CACHE PATH
+    "Development Gecko runtime (a Nightly objdir's dist/bin) for the Gecko host tests")
 if(DALINIRA_ENABLE_GECKO)
-  message(FATAL_ERROR
-    "DALINIRA_ENABLE_GECKO=ON: the Gecko backend is not implemented yet. "
-    "Configure with -DDALINIRA_ENABLE_GECKO=OFF.")
+  pkg_check_modules(DALINIRA_GECKO_XCB REQUIRED IMPORTED_TARGET xcb xcb-res)
+  set(DALINIRA_GECKO_HOST_APP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/browser/resources/gecko-host")
+  add_library(dalinira-gecko-adapter STATIC
+    browser/native/engine/gecko/gecko_runtime.cpp
+    browser/native/engine/gecko/gecko_runtime.h
+    browser/native/engine/gecko/gecko_host_process.cpp
+    browser/native/engine/gecko/gecko_host_process.h
+    browser/native/engine/gecko/gecko_ipc_server.cpp
+    browser/native/engine/gecko/gecko_ipc_server.h
+    browser/native/engine/gecko/gecko_session.cpp
+    browser/native/engine/gecko/gecko_session.h
+    browser/native/engine/gecko/gecko_x11_embedder.cpp
+    browser/native/engine/gecko/gecko_x11_embedder.h)
+  # Only what the adapter uses: not the directory-wide WebKit libraries.
+  set_property(TARGET dalinira-gecko-adapter PROPERTY LINK_LIBRARIES "")
+  target_link_libraries(dalinira-gecko-adapter PUBLIC Qt6::Core Qt6::Network Qt6::Widgets PkgConfig::DALINIRA_GECKO_XCB)
+  target_compile_definitions(dalinira-gecko-adapter PRIVATE
+    DALINIRA_GECKO_HOST_APP_DIR="${DALINIRA_GECKO_HOST_APP_DIR}")
+  if(DALINIRA_GECKO_DEVELOPMENT_RUNTIME)
+    target_compile_definitions(dalinira-gecko-adapter PRIVATE
+      DALINIRA_GECKO_DEVELOPMENT_RUNTIME="${DALINIRA_GECKO_DEVELOPMENT_RUNTIME}")
+  endif()
+  target_compile_options(dalinira-gecko-adapter PRIVATE -Wall -Wextra)
+
+  # Speaks the host side of the protocol for the adapter tests; started from
+  # a test runtime exactly as Gecko's `firefox` is.
+  add_executable(dalinira-gecko-fake-host browser/native/tests/gecko_fake_host.cpp)
+  set_property(TARGET dalinira-gecko-fake-host PROPERTY LINK_LIBRARIES "")
+  target_link_libraries(dalinira-gecko-fake-host PRIVATE Qt6::Core Qt6::Network)
+
+  add_executable(dalinira-browser-gecko-adapter-test browser/native/tests/gecko_adapter_test.cpp)
+  set_property(TARGET dalinira-browser-gecko-adapter-test PROPERTY LINK_LIBRARIES "")
+  target_link_libraries(dalinira-browser-gecko-adapter-test PRIVATE dalinira-gecko-adapter)
+  target_compile_definitions(dalinira-browser-gecko-adapter-test PRIVATE
+    DALINIRA_GECKO_HOST_APP_DIR="${DALINIRA_GECKO_HOST_APP_DIR}"
+    DALINIRA_GECKO_FAKE_HOST="$<TARGET_FILE:dalinira-gecko-fake-host>")
+  add_dependencies(dalinira-browser-gecko-adapter-test dalinira-gecko-fake-host)
+  add_test(NAME browser-gecko-adapter COMMAND dalinira-browser-gecko-adapter-test)
+  set_tests_properties(browser-gecko-adapter PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+
+  # The real Gecko host, headless (no display, no GPU), on
+  # DALINIRA_GECKO_DEVELOPMENT_RUNTIME. Opt-in: DALINIRA_GECKO_HOST_TESTS=1.
+  add_executable(dalinira-browser-gecko-host-test browser/native/tests/gecko_host_test.cpp)
+  set_property(TARGET dalinira-browser-gecko-host-test PROPERTY LINK_LIBRARIES "")
+  target_link_libraries(dalinira-browser-gecko-host-test PRIVATE dalinira-gecko-adapter)
+  add_test(NAME browser-gecko-host COMMAND dalinira-browser-gecko-host-test)
+  set_tests_properties(browser-gecko-host PROPERTIES
+    LABELS "gecko" SKIP_RETURN_CODE 77 TIMEOUT 300 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 
 set(BROWSER_SOURCES

@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- DaliNira Gecko Host: the only chrome document. It holds a stack of remote
+     content browsers. All visible tabs and navigation controls belong to Qt. -->
+
+<?csp default-src chrome: resource:; script-src chrome:; style-src chrome: resource: 'unsafe-inline'; object-src 'none'; ?>
+
+<window
+  id="dng-host-window"
+  windowtype="dalinira:geckohost"
+  title="DaliNira Gecko Host"
+  width="1280"
+  height="800"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+>
+  <script type="application/javascript" src="chrome://dng/content/ipc.js" />
+  <script type="application/javascript" src="chrome://dng/content/tabs.js" />
+  <script type="application/javascript" src="chrome://dng/content/host.js" />
+  <stack id="browser-stack" flex="1" />
+</window>

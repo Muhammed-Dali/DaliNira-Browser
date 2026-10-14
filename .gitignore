@@ -3,6 +3,7 @@ build/
 build-dalinira/
 build-webkit-runtime/
 build-release-*/
+build-gecko*/
 release-root-*/
 dist/
 browser/build/
