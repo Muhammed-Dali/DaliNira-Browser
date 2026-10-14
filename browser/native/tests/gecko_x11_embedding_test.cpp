@@ -11,6 +11,13 @@
 // host process opens an NVIDIA device, closing the window keeps the host's
 // window alive until the host is shut down, and nothing is left afterwards.
 //
+// Keyboard focus (X11 input focus, read back from the X server): the page has
+// it while its view has Qt's focus, the address bar (Ctrl+L) takes it back,
+// a tab switch keeps it with the page, Settings takes it from the page, and
+// browser shortcuts typed into the focused page run the window's actions.
+// Keys are typed into the host's page only, through Gecko's own input path
+// (the host's test-only "test_key"); nothing is sent to the desktop.
+//
 // Skipped (77) without a usable runtime or off xcb.
 
 #include <QApplication>
@@ -22,6 +29,7 @@
 #include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLineEdit>
 #include <QSettings>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -43,6 +51,7 @@
 #include "engine/gecko/gecko_engine_view.h"
 #include "engine/gecko/gecko_presentation_surface.h"
 #include "engine/gecko/gecko_session.h"
+#include "engine/gecko/gecko_shortcut_router.h"
 #include "engine/gecko/gecko_x11_embedder.h"
 #include "session/session_store.h"
 
@@ -105,7 +114,14 @@ class PageServer : public QTcpServer {
         connect(socket, &QTcpSocket::readyRead, socket, [socket] {
           const QUrl url(QString::fromLatin1(socket->readAll().split(' ').value(1)));
           const QString name = QUrlQuery(url).queryItemValue(QStringLiteral("name")).toHtmlEscaped();
-          const QByteArray body = QStringLiteral("<!doctype html><meta charset=utf-8><title>%1</title>"
+          // /keys: a focused text field; the title lists the keys the page
+          // received and the field's text ("keys:a,C-c,b|ab").
+          const QByteArray body = url.path() == QLatin1String("/keys") ? QByteArray(
+              "<!doctype html><meta charset=utf-8><title>keys:|</title><input id=f>"
+              "<script>const seen=[];const show=()=>{document.title='keys:'+seen.join(',')+'|'+f.value};"
+              "addEventListener('keydown',e=>{if(['Control','Shift','Alt'].includes(e.key))return;"
+              "seen.push((e.ctrlKey?'C-':'')+(e.altKey?'A-':'')+e.key);show()},true);"
+              "f.addEventListener('input',show);f.focus()</script>") : QStringLiteral("<!doctype html><meta charset=utf-8><title>%1</title>"
                                                  "<body style='background:#2b6;font:40px sans-serif'><h1>%1</h1>")
                                       .arg(name).toUtf8();
           socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: " +
@@ -162,6 +178,7 @@ int main(int argc, char *argv[]) {
   EngineStorageManager storage(dataDir);
   GeckoBackend::Config config;
   config.ipcRoot = base + QStringLiteral("/ipc");
+  config.testInput = true;
   auto ownedBackend = std::make_unique<GeckoBackend>(config, &app);
   GeckoBackend *gecko = ownedBackend.get();
   gecko->setDiscardConfirmation([](QWidget *, const QString &) { return true; });
@@ -212,6 +229,78 @@ int main(int argc, char *argv[]) {
   window->switchTab(0);
   CHECK(waitUntil([&] { return gecko->surface()->inspect().value("viewable").toBool(); }));
   std::cout << "PASS hidden under DaliNira pages" << std::endl;
+
+  // Keyboard focus. The window must be the active one for Qt to give focus.
+  window->activateWindow();
+  if (!waitUntil([&] { return window->isActiveWindow(); }, 5000)) {
+    std::cout << "the test window did not become the active window (window manager focus policy)" << std::endl;
+    CHECK(window->isActiveWindow());
+  }
+  const auto pageHasKeyboard = [&] { return gecko->surface()->inspect().value("inputFocusOnEmbedded").toBool(); };
+  const QString topLevel = QStringLiteral("0x%1").arg(window->winId(), 0, 16);
+  const auto qtHasKeyboard = [&] { return gecko->surface()->inspect().value("inputFocus").toString() == topLevel; };
+  alpha->setFocus();
+  CHECK(waitUntil(pageHasKeyboard, 5000));
+  CHECK(window->triggerBrowserAction(QStringLiteral("navigation.focus_address")));
+  CHECK(waitUntil(qtHasKeyboard, 5000));
+  alpha->setFocus();
+  CHECK(waitUntil(pageHasKeyboard, 5000));
+  std::cout << "PASS the page and the address bar take the keyboard in turn" << std::endl;
+
+  const auto type = [&](const QString &key, const QString &code, const QStringList &modifiers) {
+    GeckoRequest *request = session->submit(QStringLiteral("test_key"),
+                                            {{QStringLiteral("tabId"), session->activeTabId()}, {QStringLiteral("key"), key},
+                                             {QStringLiteral("code"), code},
+                                             {QStringLiteral("modifiers"), QJsonArray::fromStringList(modifiers)}});
+    CHECK(waitUntil([&] { return request->isFinished(); }) && request->status() == QStringLiteral("completed"));
+  };
+  CHECK(waitUntil([&] { return !gecko->shortcutRouter()->hostShortcuts().isEmpty(); }));
+  // Ctrl+Tab from the focused page: the next tab, and the page keeps the keyboard.
+  type(QStringLiteral("Tab"), QStringLiteral("Tab"), {QStringLiteral("Control")});
+  CHECK(waitUntil([&] { return gecko->surface()->isPresenting(beta) && session->activeTabId() == beta->hostTabId(); }));
+  CHECK(waitUntil(pageHasKeyboard, 5000));
+  // Ctrl+L from the page: the address bar.
+  type(QStringLiteral("l"), QStringLiteral("KeyL"), {QStringLiteral("Control")});
+  auto *omnibox = window->findChild<QLineEdit *>(QStringLiteral("omnibox"));
+  CHECK(omnibox && waitUntil([&] { return omnibox->hasFocus() && qtHasKeyboard(); }, 5000));
+  // Settings takes the keyboard from the page; back on the page, it returns.
+  beta->setFocus();
+  CHECK(waitUntil(pageHasKeyboard, 5000));
+  window->showSettings();
+  CHECK(waitUntil([&] { return !pageHasKeyboard(); }, 5000));
+  window->switchTab(1);
+  CHECK(waitUntil(pageHasKeyboard, 5000));
+  // Ctrl+T from the page: one new tab.
+  const int tabs = window->tabCount();
+  type(QStringLiteral("t"), QStringLiteral("KeyT"), {QStringLiteral("Control")});
+  CHECK(waitUntil([&] { return window->tabCount() == tabs + 1; }));
+  QThread::msleep(300);
+  QCoreApplication::processEvents();
+  CHECK(window->tabCount() == tabs + 1);
+  auto *opened = qobject_cast<GeckoEngineView *>(window->currentEngineView());
+  CHECK(opened && opened != alpha && opened != beta);
+  int openedIndex = -1;
+  for (int i = 0; i < window->tabCount(); ++i) {
+    if (geckoView(window, i) == opened) openedIndex = i;
+  }
+  window->closeTab(openedIndex);
+  CHECK(waitUntil([&] { return window->tabCount() == tabs; }));
+  window->switchTab(0);
+  CHECK(waitUntil([&] { return gecko->surface()->isPresenting(alpha); }));
+  std::cout << "PASS shortcuts from the focused page; Settings and tab switches move the keyboard" << std::endl;
+
+  // Normal page keys while the page holds the X11 focus: text and Ctrl+C
+  // reach the page; a bound shortcut (Ctrl+T) does not.
+  alpha->load(QUrl(QStringLiteral("http://127.0.0.1:%1/keys").arg(pages.serverPort())));
+  CHECK(waitUntil([&] { return alpha->title() == QStringLiteral("keys:|") && !alpha->isLoading(); }));
+  alpha->setFocus();
+  CHECK(waitUntil(pageHasKeyboard, 5000));
+  type(QStringLiteral("a"), QStringLiteral("KeyA"), {});
+  type(QStringLiteral("c"), QStringLiteral("KeyC"), {QStringLiteral("Control")});
+  type(QStringLiteral("b"), QStringLiteral("KeyB"), {});
+  CHECK(waitUntil([&] { return alpha->title() == QStringLiteral("keys:a,C-c,b|ab"); }));
+  CHECK(pageHasKeyboard() && window->tabCount() == tabs);
+  std::cout << "PASS typing and Ctrl+C reach the focused page" << std::endl;
 
   QList<qint64> tree{session->hostPid()};
   for (const auto &process : session->hostProcesses()) tree.append(process.pid);

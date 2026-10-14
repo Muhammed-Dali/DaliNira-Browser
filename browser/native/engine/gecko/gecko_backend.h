@@ -16,6 +16,7 @@ class GeckoEngineView;
 class GeckoPresentationSurface;
 class GeckoSession;
 class GeckoSessionView;
+class GeckoShortcutRouter;
 
 // The experimental Gecko engine: one Gecko host process (GeckoSession) for
 // the whole browser, one host tab per GeckoEngineView, one shared native
@@ -35,6 +36,7 @@ class GeckoBackend : public EngineBackend {
     QString dataDirectory;  // empty: EngineStorageManager::engineDir(EngineType::Gecko)
     QString ipcRoot;        // empty: XDG_RUNTIME_DIR
     GeckoHostProcess::Display display = GeckoHostProcess::Display::X11;
+    bool testInput = false;  // GeckoHostProcess::Config::testInput (tests only)
   };
   // Asks the user whether to discard a page's unsaved changes.
   using DiscardConfirmation = std::function<bool(QWidget *parent, const QString &title)>;
@@ -57,6 +59,7 @@ class GeckoBackend : public EngineBackend {
 
   GeckoSession *session() const { return session_; }
   GeckoPresentationSurface *surface() const { return surface_; }
+  GeckoShortcutRouter *shortcutRouter() const { return shortcutRouter_; }
   QString lastError() const { return lastError_; }
   QString dataDirectory() const { return dataDirectory_; }
 
@@ -71,6 +74,7 @@ class GeckoBackend : public EngineBackend {
 
  private:
   friend class GeckoEngineView;
+  friend class GeckoShortcutRouter;
   void registerView(GeckoEngineView *view);
   void unregisterView(GeckoEngineView *view);
   // A host tab no view shows yet for `view` (its adopted tab, else the host's
@@ -83,6 +87,7 @@ class GeckoBackend : public EngineBackend {
   Config config_;
   GeckoSession *session_ = nullptr;
   GeckoPresentationSurface *surface_ = nullptr;
+  GeckoShortcutRouter *shortcutRouter_ = nullptr;
   std::unique_ptr<EngineProfile> profile_;
   QList<QPointer<GeckoEngineView>> views_;
   QHash<const GeckoEngineView *, QString> adopted_;  // view → host tab it adopts

@@ -49,7 +49,8 @@ class GeckoX11Embedder : public QObject, public QAbstractNativeEventFilter {
 
   QJsonObject inspect(QWidget *topLevel, QWidget *container) const;
   xcb_window_t inputFocus() const;
-  void focusEmbedded();
+  // False when the embedded window is not viewable (X11 refuses to focus it).
+  bool focusEmbedded();
   void focusQt(QWidget *topLevel);
 
   bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;

@@ -7,14 +7,19 @@
 // Tab page, tab switching selects the host tab, navigation waits for the
 // asynchronous host tab, a page-opened tab, closing a tab and the guarded
 // close of a page with unsaved changes (cancelled, then confirmed), crash and
-// recovery, the Gecko session file, one window, and the exit shutdown: no
-// host process left, the run directory removed, the profile kept.
+// recovery, one window, the keyboard (browser shortcuts typed into a page
+// reach the window's actions exactly once and only for the visible active tab,
+// every other key reaches the page, rebinding takes effect, the address bar
+// takes the keyboard), the Gecko session file, and the exit shutdown: no host
+// process left, the run directory removed, the profile kept.
 
 #include <QApplication>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QLineEdit>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QThread>
@@ -26,6 +31,7 @@
 
 #include "browser_window.h"
 #include "core/browser_profile_service.h"
+#include "core/keyboard_shortcut_service.h"
 #include "desktop_tabs/tab_manager.h"
 #include "desktop_tabs/tab_performance_manager.h"
 #include "engine/engine_backend.h"
@@ -33,6 +39,7 @@
 #include "engine/gecko/gecko_backend.h"
 #include "engine/gecko/gecko_engine_view.h"
 #include "engine/gecko/gecko_session.h"
+#include "engine/gecko/gecko_shortcut_router.h"
 #include "i18n/i18n.h"
 #include "session/session_store.h"
 
@@ -127,6 +134,7 @@ int main(int argc, char *argv[]) {
   config.runtime = {makeFakeRuntime(base + QStringLiteral("/gre")), QStringLiteral(DALINIRA_GECKO_HOST_APP_DIR)};
   config.ipcRoot = base + QStringLiteral("/ipc");
   config.display = GeckoHostProcess::Display::Headless;
+  config.testInput = true;  // "test_key": keys typed into the fake host's page
   auto ownedBackend = std::make_unique<GeckoBackend>(config, &app);
   GeckoBackend *gecko = ownedBackend.get();
   bool discard = false;
@@ -146,6 +154,30 @@ int main(int argc, char *argv[]) {
         modeOf(geckoData + QStringLiteral("/profile")) == 0700 && modeOf(geckoData + QStringLiteral("/host-output.log")) == 0600);
   CHECK(!gecko->createEphemeralView(nullptr) && gecko->versionString() == QStringLiteral("Gecko 160.0a1"));
   std::cout << "PASS backend started; private Gecko storage" << std::endl;
+
+  // The host's names of DaliNira's shortcuts; every default binding has one.
+  using Router = GeckoShortcutRouter;
+  const auto keys = [](QKeyCombination combination) { return QKeySequence(combination); };
+  CHECK(Router::hostShortcut(keys(Qt::CTRL | Qt::Key_T)) == QStringLiteral("Ctrl+T"));
+  CHECK(Router::hostShortcut(keys(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab)) == QStringLiteral("Ctrl+Shift+Tab"));
+  CHECK(Router::hostShortcut(keys(Qt::CTRL | Qt::Key_Backtab)) == QStringLiteral("Ctrl+Shift+Tab"));
+  CHECK(Router::hostShortcut(keys(Qt::ALT | Qt::Key_Left)) == QStringLiteral("Alt+ArrowLeft"));
+  CHECK(Router::hostShortcut(keys(Qt::CTRL | Qt::Key_PageDown)) == QStringLiteral("Ctrl+PageDown"));
+  CHECK(Router::hostShortcut(keys(Qt::CTRL | Qt::Key_Plus)) == QStringLiteral("Ctrl++"));
+  CHECK(Router::hostShortcut(keys(Qt::CTRL | Qt::SHIFT | Qt::Key_Equal)) == QStringLiteral("Ctrl+="));
+  CHECK(Router::hostShortcut(keys(Qt::SHIFT | Qt::Key_F3)) == QStringLiteral("Shift+F3"));
+  CHECK(Router::hostShortcut(keys(QKeyCombination(Qt::Key_F5))) == QStringLiteral("F5"));
+  for (const QKeySequence &none : {keys(Qt::CTRL | Qt::Key_C), keys(Qt::META | Qt::Key_T), keys(Qt::CTRL | Qt::ALT | Qt::Key_Q),
+                                   keys(Qt::CTRL | Qt::Key_Odiaeresis), keys(QKeyCombination(Qt::Key_T)), QKeySequence()})
+    CHECK(Router::hostShortcut(none).isEmpty());
+  Router *router = gecko->shortcutRouter();
+  CHECK(waitUntil([&] { return !router->hostShortcuts().isEmpty(); }));
+  auto &shortcutService = dalinira::KeyboardShortcutService::instance();
+  for (const auto &definition : dalinira::KeyboardShortcutService::registry()) {
+    for (const QKeySequence &sequence : shortcutService.shortcuts(definition.id))
+      CHECK(router->hostShortcuts().contains(Router::hostShortcut(sequence)));
+  }
+  std::cout << "PASS every browser shortcut has a host name and is given to the host" << std::endl;
 
   TabManager tabManager(&app);
   tabManager.performanceManager()->setPolicyMode(dalinira::PerformancePolicyMode::Off);
@@ -239,6 +271,137 @@ int main(int argc, char *argv[]) {
   CHECK(window->tabCount() == beforeNewWindow + 1);
   std::cout << "PASS one window" << std::endl;
 
+  // The keyboard. "test_key" types into the host's active tab as a keyboard
+  // would; a browser shortcut runs the window's action once, any other key
+  // reaches the page (whose title lists what it received).
+  const auto finished = [](GeckoRequest *request) {
+    CHECK(waitUntil([&] { return request->isFinished(); }));
+    return request->status();
+  };
+  const auto type = [&](const QString &key, const QStringList &modifiers) {
+    CHECK(finished(session->submit(QStringLiteral("test_key"),
+                                   {{QStringLiteral("tabId"), session->activeTabId()}, {QStringLiteral("key"), key},
+                                    {QStringLiteral("code"), QString()},
+                                    {QStringLiteral("modifiers"), QJsonArray::fromStringList(modifiers)}})) ==
+          QStringLiteral("completed"));
+  };
+  const auto settle = [] {
+    // Room for a second (wrong) action to run.
+    for (int i = 0; i < 20; ++i) {
+      QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+      QThread::msleep(5);
+    }
+  };
+  const auto current = [&] { return qobject_cast<GeckoEngineView *>(window->currentEngineView()); };
+  const auto hostActive = [&](GeckoEngineView *view) {
+    return waitUntil([&] { return view && current() == view && session->activeTabId() == view->hostTabId(); });
+  };
+  const QStringList ctrl{QStringLiteral("Control")};
+  window->activateWindow();
+  window->switchTab(indexOfHostTab(window, a->hostTabId()));
+  CHECK(hostActive(a));
+
+  // Ctrl+T: one new tab, in this window.
+  int tabs = window->tabCount();
+  type(QStringLiteral("t"), ctrl);
+  CHECK(waitUntil([&] { return window->tabCount() == tabs + 1; }));
+  settle();
+  CHECK(window->tabCount() == tabs + 1);
+  GeckoEngineView *opened = current();
+  CHECK(opened && opened != a && waitUntil([&] { return !opened->hostTabId().isEmpty(); }) && hostActive(opened));
+  // Ctrl+W closes it (and only it).
+  type(QStringLiteral("w"), ctrl);
+  CHECK(waitUntil([&] { return window->tabCount() == tabs; }));
+  settle();
+  CHECK(window->tabCount() == tabs && indexOfHostTab(window, a->hostTabId()) >= 0);
+  std::cout << "PASS Ctrl+T and Ctrl+W from the page: one action each" << std::endl;
+
+  // Ctrl+Tab and Ctrl+Shift+Tab go to the next and previous tab.
+  window->switchTab(indexOfHostTab(window, a->hostTabId()));
+  CHECK(hostActive(a));
+  const int aIndex = indexOfHostTab(window, a->hostTabId());
+  GeckoEngineView *next = geckoView(window, (aIndex + 1) % window->tabCount());
+  type(QStringLiteral("Tab"), ctrl);
+  CHECK(hostActive(next));
+  type(QStringLiteral("Tab"), {QStringLiteral("Control"), QStringLiteral("Shift")});
+  CHECK(hostActive(a));
+  std::cout << "PASS Ctrl+Tab and Ctrl+Shift+Tab from the page" << std::endl;
+
+  // Ctrl+R reloads the page; Alt+Left goes back.
+  int reloads = 0;
+  QObject::connect(session, &GeckoSession::requestFinished, &app, [&](const QString &, const QString &, const QJsonObject &reply) {
+    if (reply.value(QStringLiteral("command")).toString() == QLatin1String("reload")) ++reloads;
+  });
+  // (The fake host's one content process crashed every tab above: recover this one.)
+  if (a->isCrashed()) a->reload();
+  CHECK(waitUntil([&] { return !a->isCrashed(); }));
+  type(QStringLiteral("r"), ctrl);
+  CHECK(waitUntil([&] { return reloads == 1; }));
+  const QUrl beforeA2 = a->url();
+  a->load(QUrl(QStringLiteral("http://fake.test/a2")));
+  CHECK(waitUntil([&] { return a->url() == QUrl(QStringLiteral("http://fake.test/a2")) && a->canGoBack(); }));
+  type(QStringLiteral("ArrowLeft"), {QStringLiteral("Alt")});
+  CHECK(waitUntil([&] { return a->url() == beforeA2; }));
+  settle();
+  CHECK(reloads == 1);
+  std::cout << "PASS Ctrl+R and Alt+Left from the page" << std::endl;
+
+  // Other keys are the page's: text and the reserved editing keys.
+  type(QStringLiteral("c"), ctrl);
+  type(QStringLiteral("x"), {});
+  CHECK(waitUntil([&] { return a->title() == QStringLiteral("keys:Ctrl+C,X"); }));
+  CHECK(window->tabCount() == tabs);
+  // Ctrl+L: the address bar takes the keyboard; the page gets it back.
+  auto *omnibox = window->findChild<QLineEdit *>(QStringLiteral("omnibox"));
+  CHECK(omnibox);
+  a->setFocus();
+  CHECK(waitUntil([&] { return a->hasFocus(); }));
+  type(QStringLiteral("l"), ctrl);
+  CHECK(waitUntil([&] { return omnibox->hasFocus(); }));
+  a->setFocus();
+  CHECK(waitUntil([&] { return a->hasFocus(); }));
+  std::cout << "PASS page keys stay the page's; Ctrl+L focuses the address bar" << std::endl;
+
+  // Reports for a tab that is not the visible active one are dropped (a key
+  // pressed just before a tab switch); so are reports while the window is hidden.
+  GeckoEngineView *background = next;
+  CHECK(background != a && session->activeTabId() == a->hostTabId());
+  int sentBackground = 0;
+  QObject::connect(session, &GeckoSession::shortcutPressed, &app, [&] { ++sentBackground; });
+  background->load(QUrl(QStringLiteral("http://fake.test/shortcut-from-background")));
+  CHECK(waitUntil([&] { return sentBackground == 1; }));
+  settle();
+  CHECK(window->tabCount() == tabs);
+  window->hide();
+  type(QStringLiteral("t"), ctrl);
+  CHECK(waitUntil([&] { return sentBackground == 2; }));
+  settle();
+  CHECK(window->tabCount() == tabs);
+  window->show();
+  window->activateWindow();
+  std::cout << "PASS shortcuts of a background tab or hidden window are dropped" << std::endl;
+
+  // Rebinding takes effect at once: the old key goes to the page, the new one works.
+  int published = 0;
+  QObject::connect(router, &GeckoShortcutRouter::shortcutsPublished, &app, [&] { ++published; });
+  CHECK(shortcutService.setShortcut(QStringLiteral("tabs.new"), keys(Qt::CTRL | Qt::SHIFT | Qt::Key_Y)).ok());
+  CHECK(waitUntil([&] { return published == 1; }));
+  CHECK(!router->hostShortcuts().contains(QStringLiteral("Ctrl+T")) && router->hostShortcuts().contains(QStringLiteral("Ctrl+Shift+Y")));
+  type(QStringLiteral("t"), ctrl);
+  CHECK(waitUntil([&] { return a->title() == QStringLiteral("keys:Ctrl+C,X,Ctrl+T"); }));
+  CHECK(window->tabCount() == tabs);
+  type(QStringLiteral("Y"), {QStringLiteral("Control"), QStringLiteral("Shift")});
+  CHECK(waitUntil([&] { return window->tabCount() == tabs + 1; }));
+  settle();
+  CHECK(window->tabCount() == tabs + 1);
+  GeckoEngineView *rebound = current();
+  CHECK(rebound && waitUntil([&] { return !rebound->hostTabId().isEmpty(); }) && hostActive(rebound));
+  type(QStringLiteral("w"), ctrl);
+  CHECK(waitUntil([&] { return window->tabCount() == tabs; }));
+  shortcutService.resetShortcut(QStringLiteral("tabs.new"));
+  CHECK(waitUntil([&] { return published == 2 && router->hostShortcuts().contains(QStringLiteral("Ctrl+T")); }));
+  std::cout << "PASS rebinding takes effect in the page at once" << std::endl;
+
   // The Gecko workspace's session file only.
   window->saveSessionNow();
   QFile sessionFile(dataDir + QStringLiteral("/session/gecko/tabs.session.json"));
@@ -258,6 +421,8 @@ int main(int argc, char *argv[]) {
   CHECK(QDir(geckoData + QStringLiteral("/runtime")).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty());
   CHECK(QDir(base + QStringLiteral("/ipc")).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).isEmpty());
   CHECK(QFileInfo(geckoData + QStringLiteral("/profile/user.js")).isFile());
+  // No host, no shortcuts: nothing of the old set is acted on.
+  CHECK(router->hostShortcuts().isEmpty());
   delete window;
   EngineBackend::shutdown();
   std::cout << "PASS exit: no host process, run directory removed, profile kept" << std::endl;

@@ -34,6 +34,12 @@ GeckoPresentationSurface::GeckoPresentationSurface(GeckoSession *session, QObjec
     findTimer_.stop();
     setStatus(QStringLiteral("Gecko stopped (%1). Restart DaliNira to use Gecko again.").arg(why));
   });
+  // A click on the page moved the X11 focus to it: Qt's focus follows, so a
+  // later move to Qt's own widgets is seen (onFocusChanged).
+  connect(embedder_, &GeckoX11Embedder::embeddedClicked, this, [this] {
+    if (current_ && !current_->hasFocus()) current_->setFocus(Qt::MouseFocusReason);
+  });
+  connect(qApp, &QApplication::focusChanged, this, &GeckoPresentationSurface::onFocusChanged);
   connect(embedder_, &GeckoX11Embedder::embeddedGone, this, [this](const QString &why) {
     if (container_) container_->deleteLater();
     container_ = nullptr;
@@ -90,8 +96,26 @@ void GeckoPresentationSurface::focusPage(GeckoEngineView *view) {
   if (isPresenting(view)) embedder_->focusEmbedded();
 }
 
+void GeckoPresentationSurface::viewHidden(GeckoEngineView *view) {
+  if (isPresenting(view)) returnKeyboardToQt();
+}
+
+void GeckoPresentationSurface::returnKeyboardToQt() {
+  if (container_ && owner_ && embedder_->embeddedWindow() && embedder_->inputFocus() == embedder_->embeddedWindow())
+    embedder_->focusQt(owner_);
+}
+
+void GeckoPresentationSurface::onFocusChanged(QWidget *, QWidget *now) {
+  if (!now || !owner_ || !container_ || now->window() != owner_) return;
+  if (now == current_ || now == container_ || container_->isAncestorOf(now)) return;
+  returnKeyboardToQt();  // e.g. the address bar (Ctrl+L), Settings, a dialog of the window
+}
+
 void GeckoPresentationSurface::release(GeckoEngineView *view) {
-  if (current_ == view) current_ = nullptr;
+  if (current_ == view) {
+    returnKeyboardToQt();
+    current_ = nullptr;
+  }
   if (container_ && container_->parentWidget() == view) park();
 }
 
@@ -145,12 +169,13 @@ bool GeckoPresentationSurface::eventFilter(QObject *watched, QEvent *event) {
     container_->setParent(nullptr);
     current_ = nullptr;
   } else if (event->type() == QEvent::MouseButtonPress && container_ && owner_ && embedder_->embeddedWindow()) {
-    // A click on DaliNira's own widgets gives the keyboard back to Qt; the
-    // embedder moves it to the page on a click there.
+    // A click on a widget of the window that takes the keyboard on click
+    // gives it back to Qt (also when Qt's focus is there already); a click on
+    // a button that takes no focus leaves it with the page, as in other
+    // browsers. The embedder moves it to the page on a click there.
     auto *widget = qobject_cast<QWidget *>(watched);
-    if (widget && widget->window() == owner_ && widget != container_ &&
-        embedder_->inputFocus() == embedder_->embeddedWindow()) {
-      embedder_->focusQt(owner_);
+    if (widget && widget->window() == owner_ && widget != container_ && (widget->focusPolicy() & Qt::ClickFocus)) {
+      returnKeyboardToQt();
     }
   }
   return QObject::eventFilter(watched, event);

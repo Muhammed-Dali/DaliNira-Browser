@@ -62,6 +62,7 @@ class GeckoEngineView : public EngineView {
   void paintEvent(QPaintEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
   void focusInEvent(QFocusEvent *event) override;
+  void hideEvent(QHideEvent *event) override;
 
  private:
   friend class GeckoBackend;

@@ -492,7 +492,9 @@ if(DALINIRA_ENABLE_GECKO)
     browser/native/engine/gecko/gecko_engine_view.cpp
     browser/native/engine/gecko/gecko_engine_view.h
     browser/native/engine/gecko/gecko_presentation_surface.cpp
-    browser/native/engine/gecko/gecko_presentation_surface.h)
+    browser/native/engine/gecko/gecko_presentation_surface.h
+    browser/native/engine/gecko/gecko_shortcut_router.cpp
+    browser/native/engine/gecko/gecko_shortcut_router.h)
   pkg_check_modules(DALINIRA_GECKO_XCB REQUIRED IMPORTED_TARGET xcb xcb-res)
   set(DALINIRA_GECKO_HOST_APP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/browser/resources/gecko-host")
   add_library(dalinira-gecko-adapter STATIC

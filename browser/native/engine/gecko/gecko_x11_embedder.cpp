@@ -223,11 +223,14 @@ xcb_window_t GeckoX11Embedder::inputFocus() const {
   return r ? r->focus : 0;
 }
 
-void GeckoX11Embedder::focusEmbedded() {
-  if (window_) {
-    xcb_set_input_focus(conn_, XCB_INPUT_FOCUS_PARENT, window_, XCB_CURRENT_TIME);
-    xcb_flush(conn_);
-  }
+bool GeckoX11Embedder::focusEmbedded() {
+  if (!window_) return false;
+  // Qt's connection: the container's pending map goes first.
+  auto attrs = reply(xcb_get_window_attributes_reply(conn_, xcb_get_window_attributes(conn_, window_), nullptr));
+  if (!attrs || attrs->map_state != XCB_MAP_STATE_VIEWABLE) return false;
+  xcb_set_input_focus(conn_, XCB_INPUT_FOCUS_PARENT, window_, XCB_CURRENT_TIME);
+  xcb_flush(conn_);
+  return true;
 }
 
 void GeckoX11Embedder::focusQt(QWidget *topLevel) {

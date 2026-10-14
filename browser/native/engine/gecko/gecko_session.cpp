@@ -9,6 +9,7 @@
 #include <QUuid>
 #include <QWidget>
 
+#include <algorithm>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -237,6 +238,7 @@ bool GeckoSession::start(const Config &config, QString *error) {
   launch.display = config.display;
   launch.profileDirectory = config.profileDirectory;
   launch.logFile = config.logFile;
+  launch.testInput = config.testInput;
   if (!host_->start(launch, error)) {
     ipc_->shutdown();
     removeRunDirectory();
@@ -280,9 +282,10 @@ GeckoRequest *GeckoSession::submit(const QString &type, QJsonObject fields, int 
       return;
     }
     if (pending_.size() > 256 || pending.type == QLatin1String("invalid_view") ||
-        pending.type == QLatin1String("unsupported_deactivate")) {
+        pending.type == QLatin1String("unsupported_deactivate") || pending.type == QLatin1String("invalid_shortcuts")) {
       finish(id, QStringLiteral("rejected"),
              {{"code", pending.type == QLatin1String("unsupported_deactivate") ? "unsupported-independent-surface"
+                       : pending.type == QLatin1String("invalid_shortcuts")   ? "invalid-shortcuts"
                                                                               : "invalid-view-or-request-limit"}});
       return;
     }
@@ -309,6 +312,14 @@ GeckoRequest *GeckoSession::createView(const QUrl &url, bool activate) {
 }
 
 GeckoRequest *GeckoSession::listViews() { return submit(QStringLiteral("list_tabs")); }
+
+GeckoRequest *GeckoSession::setShortcuts(const QStringList &shortcuts) {
+  const bool valid = shortcuts.size() <= 256 && std::all_of(shortcuts.cbegin(), shortcuts.cend(), [](const QString &shortcut) {
+    return GeckoIpcServer::isValidShortcut(shortcut);
+  });
+  if (!valid) return submit(QStringLiteral("invalid_shortcuts"));
+  return submit(QStringLiteral("set_shortcuts"), {{QStringLiteral("shortcuts"), QJsonArray::fromStringList(shortcuts)}});
+}
 
 GeckoRequest *GeckoSession::shutdown(bool discard, const QJsonObject &confirmedDocuments) {
   QJsonObject fields;
@@ -402,6 +413,9 @@ void GeckoSession::receive(quint64 generation, const QJsonObject &message) {
     }
   } else if (type == QLatin1String("view-close-requested")) {
     if (auto *item = view(id)) emit item->windowCloseRequested();
+  } else if (type == QLatin1String("shortcut")) {
+    if (view(id))
+      emit shortcutPressed(id, message.value(QStringLiteral("shortcut")).toString(), message.value(QStringLiteral("repeat")).toBool());
   } else if (type == QLatin1String("window-tagged")) {
     state_ = State::Ready;
     emit ready();

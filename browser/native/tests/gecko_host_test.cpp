@@ -119,7 +119,9 @@ QStringList metadata(const QString &directory) {
   return entries;
 }
 
-// Local test pages: /page?name=N, and /dirty?name=N with a beforeunload handler.
+// Local test pages: /page?name=N, /dirty?name=N with a beforeunload handler,
+// and /keys: a focused text field; the title lists the keys the page received
+// and the field's text ("keys:a,b,C-c|ab").
 class PageServer : public QTcpServer {
  public:
   PageServer() {
@@ -130,7 +132,12 @@ class PageServer : public QTcpServer {
           const QUrl url(QString::fromLatin1(request.split(' ').value(1)));
           const QString name = QUrlQuery(url).queryItemValue(QStringLiteral("name")).toHtmlEscaped();
           const bool dirty = url.path() == QLatin1String("/dirty");
-          const QByteArray body = QStringLiteral("<!doctype html><meta charset=utf-8><title>%1</title><h1>%1</h1>%2")
+          const QByteArray body = url.path() == QLatin1String("/keys") ? QByteArray(
+              "<!doctype html><meta charset=utf-8><title>keys:|</title><input id=f>"
+              "<script>const seen=[];const show=()=>{document.title='keys:'+seen.join(',')+'|'+f.value};"
+              "addEventListener('keydown',e=>{if(['Control','Shift','Alt'].includes(e.key))return;"
+              "seen.push((e.ctrlKey?'C-':'')+(e.altKey?'A-':'')+e.key);show()},true);"
+              "f.addEventListener('input',show);f.focus()</script>") : QStringLiteral("<!doctype html><meta charset=utf-8><title>%1</title><h1>%1</h1>%2")
                                       .arg(name, dirty ? QStringLiteral("<script>addEventListener('beforeunload',e=>{"
                                                                         "e.preventDefault();e.returnValue=''})</script>")
                                                        : QString())
@@ -187,6 +194,7 @@ int main(int argc, char *argv[]) {
   config.runtimeRoot = base + QStringLiteral("/runtime");
   config.ipcRoot = base + QStringLiteral("/ipc");
   config.display = GeckoHostProcess::Display::Headless;
+  config.testInput = true;
   QString error;
   if (!session.start(config, &error)) std::cout << error.toStdString() << std::endl;
   CHECK(session.hostPid() > 0);
@@ -214,6 +222,44 @@ int main(int argc, char *argv[]) {
   loaded(beta, QStringLiteral("Beta"));
   CHECK(waitUntil([&] { return beta->canGoForward(); }));
   std::cout << "PASS history" << std::endl;
+
+  // Keyboard: typed through Gecko's own input path into the focused page.
+  // The keys of the shortcut set never reach the page and are reported;
+  // every other key (text, Ctrl+C) is the page's.
+  QStringList pressed;
+  QObject::connect(&session, &GeckoSession::shortcutPressed, [&](const QString &tab, const QString &name, bool) {
+    pressed << (tab == alpha->tabId() ? name : QStringLiteral("other tab"));
+  });
+  result(session.setShortcuts({QStringLiteral("Ctrl+T"), QStringLiteral("Ctrl+Shift+Tab"), QStringLiteral("Alt+ArrowLeft"),
+                               QStringLiteral("F5"), QStringLiteral("Ctrl++"), QStringLiteral("Ctrl+L")}));
+  result(alpha->load(pages.url(QStringLiteral("127.0.0.1"), QStringLiteral("/keys"), QString())));
+  loaded(alpha, QStringLiteral("keys:|"));
+  const auto type = [&](const QString &key, const QString &code, const QStringList &modifiers) {
+    result(session.submit(QStringLiteral("test_key"), {{QStringLiteral("tabId"), alpha->tabId()}, {QStringLiteral("key"), key},
+                                                     {QStringLiteral("code"), code},
+                                                     {QStringLiteral("modifiers"), QJsonArray::fromStringList(modifiers)}}));
+  };
+  const QStringList ctrl{QStringLiteral("Control")};
+  type(QStringLiteral("a"), QStringLiteral("KeyA"), {});
+  type(QStringLiteral("t"), QStringLiteral("KeyT"), ctrl);
+  type(QStringLiteral("Tab"), QStringLiteral("Tab"), {QStringLiteral("Control"), QStringLiteral("Shift")});
+  type(QStringLiteral("ArrowLeft"), QStringLiteral("ArrowLeft"), {QStringLiteral("Alt")});
+  type(QStringLiteral("F5"), QStringLiteral("F5"), {});
+  type(QStringLiteral("+"), QStringLiteral("Equal"), {QStringLiteral("Control"), QStringLiteral("Shift")});
+  // Another layout: Cyrillic "е" on the T key is Ctrl+T as well.
+  type(QString(QChar(0x0435)), QStringLiteral("KeyT"), ctrl);
+  type(QStringLiteral("c"), QStringLiteral("KeyC"), ctrl);
+  type(QStringLiteral("b"), QStringLiteral("KeyB"), {});
+  CHECK(waitUntil([&] { return alpha->title() == QStringLiteral("keys:a,C-c,b|ab"); }));
+  if (pressed != QStringList({"Ctrl+T", "Ctrl+Shift+Tab", "Alt+ArrowLeft", "F5", "Ctrl++", "Ctrl+T"}))
+    std::cout << "pressed: " << pressed.join(QLatin1Char(' ')).toStdString() << std::endl;
+  CHECK(pressed == QStringList({"Ctrl+T", "Ctrl+Shift+Tab", "Alt+ArrowLeft", "F5", "Ctrl++", "Ctrl+T"}));
+  // Without a set, every key is the page's.
+  result(session.setShortcuts({}));
+  type(QStringLiteral("t"), QStringLiteral("KeyT"), ctrl);
+  CHECK(waitUntil([&] { return alpha->title() == QStringLiteral("keys:a,C-c,b,C-t|ab"); }));
+  CHECK(pressed.size() == 6);
+  std::cout << "PASS browser shortcuts kept from the page and reported; typing and Ctrl+C reach the page" << std::endl;
 
   result(alpha->load(pages.url(QStringLiteral("127.0.0.1"), QStringLiteral("/dirty"), QStringLiteral("Dirty"))));
   loaded(alpha, QStringLiteral("Dirty"));

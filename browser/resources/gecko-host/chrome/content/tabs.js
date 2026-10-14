@@ -111,7 +111,8 @@ const DngTabs = (() => {
         create_tab: ["url", "activate"], close_tab: ["tabId", ...(msg.protocol === 3 ? ["discard", "documentId"] : [])], activate_tab: ["tabId"],
         load_url: ["tabId", "url"], back: ["tabId"], forward: ["tabId"],
         reload: ["tabId"], stop: ["tabId"], list_tabs: [], shutdown: msg.protocol === 3 ? ["discard", "documents"] : [],
-        ...(msg.protocol === 3 ? { recover_tab: ["tabId"], cancel_request: ["targetRequestId"] } : {}),
+        ...(msg.protocol === 3 ? { recover_tab: ["tabId"], cancel_request: ["targetRequestId"], set_shortcuts: ["shortcuts"],
+          ...(DngKeys.testInput ? { test_key: ["tabId", "key", "code", "modifiers"] } : {}) } : {}),
       };
       const fields = schemas[msg.type];
       if (!fields) throw new Error("unknown-command");
@@ -126,6 +127,7 @@ const DngTabs = (() => {
         return;
       }
       if (msg.type === "list_tabs") { list(msg.requestId); return; }
+      if (msg.type === "set_shortcuts") { DngKeys.setShortcuts(msg.shortcuts); DngIpc.send("ack", response); return; }
       if (msg.protocol === 3 && "discard" in msg && typeof msg.discard !== "boolean") throw new Error("invalid-argument");
       if (msg.type === "shutdown") {
         if (msg.protocol === 3) {
@@ -177,6 +179,7 @@ const DngTabs = (() => {
           break;
         case "reload": t.browser.reload(); break;
         case "stop": t.browser.stop(); break;
+        case "test_key": DngKeys.testKey(t, msg); break;
       }
       DngIpc.send("ack", response);
     } catch (e) {

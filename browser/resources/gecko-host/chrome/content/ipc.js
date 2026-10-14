@@ -18,7 +18,8 @@ const DngIpc = (() => {
   let commandSequence = 0;
   let negotiatedProtocol = 1;
   const MAX_FRAME = 64 * 1024;
-  const COMMANDS = new Set(["load", "back", "forward", "reload", "stop", "shutdown", "create_tab", "close_tab", "activate_tab", "load_url", "list_tabs", "cancel_request", "recover_tab"]);
+  const COMMANDS = new Set(["load", "back", "forward", "reload", "stop", "shutdown", "create_tab", "close_tab", "activate_tab", "load_url", "list_tabs", "cancel_request", "recover_tab", "set_shortcuts",
+    ...(Services.env.get("DNG_TEST_INPUT") === "1" ? ["test_key"] : [])]);
 
   let input = null;
   let output = null;

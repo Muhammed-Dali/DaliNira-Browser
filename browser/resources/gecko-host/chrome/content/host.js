@@ -687,6 +687,7 @@ async function startup() {
     window.addEventListener("resize", ipcReportGeometry);
     window.addEventListener("activate", () => ipcReportFocus("activate"));
     window.addEventListener("deactivate", () => ipcReportFocus("deactivate"));
+    DngKeys.install();
     startIpc();
   }
 
