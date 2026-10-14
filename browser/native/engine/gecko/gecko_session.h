@@ -144,6 +144,10 @@ class GeckoSession : public QObject {
     QString ipcRoot;
     GeckoHostProcess::Display display = GeckoHostProcess::Display::X11;
     int helloTimeoutMs = 10000;
+    // See GeckoHostProcess::Config: a profile kept across launches (empty: a
+    // fresh one per launch) and the host's log (empty: in the run directory).
+    QString profileDirectory;
+    QString logFile;
   };
 
   explicit GeckoSession(QObject *parent = nullptr);
@@ -172,7 +176,9 @@ class GeckoSession : public QObject {
   // Closes the whole host; with beforeunload documents open it needs
   // `discard` and documentSnapshot() of exactly the documents confirmed.
   GeckoRequest *shutdown(bool discard = false, const QJsonObject &confirmedDocuments = {});
-  // Final cleanup after shutdown() was accepted (refused for a live session).
+  // Final cleanup after shutdown() was accepted (refused for a live session):
+  // the host's process tree, its IPC directory and this session's own run
+  // directory (never a persistent profile).
   QJsonObject stopHost(int graceMs = 8000);
   bool cancel(const QString &requestId);
   QJsonArray lostSessionSnapshot() const { return lostViews_; }
@@ -203,6 +209,7 @@ class GeckoSession : public QObject {
   void loseSession(quint64 generation, const QString &reason);
   GeckoSessionView *adopt(const QString &id);
   void finish(const QString &id, const QString &status, const QJsonObject &result = {});
+  void removeRunDirectory();
 
   QPointer<QWidget> presentationOwner_;
   QPointer<GeckoIpcServer> ipc_;
@@ -212,6 +219,7 @@ class GeckoSession : public QObject {
   QHash<QString, Pending> pending_;
   QJsonArray lostViews_;
   QString runDir_;
+  QString runtimeRoot_;
   QString activeId_;
   QString requestPrefix_;
   quint64 generation_ = 0;

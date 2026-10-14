@@ -43,6 +43,10 @@
 #include "engine/webkit/webkit_private_runtime.h"
 #include <cstdio>
 #endif
+#if defined(DALINIRA_BUILD_GECKO)
+#include "engine/gecko/gecko_backend.h"
+#include "engine/gecko/gecko_runtime.h"
+#endif
 #include "i18n/i18n.h"
 #include "i18n/language_manager.h"
 #include "i18n/widget_i18n.h"
@@ -282,6 +286,19 @@ int main(int argc, char *argv[]) {
     }
   }
 #endif
+#if defined(DALINIRA_BUILD_GECKO)
+  // The experimental Gecko engine runs only on a runtime that passes every
+  // check of GeckoRuntime::validate (development Nightly runtime for now).
+  if (initialEngine == dalinira::engine::EngineType::Gecko) {
+    QStringList problems;
+    if (!dalinira::engine::GeckoRuntime::validate(dalinira::engine::GeckoRuntime::developmentPaths(), &problems).isValid()) {
+      qWarning().noquote() << "The Gecko runtime is not usable:\n  " << problems.join(QStringLiteral("\n  "))
+                           << "\nStarting with Chromium for this run.";
+      initialEngine = dalinira::engine::EngineType::Chromium;
+      displayPlan = dalinira::engine::planDisplay(initialEngine, displayEnvironment);
+    }
+  }
+#endif
   dalinira::engine::applyDisplayPlan(displayPlan);
   dalinira::engine::EngineBackend::setSelectedEngineType(initialEngine);
 
@@ -304,8 +321,9 @@ int main(int argc, char *argv[]) {
     // Do not set WEBKIT_DISABLE_DMABUF_RENDERER: WebKitGTK 2.52 then creates no
     // AcceleratedBackingStore, and a page entering compositing mode crashes the
     // UI process (AcceleratedBackingStore::update with a null store).
-    // Each WebKit tab is a native X11 child window (see WebKitEngineView).
-    // Keep its siblings (Settings and other internal Qt pages) alien.
+    // Each WebKit tab is a native X11 child window (see WebKitEngineView), as
+    // is the embedded Gecko host window. Keep their siblings (Settings and
+    // other internal Qt pages) alien.
     QCoreApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
   }
 
@@ -368,6 +386,15 @@ int main(int argc, char *argv[]) {
     profileService.applyEngineCookiePolicy();
   }
 #endif
+#if defined(DALINIRA_BUILD_GECKO)
+  else if (initialEngine == dalinira::engine::EngineType::Gecko) {
+    auto geckoBackend = std::make_unique<dalinira::engine::GeckoBackend>(dalinira::engine::GeckoBackend::Config{}, &app);
+    // The host starts now and is ready later; its tabs wait for it.
+    if (!geckoBackend->initialize(engineStorage))
+      qWarning().noquote() << "The Gecko host did not start:" << geckoBackend->lastError();
+    dalinira::engine::EngineBackend::registerBackend(dalinira::engine::EngineType::Gecko, std::move(geckoBackend));
+  }
+#endif
 
   TabManager tabManager(&app);
   const QString initialEngineScope = dalinira::engine::engineKey(initialEngine);
@@ -403,9 +430,10 @@ int main(int argc, char *argv[]) {
   auto &dragController = dalinira::desktop_tabs::TabDragController::instance();
 
   dragController.setDetachedWindowFactory(
-      [services](QWidget *originWin, uint64_t /*tabId*/) -> QWidget * {
+      [services](QWidget *originWin, uint64_t tabId) -> QWidget * {
         auto *origin = dynamic_cast<BrowserWindow *>(originWin);
-        if (!origin) return nullptr;
+        // No window for a tab that cannot move: the drag stays in the strip.
+        if (!origin || !origin->canMoveTabToAnotherWindow(tabId)) return nullptr;
         auto *captureShell = new BrowserWindow(origin->services(), /*isCaptureShell=*/true);
         return captureShell;
       });
@@ -554,6 +582,16 @@ int main(int argc, char *argv[]) {
   }
 
   const int exitCode = app.exec();
+
+#if defined(DALINIRA_BUILD_GECKO)
+  // The Gecko host first: closed (its pages' unsaved changes discarded, as
+  // the browser is quitting), its process tree ended, its run directory
+  // removed. Its tabs then find no host to close.
+  if (auto *gecko = qobject_cast<dalinira::engine::GeckoBackend *>(
+          dalinira::engine::EngineBackend::backendForType(dalinira::engine::EngineType::Gecko))) {
+    if (!gecko->shutdownHost(10000)) qWarning() << "The Gecko host did not stop cleanly.";
+  }
+#endif
 
   // A WebKitGTK view is a foreign native child window. Tear down every browser
   // window first, then the selected backend, before QApplication dismantles

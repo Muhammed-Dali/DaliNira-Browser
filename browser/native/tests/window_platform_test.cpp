@@ -122,6 +122,16 @@ int runLogic() {
   // Headless tooling keeps its platform.
   plan = planDisplay(EngineType::WebKit, env("wayland", "wayland-0", "", "offscreen"));
   CHECK(plan.engineSupported && plan.qpaPlatform.isEmpty());
+  // Gecko: its host's X11 window is embedded: Qt on xcb (XWayland), never
+  // native Wayland; no X server at all means Chromium.
+  plan = planDisplay(EngineType::Gecko, env("x11", "", ":0"));
+  CHECK(plan.engineSupported && plan.qpaPlatform == "xcb" && plan.gdkBackend == "x11");
+  plan = planDisplay(EngineType::Gecko, env("wayland", "wayland-0", ":0", "wayland"));
+  CHECK(plan.engineSupported && plan.qpaPlatform == "xcb" && !plan.note.isEmpty());
+  plan = planDisplay(EngineType::Gecko, env("wayland", "wayland-0", ""));
+  CHECK(!plan.engineSupported && !plan.note.isEmpty());
+  plan = planDisplay(EngineType::Gecko, env("wayland", "wayland-0", "", "offscreen"));
+  CHECK(plan.engineSupported && plan.qpaPlatform.isEmpty());
   std::cout << "[PASS] display platform plan" << std::endl;
   return 0;
 }

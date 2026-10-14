@@ -475,16 +475,24 @@ endif()
 set(DALINIRA_BUILD_WEBKIT ${DALINIRA_BUILD_WEBKIT} CACHE INTERNAL
   "Whether the WebKit backend is compiled into DaliNira" FORCE)
 
-# Gecko is known as an engine identity ("gecko" workspace, --engine gecko),
-# but it is not a backend of the browser yet: DALINIRA_BUILD_GECKO is never
-# defined, so every Gecko request starts Chromium. DALINIRA_ENABLE_GECKO
-# builds only the separate Gecko adapter library (the out-of-process Gecko
-# host's launcher, authenticated IPC, session and X11 embedder) and its
-# tests; dalinira-browser neither compiles nor links any of it.
-option(DALINIRA_ENABLE_GECKO "Build the optional Gecko adapter library and its tests (not used by the browser yet)" OFF)
+# Gecko is an experimental third engine: a separate Gecko host process (the
+# adapter library: launcher, authenticated IPC, session, X11 embedder) and
+# its backend in the browser. Only `--engine gecko` starts it; Settings and
+# setup do not offer it. OFF (the default): no Gecko code is compiled or
+# linked, and every Gecko request starts Chromium.
+option(DALINIRA_ENABLE_GECKO "Build the experimental Gecko engine (--engine gecko)" OFF)
+set(GECKO_BACKEND_SOURCES)
 set(DALINIRA_GECKO_DEVELOPMENT_RUNTIME "" CACHE PATH
     "Development Gecko runtime (a Nightly objdir's dist/bin) for the Gecko host tests")
 if(DALINIRA_ENABLE_GECKO)
+  add_compile_definitions(DALINIRA_BUILD_GECKO=1)
+  set(GECKO_BACKEND_SOURCES
+    browser/native/engine/gecko/gecko_backend.cpp
+    browser/native/engine/gecko/gecko_backend.h
+    browser/native/engine/gecko/gecko_engine_view.cpp
+    browser/native/engine/gecko/gecko_engine_view.h
+    browser/native/engine/gecko/gecko_presentation_surface.cpp
+    browser/native/engine/gecko/gecko_presentation_surface.h)
   pkg_check_modules(DALINIRA_GECKO_XCB REQUIRED IMPORTED_TARGET xcb xcb-res)
   set(DALINIRA_GECKO_HOST_APP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/browser/resources/gecko-host")
   add_library(dalinira-gecko-adapter STATIC
@@ -551,6 +559,7 @@ set(BROWSER_SOURCES
   ${I18N_SOURCES}
   ${WINDOW_SOURCES}
   ${ENGINE_SOURCES}
+  ${GECKO_BACKEND_SOURCES}
   ${ONBOARDING_SOURCES}
   browser/native/main.cpp
 )
@@ -813,6 +822,9 @@ target_link_libraries(dalinira-browser PRIVATE
 if(DALINIRA_BUILD_WEBKIT)
   target_link_libraries(dalinira-browser PRIVATE ${WEBKIT_LIBRARIES} ${X11_LIBRARIES})
   target_include_directories(dalinira-browser PRIVATE ${WEBKIT_INCLUDE_DIRS} ${X11_INCLUDE_DIRS})
+endif()
+if(DALINIRA_ENABLE_GECKO)
+  target_link_libraries(dalinira-browser PRIVATE dalinira-gecko-adapter)
 endif()
 
 target_compile_definitions(dalinira-browser PRIVATE
@@ -1579,6 +1591,39 @@ add_test(NAME browser-engine-identity COMMAND dalinira-browser-engine-identity-t
 set_tests_properties(browser-engine-identity PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
 
+# The experimental Gecko engine in the real BrowserWindow, off screen, with
+# the fake Gecko host: tabs, navigation, guarded close, crash, exit.
+if(DALINIRA_ENABLE_GECKO)
+  add_executable(dalinira-browser-gecko-window-test
+    ${DALINIRA_BROWSER_FULL_SOURCES}
+    browser/native/tests/gecko_browser_window_test.cpp)
+  target_link_libraries(dalinira-browser-gecko-window-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+  if(DALINIRA_BROWSER_FULL_DEFS)
+    target_compile_definitions(dalinira-browser-gecko-window-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+  endif()
+  target_compile_definitions(dalinira-browser-gecko-window-test PRIVATE
+    DALINIRA_GECKO_HOST_APP_DIR="${DALINIRA_GECKO_HOST_APP_DIR}"
+    DALINIRA_GECKO_FAKE_HOST="$<TARGET_FILE:dalinira-gecko-fake-host>")
+  add_dependencies(dalinira-browser-gecko-window-test dalinira-gecko-fake-host dalinira-browser-policy dalinira-web-output-dali)
+  add_test(NAME browser-gecko-window COMMAND dalinira-browser-gecko-window-test)
+  set_tests_properties(browser-gecko-window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+
+  # GUI tier (scripts/safe-gui-test.sh): the real Gecko host's window embedded
+  # in the browser window on the real X11 display.
+  add_executable(dalinira-browser-gecko-x11-embedding-test
+    ${DALINIRA_BROWSER_FULL_SOURCES}
+    browser/native/tests/gecko_x11_embedding_test.cpp)
+  target_link_libraries(dalinira-browser-gecko-x11-embedding-test PRIVATE ${DALINIRA_BROWSER_FULL_LIBS})
+  if(DALINIRA_BROWSER_FULL_DEFS)
+    target_compile_definitions(dalinira-browser-gecko-x11-embedding-test PRIVATE ${DALINIRA_BROWSER_FULL_DEFS})
+  endif()
+  add_dependencies(dalinira-browser-gecko-x11-embedding-test dalinira-browser-policy dalinira-web-output-dali)
+  add_test(NAME browser-gecko-x11-embedding
+    COMMAND ${DALINIRA_GUI_GATE} $<TARGET_FILE:dalinira-browser-gecko-x11-embedding-test>)
+  set_tests_properties(browser-gecko-x11-embedding PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=xcb;GDK_BACKEND=x11" TIMEOUT 240)
+endif()
+
 # Chromium and WebKit browsing workspaces (tabs, session, shortcut row) are
 # independent; the bookmark library stays shared. One executable: the logic
 # checks run in the default tier; the engine switch (one child process per
@@ -2153,6 +2198,9 @@ foreach(DALINIRA_PARITY_CASE IN LISTS DALINIRA_PARITY_CASES)
 endforeach()
 if(DALINIRA_BUILD_WEBKIT)
   list(APPEND DALINIRA_GUI_TESTS browser-webkit-backend browser-webkit-media browser-webkit-lifecycle)
+endif()
+if(DALINIRA_ENABLE_GECKO)
+  list(APPEND DALINIRA_GUI_TESTS browser-gecko-x11-embedding)
 endif()
 set_tests_properties(${DALINIRA_GUI_TESTS} PROPERTIES RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 

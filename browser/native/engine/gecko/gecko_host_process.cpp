@@ -11,6 +11,7 @@
 #include <QSet>
 #include <QThread>
 
+#include <cerrno>
 #include <csignal>
 #include <fcntl.h>
 #include <sys/prctl.h>
@@ -54,6 +55,65 @@ bool stillSameProcess(const GeckoHostProcess::ProcessId &id) {
 
 bool makePrivateDirectory(const QString &path) {
   return ::mkdir(QFile::encodeName(path).constData(), 0700) == 0;
+}
+
+// A profile kept across launches: created private, or an existing private
+// directory of this user (Gecko's own profiles are 0700).
+bool preparePersistentProfile(const QString &path, QString *error) {
+  struct stat st {};
+  if (::lstat(QFile::encodeName(path).constData(), &st) != 0) {
+    if (errno == ENOENT && makePrivateDirectory(path)) return true;
+    *error = QStringLiteral("cannot create the Gecko profile %1").arg(path);
+    return false;
+  }
+  if (!S_ISDIR(st.st_mode) || st.st_uid != ::getuid() || (st.st_mode & 0077) != 0) {
+    *error = QStringLiteral("the Gecko profile %1 is not a private directory of this user").arg(path);
+    return false;
+  }
+  return true;
+}
+
+// Another process holds Gecko's profile lock (a running Gecko). Only asks:
+// nothing is locked or written.
+bool profileInUse(const QString &profile) {
+  const int fd = ::open(QFile::encodeName(profile + QStringLiteral("/.parentlock")).constData(),
+                        O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+  if (fd < 0) return false;
+  struct flock lock {};
+  lock.l_type = F_WRLCK;
+  lock.l_whence = SEEK_SET;
+  const bool held = ::fcntl(fd, F_GETLK, &lock) == 0 && lock.l_type != F_UNLCK;
+  ::close(fd);
+  return held;
+}
+
+// Replaces <profile>/user.js atomically, unless a user.js DaliNira did not
+// write is there.
+bool writeUserJs(const QString &profile, const QByteArray &content, QString *error) {
+  const QString path = profile + QStringLiteral("/user.js");
+  const QByteArray marker(GeckoHostProcess::kUserJsMarker);
+  struct stat st {};
+  if (::lstat(QFile::encodeName(path).constData(), &st) == 0) {
+    QFile existing(path);
+    if (!S_ISREG(st.st_mode) || st.st_uid != ::getuid() || !existing.open(QIODevice::ReadOnly) ||
+        existing.read(marker.size()) != marker) {
+      *error = QStringLiteral("%1 was not written by DaliNira; it is left as it is").arg(path);
+      return false;
+    }
+  }
+  const QString temporary = path + QStringLiteral(".dalinira-new");
+  ::unlink(QFile::encodeName(temporary).constData());  // a leftover of an interrupted launch
+  const int fd = ::open(QFile::encodeName(temporary).constData(),
+                        O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+  const QByteArray data = marker + content;
+  const bool written = fd >= 0 && ::write(fd, data.constData(), data.size()) == data.size() && ::fsync(fd) == 0;
+  if (fd >= 0) ::close(fd);
+  if (!written || ::rename(QFile::encodeName(temporary).constData(), QFile::encodeName(path).constData()) != 0) {
+    ::unlink(QFile::encodeName(temporary).constData());
+    *error = QStringLiteral("cannot write %1").arg(path);
+    return false;
+  }
+  return true;
 }
 
 // Variables the host may inherit: locale, the session's display, D-Bus,
@@ -148,10 +208,20 @@ bool GeckoHostProcess::start(const Config &config, QString *error) {
   }
   const QString run = config.runDirectory;
   const QString home = run + QStringLiteral("/home");
-  profileDirectory_ = run + QStringLiteral("/profile");
-  for (const QString &dir : {profileDirectory_, home, home + QStringLiteral("/.config"), home + QStringLiteral("/.cache"),
-                             home + QStringLiteral("/.local"), home + QStringLiteral("/.local/share"),
-                             home + QStringLiteral("/.local/state"), run + QStringLiteral("/tmp")}) {
+  const bool persistent = !config.profileDirectory.isEmpty();
+  profileDirectory_ = persistent ? config.profileDirectory : run + QStringLiteral("/profile");
+  if (persistent) {
+    if (!preparePersistentProfile(profileDirectory_, error)) return false;
+    if (profileInUse(profileDirectory_)) {
+      *error = QStringLiteral("the Gecko profile %1 is in use by another Gecko").arg(profileDirectory_);
+      return false;
+    }
+  }
+  QStringList directories{home, home + QStringLiteral("/.config"), home + QStringLiteral("/.cache"),
+                          home + QStringLiteral("/.local"), home + QStringLiteral("/.local/share"),
+                          home + QStringLiteral("/.local/state"), run + QStringLiteral("/tmp")};
+  if (!persistent) directories.prepend(profileDirectory_);
+  for (const QString &dir : std::as_const(directories)) {
     if (!makePrivateDirectory(dir)) {
       *error = QStringLiteral("cannot create %1").arg(dir);
       return false;
@@ -164,14 +234,15 @@ bool GeckoHostProcess::start(const Config &config, QString *error) {
       QJsonDocument(QJsonArray{config.runtime.updatePolicyFile}).toJson(QJsonDocument::Compact).mid(1).chopped(1);
   const QByteArray userJs = "user_pref(\"browser.policies.alternatePath\", " + policyPath + ");\n"
                             "user_pref(\"toolkit.policies.perUserDir\", false);\n";
-  const int fd = ::open(QFile::encodeName(profileDirectory_ + QStringLiteral("/user.js")).constData(),
-                        O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
-  const bool written = fd >= 0 && ::write(fd, userJs.constData(), userJs.size()) == userJs.size();
-  if (fd >= 0) ::close(fd);
-  if (!written) {
-    *error = QStringLiteral("cannot write the host profile's user.js");
+  if (!writeUserJs(profileDirectory_, userJs, error)) return false;
+
+  const QString log = config.logFile.isEmpty() ? run + QStringLiteral("/host-output.log") : config.logFile;
+  const int logFd = ::open(QFile::encodeName(log).constData(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600);
+  if (logFd < 0) {
+    *error = QStringLiteral("cannot create the host log %1").arg(log);
     return false;
   }
+  ::close(logFd);
 
   const QProcessEnvironment env = environmentFor(QProcessEnvironment::systemEnvironment(), config, home, error);
   if (env.isEmpty()) return false;
@@ -180,7 +251,7 @@ bool GeckoHostProcess::start(const Config &config, QString *error) {
   process_.setArguments(argumentsFor(config, profileDirectory_));
   process_.setWorkingDirectory(run);
   process_.setProcessChannelMode(QProcess::MergedChannels);
-  process_.setStandardOutputFile(run + QStringLiteral("/host-output.log"));
+  process_.setStandardOutputFile(log);
   process_.setStandardInputFile(QProcess::nullDevice());
 #if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
   process_.setUnixProcessParameters(QProcess::UnixProcessFlag::CloseFileDescriptors |

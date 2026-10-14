@@ -24,6 +24,10 @@
 #if defined(DALINIRA_BUILD_WEBKIT)
 #include "engine/webkit/webkit_engine_view.h"
 #endif
+#if defined(DALINIRA_BUILD_GECKO)
+#include "engine/gecko/gecko_backend.h"
+#include "engine/gecko/gecko_engine_view.h"
+#endif
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -1376,7 +1380,7 @@ void BrowserWindow::setupUi() {
   connect(sidePanel_, &dalinira::layout::BrowserSidePanel::tabMoved, this, &BrowserWindow::moveTab);
   connect(sidePanel_, &dalinira::layout::BrowserSidePanel::tabDetachRequested,
           this, [this](int index, const QPoint &globalPosition) {
-    if (index < 0 || index >= tabs_.size()) return;
+    if (index < 0 || index >= tabs_.size() || !canMoveTabToAnotherWindow(tabs_[index].id)) return;
 
     QScreen *screen = QGuiApplication::screenAt(globalPosition);
     if (!screen) screen = QGuiApplication::primaryScreen();
@@ -2102,7 +2106,7 @@ int BrowserWindow::addNewTab(const QUrl &url, int insertIndex, bool initiallyPin
     if (host == QLatin1String("listen-settings")) { showSongFinderSettings(); return tabStrip_->currentIndex(); }
   }
 
-  if (dalinira::engine::EngineBackend::selectedEngineType() == dalinira::engine::EngineType::WebKit &&
+  if (dalinira::engine::EngineBackend::selectedEngineType() != dalinira::engine::EngineType::Chromium &&
       dalinira::engine::EngineBackend::instance()) {
     QUrl loadUrl = targetUrl;
     if (loadUrl.isEmpty()) {
@@ -2113,6 +2117,8 @@ int BrowserWindow::addNewTab(const QUrl &url, int insertIndex, bool initiallyPin
     auto *engineView = isIncognito()
         ? backend->createEphemeralView(pageStack_)
         : backend->createView(pageStack_);
+    // An engine without private pages (Gecko) refuses a private view.
+    if (!engineView) return -1;
 #if defined(DALINIRA_BUILD_WEBKIT)
     if (auto *webkitView = qobject_cast<dalinira::engine::WebKitEngineView *>(engineView)) {
       webkitView->setNewTabProfileData(services_.profileService);
@@ -2626,6 +2632,23 @@ void BrowserWindow::wireEngineViewSignals(dalinira::engine::EngineView *engineVi
     });
   }
 #endif
+#if defined(DALINIRA_BUILD_GECKO)
+  if (auto *gecko = qobject_cast<dalinira::engine::GeckoEngineView *>(engineView)) {
+    // A page opened a tab (target=_blank, window.open): the Gecko host made
+    // it, with its opener; this window shows it as a new tab.
+    connect(gecko, &dalinira::engine::GeckoEngineView::contentTabOpened, this, [this](const QString &hostTabId) {
+      auto *backend = qobject_cast<dalinira::engine::GeckoBackend *>(
+          dalinira::engine::EngineBackend::backendForType(dalinira::engine::EngineType::Gecko));
+      if (!backend) return;
+      backend->adoptHostTab(hostTabId);
+      {
+        QScopedValueRollback<bool> adopting(adoptingEnginePopup_, true);
+        addNewTab(QUrl(QStringLiteral("about:blank")));
+      }
+      backend->adoptHostTab({});
+    });
+  }
+#endif
 }
 
 int BrowserWindow::addInternalTab(QWidget *page, const QString &title, const QIcon &icon,
@@ -2657,6 +2680,23 @@ int BrowserWindow::addInternalTab(QWidget *page, const QString &title, const QIc
 }
 
 void BrowserWindow::closeTab(int index) {
+  if (index < 0 || index >= tabs_.size()) return;
+  dalinira::engine::EngineView *engineView = tabs_[index].engineView.data();
+  if (!engineView) {
+    closeTabNow(index);
+    return;
+  }
+  // Chromium/WebKit views allow it at once, inside requestClose(); a Gecko
+  // page with unsaved changes answers after the user confirmed.
+  const uint64_t tabId = tabs_[index].id;
+  engineView->requestClose([window = QPointer<BrowserWindow>(this), tabId](bool allowed) {
+    if (!allowed || !window) return;
+    const int current = window->findIndexByTabId(tabId);
+    if (current >= 0) window->closeTabNow(current);
+  });
+}
+
+void BrowserWindow::closeTabNow(int index) {
   if (translateBubble_ && translateBubble_->isVisible()) {
     translateBubble_->close();
   }
@@ -2950,7 +2990,7 @@ bool BrowserWindow::transferSidePanelTabTo(uint64_t tabId,
                                            BrowserWindow *destination,
                                            int targetIndex) {
   if (!destination || destination == this ||
-      destination->services_.profile != services_.profile) {
+      destination->services_.profile != services_.profile || !canMoveTabToAnotherWindow(tabId)) {
     return false;
   }
 
@@ -2985,8 +3025,15 @@ bool BrowserWindow::transferSidePanelTabTo(uint64_t tabId,
   return true;
 }
 
+bool BrowserWindow::canMoveTabToAnotherWindow(uint64_t tabId) const {
+  const int index = findIndexByTabId(tabId);
+  return index < 0 || !tabs_[index].engineView ||
+         tabs_[index].engineView->engineType() != dalinira::engine::EngineType::Gecko;
+}
+
 bool BrowserWindow::transferTabTo(uint64_t tabId, BrowserWindow *destination, int targetIndex) {
   if (!destination || destination == this || destination->services_.profile != services_.profile) return false;
+  if (!canMoveTabToAnotherWindow(tabId)) return false;
 
   int sourceIndex = findIndexByTabId(tabId);
   if (sourceIndex < 0) {
@@ -4707,6 +4754,11 @@ void BrowserWindow::openLocalMedia(const LocalMediaOpenRequest &request) {
       ? QFileInfo(canonicalPath).completeBaseName() : request.title;
   const QIcon icon = BrowserIcons::icon(audio ? BrowserIcon::Music : BrowserIcon::Video);
 
+  // Gecko pages are http(s) only: the system player opens the file.
+  if (currentWorkspaceEngine_ == dalinira::engine::EngineType::Gecko) {
+    DownloadDesktopActions::openFile(canonicalPath, request.allowedRoot);
+    return;
+  }
   const bool isWebKit = (currentWorkspaceEngine_ == dalinira::engine::EngineType::WebKit)
       || (dalinira::engine::EngineBackend::selectedEngineType() == dalinira::engine::EngineType::WebKit);
   if (isWebKit) {
@@ -7327,6 +7379,11 @@ BrowserWindow *BrowserWindow::createWindow(const BrowserServices &services) {
 }
 
 BrowserWindow *BrowserWindow::openNewWindow(const QUrl &url) {
+  // The experimental Gecko engine presents one window: a new tab instead.
+  if (currentWorkspaceEngine_ == dalinira::engine::EngineType::Gecko) {
+    addNewTab(url);
+    return this;
+  }
   auto *window = createWindow(services_);
   if (url.isValid() && !url.isEmpty()) {
     window->addNewTab(url);
@@ -7338,6 +7395,11 @@ BrowserWindow *BrowserWindow::openNewWindow(const QUrl &url) {
 }
 
 BrowserWindow *BrowserWindow::openIncognitoWindow(const QUrl &url) {
+  if (currentWorkspaceEngine_ == dalinira::engine::EngineType::Gecko) {
+    QMessageBox::information(this, I18n::text(QStringLiteral("window.incognito_title")),
+                             QStringLiteral("Private windows are not available with the experimental Gecko engine."));
+    return nullptr;
+  }
   auto incognitoServices = services_;
   const auto directory = std::make_shared<QTemporaryDir>();
   if (!directory->isValid()) return nullptr;
