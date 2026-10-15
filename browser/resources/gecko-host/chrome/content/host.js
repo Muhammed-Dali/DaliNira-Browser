@@ -171,6 +171,7 @@ function ipcReportState(state, tab = DngTabs.tabForBrowser(gBrowser)) {
   const mc = bc?.mediaController;
   const report = {
     url: state.uri?.slice(0, 8192),
+    ...DngNewTab.report(tab),
     title: state.title.slice(0, 2048),
     loading: state.loading,
     canGoBack: state.historyIndex > 0,
@@ -607,6 +608,7 @@ async function onBrowserCrashed(event) {
   if (!tab || tab.recovering) return;
   tab.recovering = true;
   tab.crashed = true;
+  DngNewTab.intent(tab, "content-crashed");
   const dead = tab.browser;
   emit("content-crashed", { isTopFrame: event.isTopFrame, childID: event.childID, hostAlive: true, tabId: tab.id });
   ipcTabSend(tab, "content-crashed", { isTopFrame: event.isTopFrame });
@@ -641,7 +643,7 @@ async function recoverBrowser(tab) {
       if (s.loading === false && s.pid && s.uri && s.uri !== "about:blank") {
         gRecoveries++;
         emit("recovered", { ...s, tabId: tab.id, recoveries: gRecoveries, frames: frameTree(tab.browser) });
-        ipcTabSend(tab, "recovered", { url: s.uri, contentPid: s.pid });
+        ipcTabSend(tab, "recovered", { url: DngNewTab.report(tab).url || s.uri, contentPid: s.pid });
         return;
       }
       await sleep(100);

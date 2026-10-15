@@ -487,6 +487,8 @@ set(DALINIRA_GECKO_DEVELOPMENT_RUNTIME "" CACHE PATH
 if(DALINIRA_ENABLE_GECKO)
   add_compile_definitions(DALINIRA_BUILD_GECKO=1)
   set(GECKO_BACKEND_SOURCES
+    browser/native/newtab/gecko_new_tab_controller.cpp
+    browser/native/newtab/gecko_new_tab_controller.h
     browser/native/engine/gecko/gecko_backend.cpp
     browser/native/engine/gecko/gecko_backend.h
     browser/native/engine/gecko/gecko_engine_view.cpp
@@ -496,7 +498,14 @@ if(DALINIRA_ENABLE_GECKO)
     browser/native/engine/gecko/gecko_shortcut_router.cpp
     browser/native/engine/gecko/gecko_shortcut_router.h)
   pkg_check_modules(DALINIRA_GECKO_XCB REQUIRED IMPORTED_TARGET xcb xcb-res)
-  set(DALINIRA_GECKO_HOST_APP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/browser/resources/gecko-host")
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  set(DALINIRA_GECKO_HOST_APP_DIR "${CMAKE_CURRENT_BINARY_DIR}/gecko-host")
+  file(GLOB_RECURSE GECKO_HOST_INPUTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/browser/resources/gecko-host/*")
+  add_custom_command(OUTPUT "${DALINIRA_GECKO_HOST_APP_DIR}/omni.ja"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/package_gecko_host.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/browser/resources/gecko-host" "${DALINIRA_GECKO_HOST_APP_DIR}"
+    DEPENDS ${GECKO_HOST_INPUTS} "${CMAKE_CURRENT_SOURCE_DIR}/tools/package_gecko_host.py" VERBATIM)
+  add_custom_target(dalinira-gecko-host-package DEPENDS "${DALINIRA_GECKO_HOST_APP_DIR}/omni.ja")
   add_library(dalinira-gecko-adapter STATIC
     browser/native/engine/gecko/gecko_runtime.cpp
     browser/native/engine/gecko/gecko_runtime.h
@@ -508,6 +517,7 @@ if(DALINIRA_ENABLE_GECKO)
     browser/native/engine/gecko/gecko_session.h
     browser/native/engine/gecko/gecko_x11_embedder.cpp
     browser/native/engine/gecko/gecko_x11_embedder.h)
+  add_dependencies(dalinira-gecko-adapter dalinira-gecko-host-package)
   # Only what the adapter uses: not the directory-wide WebKit libraries.
   set_property(TARGET dalinira-gecko-adapter PROPERTY LINK_LIBRARIES "")
   target_link_libraries(dalinira-gecko-adapter PUBLIC Qt6::Core Qt6::Network Qt6::Widgets PkgConfig::DALINIRA_GECKO_XCB)
@@ -1609,6 +1619,16 @@ if(DALINIRA_ENABLE_GECKO)
   add_dependencies(dalinira-browser-gecko-window-test dalinira-gecko-fake-host dalinira-browser-policy dalinira-web-output-dali)
   add_test(NAME browser-gecko-window COMMAND dalinira-browser-gecko-window-test)
   set_tests_properties(browser-gecko-window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+
+  add_test(NAME browser-gecko-newtab-headless COMMAND dalinira-browser-gecko-window-test --real-newtab)
+  set_tests_properties(browser-gecko-newtab-headless PROPERTIES SKIP_RETURN_CODE 77 LABELS "gecko" ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 120)
+  add_test(NAME browser-gecko-newtab-security COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_gecko_newtab_security.py" "${DALINIRA_GECKO_HOST_APP_DIR}" "$<TARGET_FILE:dalinira-browser-gecko-window-test>")
+  set_tests_properties(browser-gecko-newtab-security PROPERTIES LABELS "gecko" SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_test(NAME browser-gecko-newtab-x11 COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/gecko_newtab_gui_fixture.py" "$<TARGET_FILE:dalinira-browser-gecko-window-test>")
+  set_tests_properties(browser-gecko-newtab-x11 PROPERTIES LABELS "gui" RUN_SERIAL TRUE SKIP_RETURN_CODE 77 TIMEOUT 120
+    ENVIRONMENT "QT_QPA_PLATFORM=xcb;GDK_BACKEND=x11;DALINIRA_GUI_MAX_WEB_PROCESSES=4")
 
   # GUI tier (scripts/safe-gui-test.sh): the real Gecko host's window embedded
   # in the browser window on the real X11 display.

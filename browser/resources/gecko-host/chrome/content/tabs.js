@@ -24,6 +24,7 @@ const DngTabs = (() => {
   function activate(id) {
     const t = tabs.get(id);
     if (!t) return false;
+    DngNewTab.activation();
     activeId = id;
     for (const item of tabs.values()) {
       const selected = item === t;
@@ -78,6 +79,7 @@ const DngTabs = (() => {
     const ids = [...tabs.keys()];
     const next = ids[ids.indexOf(id) + 1] || ids[ids.indexOf(id) - 1];
     detach(t);
+    DngNewTab.retire(t);
     tabs.delete(id); // Cancels polling/recovery before destroying the frame.
     t.browser.remove();
     notify("tab-closed", { tabId: id });
@@ -112,7 +114,7 @@ const DngTabs = (() => {
         load_url: ["tabId", "url"], back: ["tabId"], forward: ["tabId"],
         reload: ["tabId"], stop: ["tabId"], list_tabs: [], shutdown: msg.protocol === 3 ? ["discard", "documents"] : [],
         ...(msg.protocol === 3 ? { recover_tab: ["tabId"], cancel_request: ["targetRequestId"], set_shortcuts: ["shortcuts"],
-          ...(DngKeys.testInput ? { test_key: ["tabId", "key", "code", "modifiers"] } : {}) } : {}),
+          ...(DngKeys.testInput ? { test_key: ["tabId", "key", "code", "modifiers"], test_newtab: ["tabId", "operation"] } : {}) } : {}),
       };
       const fields = schemas[msg.type];
       if (!fields) throw new Error("unknown-command");
@@ -170,6 +172,10 @@ const DngTabs = (() => {
             throw new Error("stale-document");
         }
       }
+      // Reject malformed navigation before revoking the live internal document.
+      const navigationURI = msg.type === "load_url" ? parsedURL(msg.url) : null;
+      if (msg.type === "recover_tab" && !t.crashed) throw new Error("not-crashed");
+      if (["load_url", "back", "forward", "reload", "recover_tab", "stop"].includes(msg.type)) DngNewTab.intent(t, msg.type);
       switch (msg.type) {
         case "close_tab": close(t.id); break;
         case "recover_tab":
@@ -177,16 +183,17 @@ const DngTabs = (() => {
           recoverBrowser(t); break;
         case "activate_tab": activate(t.id); break;
         case "load_url": {
-          const uri = parsedURL(msg.url); t.lastUrl = uri.spec;
+          const uri = navigationURI; t.lastUrl = uri.spec;
           if (t.id === activeId) gLastUrl = uri.spec;
           t.browser.loadURI(uri, systemLoadOptions()); break;
         }
         case "back": case "forward":
-          if (!historyStep(msg.type === "forward", t.browser)) throw new Error("no-history");
+          if (!historyStep(msg.type === "forward", t.browser)) { DngNewTab.resume(t); throw new Error("no-history"); }
           break;
         case "reload": t.browser.reload(); break;
-        case "stop": t.browser.stop(); break;
+        case "stop": t.browser.stop(); DngNewTab.resume(t); break;
         case "test_key": DngKeys.testKey(t, msg); break;
+        case "test_newtab": response.data = await DngNewTab.testOperation(t,msg.operation); break;
       }
       DngIpc.send("ack", response);
     } catch (e) {
@@ -201,6 +208,7 @@ const DngTabs = (() => {
   }
   const queued = new Map();
   function command(msg) {
+    if (["load_internal_page", "internal_state", "commit_internal_action", "retire_internal"].includes(msg.type)) { DngNewTab.command(msg); return; }
     if (DngIpc.protocol !== 3) { commandNow(msg); return; }
     if (msg.type === "cancel_request") {
       if (msg.protocol !== 3 || typeof msg.requestId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(msg.requestId) ||
@@ -208,6 +216,7 @@ const DngTabs = (() => {
           Object.keys(msg).some(k => !["type", "protocol", "requestId", "sessionId", "commandSequence", "targetRequestId"].includes(k))) {
         DngIpc.send("error", { command: msg.type, code: "invalid-argument" }); return;
       }
+      DngNewTab.cancel(msg.targetRequestId);
       const task = queued.get(msg.targetRequestId);
       if (task) {
         clearTimeout(task.timer); queued.delete(msg.targetRequestId);

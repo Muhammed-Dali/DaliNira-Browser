@@ -131,8 +131,11 @@ GeckoValidatedRuntime GeckoRuntime::validate(const GeckoRuntimePaths &paths, QSt
     runtime.hostApplicationDirectory = app;
     runtime.applicationIni = app + QStringLiteral("/application.ini");
     runtime.updatePolicyFile = app + QStringLiteral("/distribution/policies.json");
-    for (const QString &file : {runtime.applicationIni, app + QStringLiteral("/chrome.manifest"),
-                                app + QStringLiteral("/chrome/content/host.js"), runtime.updatePolicyFile}) {
+    const QStringList hostFiles = QFileInfo::exists(app + QStringLiteral("/omni.ja"))
+        ? QStringList{runtime.applicationIni, app + QStringLiteral("/omni.ja"), runtime.updatePolicyFile}
+        : QStringList{runtime.applicationIni, app + QStringLiteral("/chrome.manifest"),
+                      app + QStringLiteral("/chrome/content/host.js"), runtime.updatePolicyFile};
+    for (const QString &file : hostFiles) {
       if (!trustedFile(app, file, false, &problem)) found.append(problem);
     }
     applicationName = iniValue(runtime.applicationIni, QStringLiteral("App"), QStringLiteral("Name"));

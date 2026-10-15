@@ -41,7 +41,7 @@ bool constantTimeEquals(const QByteArray &a, const QByteArray &b) {
 // Messages the host may send after authentication.
 const QSet<QString> &hostMessageTypes() {
   static const QSet<QString> types = {
-      QStringLiteral("window-tagged"), QStringLiteral("state"), QStringLiteral("progress"),
+      QStringLiteral("internal-action"), QStringLiteral("window-tagged"), QStringLiteral("state"), QStringLiteral("progress"),
       QStringLiteral("load-error"), QStringLiteral("geometry"), QStringLiteral("focus"),
       QStringLiteral("ack"), QStringLiteral("error"), QStringLiteral("content-crashed"),
       QStringLiteral("recovered"), QStringLiteral("tab-created"), QStringLiteral("tab-closed"),
@@ -247,18 +247,19 @@ bool GeckoIpcServer::handleFrame(const QByteArray &payload) {
       endSession(QStringLiteral("invalid session id"));
       return false;
     }
+    internalDocuments_ = msg.value(QStringLiteral("features")).toArray().contains(QStringLiteral("internal-document-v1"));
     authenticated_ = true;
     if (helloTimer_) helloTimer_->stop();
     // The token is single-use: a reconnect needs a new launch.
     token_ = randomHex(32);
     qCDebug(lcGeckoIpc) << "authenticated host" << peerPid_ << "token consumed:" << tokenFileConsumed();
-    sendFrame({{"type", "welcome"}, {"protocol", kProtocol}, {"windowTag", windowTag_}, {"sessionId", sessionId_}});
+    sendFrame({{"type", "welcome"}, {"protocol", kProtocol}, {"windowTag", windowTag_}, {"sessionId", sessionId_}, {"features", internalDocuments_ ? QJsonArray{QStringLiteral("internal-document-v1")} : QJsonArray{}}});
     emit authenticated(peerPid_);
     return true;
   }
 
   const auto sequence = msg.value(QStringLiteral("sequence")).toInteger(-1);
-  if (msg.value(QStringLiteral("sessionId")).toString() != sessionId_ || sequence != eventSequence_ + 1) {
+  if (!msg.value("sequence").isDouble() || msg.value("sequence").toDouble() != static_cast<double>(sequence) || sequence > 9007199254740991LL || msg.value(QStringLiteral("sessionId")).toString() != sessionId_ || sequence != eventSequence_ + 1) {
     endSession(QStringLiteral("stale or reordered session event"));
     return false;
   }
@@ -301,6 +302,14 @@ bool GeckoIpcServer::handleFrame(const QByteArray &payload) {
             (msg.value(QStringLiteral("contentPid")).isNull() || msg.value(QStringLiteral("contentPid")).isDouble()) &&
             boolean("mediaPlaying") && boolean("mediaAudible") && msg.value(QStringLiteral("documentId")).isString() &&
             boolean("hasBeforeUnload") && boolean("crashed");
+    if(msg.contains("internalPage") || msg.value("url")==QLatin1String("dalinira://newtab/")) {
+      static const QRegularExpression bindingId(QStringLiteral("^[0-9a-f]{32}$"));
+      const auto revision=msg.value("internalRevision");
+      valid=valid && internalDocuments_ && msg.value("internalPage")==QLatin1String("newtab") &&
+        msg.value("url")==QLatin1String("dalinira://newtab/") && msg.value("documentURI")==QLatin1String("about:dalinira-newtab") &&
+        bindingId.match(msg.value("internalInstance").toString()).hasMatch() && revision.isDouble() &&
+        revision.toDouble()==static_cast<double>(revision.toInteger(-1)) && revision.toInteger(-1)>0 && revision.toDouble()<=9007199254740991.0;
+    }
   } else if (type == QLatin1String("progress")) {
     const auto phase = msg.value(QStringLiteral("phase")).toString();
     const auto value = msg.value(QStringLiteral("value"));
@@ -323,6 +332,13 @@ bool GeckoIpcServer::handleFrame(const QByteArray &payload) {
             boolean("loading") && boolean("active") && msg.value(QStringLiteral("source")).isString();
   } else if (type == QLatin1String("window-tagged")) {
     valid = msg.value(QStringLiteral("tag")).toString() == windowTag_;
+  } else if (type == QLatin1String("internal-action")) {
+    static const QRegularExpression bindingId(QStringLiteral("^[0-9a-f]{32}$"));
+    const auto revision=msg.value("revision");
+    valid = internalDocuments_ && validTabId(msg.value("tabId")) && msg.value("documentId").isString() &&
+      !msg.value("documentId").toString().isEmpty() && msg.value("documentId").toString().size()<=64 &&
+      bindingId.match(msg.value("instance").toString()).hasMatch() && bindingId.match(msg.value("actionId").toString()).hasMatch() &&
+      revision.isDouble() && revision.toDouble()==static_cast<double>(revision.toInteger(-1)) && revision.toInteger(-1)>0 && revision.toDouble()<=9007199254740991.0 && msg.value("action").isObject();
   } else if (type == QLatin1String("shortcut")) {
     valid = valid && isValidShortcut(msg.value(QStringLiteral("shortcut")).toString()) && boolean("repeat");
   } else if (type == QLatin1String("focus")) {

@@ -78,6 +78,10 @@ class GeckoSessionView : public QObject {
   QJsonObject snapshot() const { return state_; }
 
   GeckoRequest *load(const QUrl &url);
+  GeckoRequest *loadNewTab(const QString &bundleId, const QJsonObject &state);
+  GeckoRequest *updateNewTabState(const QString &instance, const QJsonObject &state);
+  GeckoRequest *commitNewTabAction(const QJsonObject &event, const QJsonObject &effect);
+  GeckoRequest *retireNewTab(const QString &instance);
   GeckoRequest *reload();
   GeckoRequest *stop();
   GeckoRequest *back();
@@ -102,6 +106,8 @@ class GeckoSessionView : public QObject {
   void audibleChanged(bool audible);
   void webProcessTerminated(int reason);
   void lifecycleStateChanged(dalinira::engine::GeckoSessionView::State state);
+  // The host reported a new current document for this tab.
+  void documentChanged(const QString &documentId);
   void stateLost(const QString &reason);
   void windowCloseRequested();
 
@@ -163,6 +169,8 @@ class GeckoSession : public QObject {
   bool hostIsRunning() const;
   QString windowTag() const;
   int protocol() const;
+  bool supportsInternalDocuments() const;
+  QString publishNewTab(const QByteArray &markup, QString *error);
   QList<GeckoHostProcess::ProcessId> hostProcesses() const;
 
   // At most one widget presents the session's surface at a time.
@@ -220,6 +228,8 @@ class GeckoSession : public QObject {
   void finish(const QString &id, const QString &status, const QJsonObject &result = {});
   void removeRunDirectory();
 
+  QHash<QByteArray, QString> newTabBundles_;
+  qint64 newTabBundleBytes_ = 0;
   QPointer<QWidget> presentationOwner_;
   QPointer<GeckoIpcServer> ipc_;
   QPointer<GeckoHostProcess> host_;

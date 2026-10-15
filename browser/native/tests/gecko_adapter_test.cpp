@@ -171,8 +171,7 @@ void checkRuntimeValidation(const QString &base) {
   // The host application: exactly DaliNira's update policy and name.
   const QString app = base + QStringLiteral("/app");
   CHECK(QDir().mkpath(app));
-  for (const QString &entry : {QStringLiteral("application.ini"), QStringLiteral("chrome.manifest"),
-                               QStringLiteral("chrome/content/host.js"), QStringLiteral("distribution/policies.json")}) {
+  for (const QString &entry : {QStringLiteral("application.ini"), QStringLiteral("omni.ja"), QStringLiteral("distribution/policies.json")}) {
     CHECK(QDir().mkpath(QFileInfo(app + QLatin1Char('/') + entry).path()));
     QFile::remove(app + QLatin1Char('/') + entry);
     CHECK(QFile::copy(hostApplication() + QLatin1Char('/') + entry, app + QLatin1Char('/') + entry));
@@ -427,6 +426,48 @@ void checkEmbedderWithoutXcb() {
   embedder.focusEmbedded();
   embedder.focusQt(&parent);
   std::cout << "PASS x11 embedder refuses without xcb" << std::endl;
+}
+
+// M3-B5 X11 regression: once the page took the keyboard, Qt deactivated the
+// browser window 100 ms after the top-level's FocusOut (NotifyInferior), so
+// Ctrl+L's setFocus() on the address bar changed no focus and the page kept
+// the X11 keyboard. Only that FocusOut is kept from Qt.
+void checkFocusHandoffIntoEmbedded() {
+  constexpr xcb_window_t top = 0x1200001, embedded = 0x3400001, other = 0x5600001, qtChild = 0x1200007;
+  const auto out = [](xcb_window_t window, uint8_t detail, uint8_t mode = XCB_NOTIFY_MODE_NORMAL) {
+    xcb_focus_out_event_t event {};
+    event.response_type = XCB_FOCUS_OUT;
+    event.event = window;
+    event.detail = detail;
+    event.mode = mode;
+    return event;
+  };
+  // The page takes the keyboard: Qt's window stays active.
+  CHECK(GeckoX11Embedder::isFocusMoveIntoEmbedded(out(top, XCB_NOTIFY_DETAIL_INFERIOR), top, embedded, embedded));
+  CHECK(GeckoX11Embedder::isFocusMoveIntoEmbedded(out(top, XCB_NOTIFY_DETAIL_INFERIOR, XCB_NOTIFY_MODE_WHILE_GRABBED),
+                                                  top, embedded, embedded));
+  // Another application, the window manager, the root or no focus: Qt deactivates.
+  for (const uint8_t detail : {XCB_NOTIFY_DETAIL_NONLINEAR, XCB_NOTIFY_DETAIL_NONLINEAR_VIRTUAL, XCB_NOTIFY_DETAIL_ANCESTOR,
+                               XCB_NOTIFY_DETAIL_VIRTUAL, XCB_NOTIFY_DETAIL_POINTER, XCB_NOTIFY_DETAIL_POINTER_ROOT,
+                               XCB_NOTIFY_DETAIL_NONE}) {
+    CHECK(!GeckoX11Embedder::isFocusMoveIntoEmbedded(out(top, detail), top, embedded, embedded));
+    CHECK(!GeckoX11Embedder::isFocusMoveIntoEmbedded(out(top, detail), top, embedded, other));
+  }
+  // Into the window but not the page (a native Qt child), or the focus has
+  // already moved on by the time the event is read: Qt decides as usual.
+  CHECK(!GeckoX11Embedder::isFocusMoveIntoEmbedded(out(top, XCB_NOTIFY_DETAIL_INFERIOR), top, embedded, qtChild));
+  CHECK(!GeckoX11Embedder::isFocusMoveIntoEmbedded(out(top, XCB_NOTIFY_DETAIL_INFERIOR), top, embedded, other));
+  CHECK(!GeckoX11Embedder::isFocusMoveIntoEmbedded(out(top, XCB_NOTIFY_DETAIL_INFERIOR), top, embedded, top));
+  // Another window's FocusOut, or nothing embedded.
+  CHECK(!GeckoX11Embedder::isFocusMoveIntoEmbedded(out(other, XCB_NOTIFY_DETAIL_INFERIOR), top, embedded, embedded));
+  CHECK(!GeckoX11Embedder::isFocusMoveIntoEmbedded(out(embedded, XCB_NOTIFY_DETAIL_INFERIOR), top, embedded, embedded));
+  CHECK(!GeckoX11Embedder::isFocusMoveIntoEmbedded(out(top, XCB_NOTIFY_DETAIL_INFERIOR), 0, embedded, embedded));
+  CHECK(!GeckoX11Embedder::isFocusMoveIntoEmbedded(out(0, XCB_NOTIFY_DETAIL_INFERIOR), top, 0, 0));
+  // Without xcb nothing is filtered (no embedded window).
+  GeckoX11Embedder embedder;
+  xcb_focus_out_event_t event = out(top, XCB_NOTIFY_DETAIL_INFERIOR);
+  CHECK(!embedder.nativeEventFilter(QByteArrayLiteral("xcb_generic_event_t"), &event, nullptr));
+  std::cout << "PASS focus moving into the page keeps Qt's window active; leaving it does not" << std::endl;
 }
 
 // ---------------------------------------------------------------------------
@@ -891,6 +932,7 @@ int main(int argc, char *argv[]) {
   checkLaunchEnvironment();
   checkIpcServer(makePrivateDirectory(base + QStringLiteral("/ipc-tests")));
   checkEmbedderWithoutXcb();
+  checkFocusHandoffIntoEmbedded();
   checkSessionRefusals(base, paths);
   checkSession(paths);
   checkShortcuts(paths);

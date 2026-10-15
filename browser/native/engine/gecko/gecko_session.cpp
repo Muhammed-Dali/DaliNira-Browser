@@ -1,6 +1,9 @@
 #include "engine/gecko/gecko_session.h"
 
 #include <QDir>
+#include <QCryptographicHash>
+#include <QJsonDocument>
+#include <fcntl.h>
 #include <QFile>
 #include <QFileInfo>
 #include <QLoggingCategory>
@@ -76,6 +79,7 @@ void GeckoSessionView::update(const QJsonObject &state) {
   if (old.value(QStringLiteral("title")) != state.value(QStringLiteral("title"))) emit titleChanged(title());
   if (old.value(QStringLiteral("mediaAudible")) != state.value(QStringLiteral("mediaAudible"))) emit audibleChanged(isAudible());
   if (!old.value(QStringLiteral("loading")).toBool() && isLoading()) emit loadStarted();
+  if (old.value(QStringLiteral("documentId")) != state.value(QStringLiteral("documentId"))) emit documentChanged(documentId());
 }
 
 GeckoRequest *GeckoSessionView::command(const QString &type, QJsonObject fields) {
@@ -88,6 +92,18 @@ GeckoRequest *GeckoSessionView::command(const QString &type, QJsonObject fields)
 
 GeckoRequest *GeckoSessionView::load(const QUrl &url) {
   return command(QStringLiteral("load_url"), {{QStringLiteral("url"), url.toString()}});
+}
+GeckoRequest *GeckoSessionView::loadNewTab(const QString &bundleId, const QJsonObject &state) {
+  return command(QStringLiteral("load_internal_page"), {{"page","newtab"},{"bundleId",bundleId},{"state",state},{"documentId",documentId()}});
+}
+GeckoRequest *GeckoSessionView::updateNewTabState(const QString &instance,const QJsonObject &state) {
+  return command(QStringLiteral("internal_state"),{{"instance",instance},{"state",state},{"documentId",documentId()}});
+}
+GeckoRequest *GeckoSessionView::commitNewTabAction(const QJsonObject &event,const QJsonObject &effect) {
+  return command(QStringLiteral("commit_internal_action"),{{"documentId",event.value("documentId")},{"instance",event.value("instance")},{"actionId",event.value("actionId")},{"revision",event.value("revision")},{"effect",effect}});
+}
+GeckoRequest *GeckoSessionView::retireNewTab(const QString &instance) {
+  return command(QStringLiteral("retire_internal"),{{"instance",instance},{"documentId",documentId()}});
 }
 GeckoRequest *GeckoSessionView::reload() { return command(QStringLiteral("reload")); }
 GeckoRequest *GeckoSessionView::stop() { return command(QStringLiteral("stop")); }
@@ -143,6 +159,23 @@ void GeckoSession::releasePresentation(QWidget *owner) {
 
 qint64 GeckoSession::hostPid() const { return host_ ? host_->pid() : 0; }
 bool GeckoSession::hostIsRunning() const { return host_ && host_->isRunning(); }
+bool GeckoSession::supportsInternalDocuments() const { return ipc_ && ipc_->supportsInternalDocuments(); }
+QString GeckoSession::publishNewTab(const QByteArray &markup,QString *error) {
+  const QByteArray hash=QCryptographicHash::hash(markup,QCryptographicHash::Sha256).toHex();
+  if(newTabBundles_.contains(hash))return newTabBundles_.value(hash);
+  const QByteArray bytes=QJsonDocument(QJsonObject{{"version",1},{"html",QString::fromUtf8(markup)},{"sha256",QString::fromLatin1(hash)}}).toJson(QJsonDocument::Compact);
+  if(state_!=State::Ready||bytes.size()>16*1024*1024||newTabBundleBytes_+bytes.size()>32*1024*1024){*error=QStringLiteral("New Tab bundle limit/session");return {};}
+  const QString root=runDir_+QStringLiteral("/newtab");
+  if(!QFileInfo::exists(root)&&::mkdir(QFile::encodeName(root).constData(),0700)!=0){*error=QStringLiteral("New Tab private directory");return {};}
+  if(!privateRoot(root,error))return {};
+  const QString id=randomId(32),path=root+QLatin1Char('/')+id+QStringLiteral(".json");
+  const int fd=::open(QFile::encodeName(path).constData(),O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,0600);
+  if(fd<0){*error=QStringLiteral("New Tab immutable publication");return {};}
+  qint64 offset=0;while(offset<bytes.size()){const ssize_t n=::write(fd,bytes.constData()+offset,bytes.size()-offset);if(n<=0)break;offset+=n;}
+  const bool ok=offset==bytes.size()&&::fsync(fd)==0;::close(fd);
+  if(!ok){*error=QStringLiteral("New Tab publication failed");return {};}
+  newTabBundleBytes_+=bytes.size();newTabBundles_.insert(hash,id);return id;
+}
 QString GeckoSession::windowTag() const { return ipc_ ? ipc_->windowTag() : QString(); }
 int GeckoSession::protocol() const { return ipc_ ? ipc_->protocol() : 0; }
 
@@ -192,6 +225,7 @@ bool GeckoSession::start(const Config &config, QString *error) {
   requestPrefix_ = QStringLiteral("g%1_%2_").arg(generation_).arg(randomId(12));
   state_ = State::Starting;
   views_.clear();
+  newTabBundles_.clear(); newTabBundleBytes_ = 0;
   order_.clear();
   activeId_.clear();
   // Unique across launches and sessions, even when a pid is reused.
@@ -288,6 +322,10 @@ GeckoRequest *GeckoSession::submit(const QString &type, QJsonObject fields, int 
                        : pending.type == QLatin1String("invalid_shortcuts")   ? "invalid-shortcuts"
                                                                               : "invalid-view-or-request-limit"}});
       return;
+    }
+    if ((pending.type == QLatin1String("load_internal_page") || pending.type == QLatin1String("internal_state") ||
+         pending.type == QLatin1String("commit_internal_action") || pending.type == QLatin1String("retire_internal")) && !supportsInternalDocuments()) {
+      finish(id,QStringLiteral("rejected"),{{"code","internal-feature-required"}}); return;
     }
     if (!ipc_->send(pending.message)) {
       finish(id, QStringLiteral("disconnected"), {{"code", "send-failed"}});

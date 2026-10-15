@@ -173,8 +173,9 @@ std::optional<GeckoX11Embedder::HostWindow> GeckoX11Embedder::findHostWindow(qin
 }
 
 QWidget *GeckoX11Embedder::embed(const HostWindow &host, QWidget *parent) {
-  if (!conn_ || !host.window) return nullptr;
+  if (!conn_ || !host.window || !parent) return nullptr;
   window_ = host.window;
+  topLevel_ = parent->window();
   // Observe the window's lifecycle on our own connection without disturbing
   // whatever event mask Qt itself selected on it.
   auto attrs = reply(xcb_get_window_attributes_reply(
@@ -214,6 +215,7 @@ void GeckoX11Embedder::forget() {
     xcb_flush(conn_);
   }
   window_ = 0;
+  topLevel_.clear();
   grabbed_ = false;
 }
 
@@ -221,6 +223,26 @@ xcb_window_t GeckoX11Embedder::inputFocus() const {
   if (!conn_) return 0;
   auto r = reply(xcb_get_input_focus_reply(conn_, xcb_get_input_focus(conn_), nullptr));
   return r ? r->focus : 0;
+}
+
+xcb_window_t GeckoX11Embedder::focusWithinEmbedded() const {
+  const xcb_window_t focus = inputFocus();
+  xcb_window_t current = focus;
+  for (int depth = 0; current && current != XCB_INPUT_FOCUS_POINTER_ROOT && current != root_ && depth < 16; ++depth) {
+    if (current == window_) return window_;
+    auto tree = reply(xcb_query_tree_reply(conn_, xcb_query_tree(conn_, current), nullptr));
+    if (!tree) break;
+    current = tree->parent;
+  }
+  return focus;
+}
+
+bool GeckoX11Embedder::isFocusMoveIntoEmbedded(const xcb_focus_out_event_t &event, xcb_window_t topLevel,
+                                               xcb_window_t embedded, xcb_window_t focus) {
+  // Leaving for another application or the window manager is NotifyNonlinear*
+  // (or NotifyAncestor/Virtual); only NotifyInferior stays inside the window.
+  return topLevel && embedded && event.event == topLevel && event.detail == XCB_NOTIFY_DETAIL_INFERIOR &&
+         focus == embedded;
 }
 
 bool GeckoX11Embedder::focusEmbedded() {
@@ -316,8 +338,18 @@ bool GeckoX11Embedder::nativeEventFilter(const QByteArray &eventType, void *mess
       }
       break;
     }
-    case XCB_FOCUS_IN:
     case XCB_FOCUS_OUT: {
+      auto *out = reinterpret_cast<xcb_focus_out_event_t *>(event);
+      const auto top = topLevel_ ? static_cast<xcb_window_t>(topLevel_->internalWinId()) : xcb_window_t(0);
+      // (Only a move inside the window costs a round trip to the X server.)
+      if (top && out->event == top && out->detail == XCB_NOTIFY_DETAIL_INFERIOR &&
+          isFocusMoveIntoEmbedded(*out, top, window_, focusWithinEmbedded())) {
+        qCDebug(lcGeckoX11) << "the page took the keyboard: the window stays active";
+        return true;
+      }
+      [[fallthrough]];
+    }
+    case XCB_FOCUS_IN: {
       auto *focus = reinterpret_cast<xcb_focus_in_event_t *>(event);
       if (focus->event == window_) {
         qCDebug(lcGeckoX11) << "focus" << ((event->response_type & ~0x80) == XCB_FOCUS_IN ? "in" : "out")
@@ -350,6 +382,7 @@ bool GeckoX11Embedder::nativeEventFilter(const QByteArray &eventType, void *mess
       auto *destroy = reinterpret_cast<xcb_destroy_notify_event_t *>(event);
       if (destroy->window == window_) {
         window_ = 0;
+        topLevel_.clear();
         grabbed_ = false;
         emit embeddedGone(QStringLiteral("embedded window destroyed"));
       }

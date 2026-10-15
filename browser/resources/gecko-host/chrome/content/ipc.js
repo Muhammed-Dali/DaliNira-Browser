@@ -18,8 +18,8 @@ const DngIpc = (() => {
   let commandSequence = 0;
   let negotiatedProtocol = 1;
   const MAX_FRAME = 64 * 1024;
-  const COMMANDS = new Set(["load", "back", "forward", "reload", "stop", "shutdown", "create_tab", "close_tab", "activate_tab", "load_url", "list_tabs", "cancel_request", "recover_tab", "set_shortcuts",
-    ...(Services.env.get("DNG_TEST_INPUT") === "1" ? ["test_key"] : [])]);
+  const COMMANDS = new Set(["load_internal_page", "internal_state", "commit_internal_action", "retire_internal", "load", "back", "forward", "reload", "stop", "shutdown", "create_tab", "close_tab", "activate_tab", "load_url", "list_tabs", "cancel_request", "recover_tab", "set_shortcuts",
+    ...(Services.env.get("DNG_TEST_INPUT") === "1" ? ["test_key", "test_newtab"] : [])]);
 
   let input = null;
   let output = null;
@@ -98,6 +98,7 @@ const DngIpc = (() => {
       }
       negotiatedProtocol = msg.protocol;
       welcomed = true;
+      DngNewTab.negotiate(msg.features);
       handlers.onWelcome(msg.windowTag);
       return;
     }
@@ -192,7 +193,7 @@ const DngIpc = (() => {
     input = transport.openInputStream(0, 0, 0).QueryInterface(Ci.nsIAsyncInputStream);
     binIn = Cc["@mozilla.org/binaryinputstream;1"].createInstance(Ci.nsIBinaryInputStream);
     binIn.setInputStream(input);
-    send("hello", { protocol: PROTOCOL, supportedProtocols: [1, 2, 3], sessionId, token, pid: Services.appinfo.processID });
+    send("hello", { protocol: PROTOCOL, supportedProtocols: [1, 2, 3], features: [DngNewTab.feature], sessionId, token, pid: Services.appinfo.processID });
     input.asyncWait({ onInputStreamReady: onReadable }, 0, 0, Services.tm.mainThread);
   }
 

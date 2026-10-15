@@ -38,6 +38,8 @@ GeckoEngineView::GeckoEngineView(GeckoBackend *backend, QWidget *parent) : Engin
 
 GeckoEngineView::~GeckoEngineView() {
   if (!backend_) return;
+  if (view_ && view_->snapshot().value("internalPage") == QLatin1String("newtab"))
+    view_->retireNewTab(view_->snapshot().value("internalInstance").toString());
   backend_->surface()->release(this);
   backend_->unregisterView(this);
   // Widget disposal is not permission to destroy a live host document.
@@ -105,9 +107,21 @@ void GeckoEngineView::hostTabFailed(const QString &reason) {
 
 void GeckoEngineView::bind(GeckoSessionView *view) {
   view_ = view;
+  connect(backend_->session(), &GeckoSession::eventReceived, this, [this](const QJsonObject &event) {
+    if(!view_ || event.value("tabId").toString()!=view_->tabId())return;
+    if(event.value("type")==QLatin1String("state")){
+      publishNewTab();
+      if(view_->snapshot().value("internalPage")==QLatin1String("newtab") && newTabState_.value("revision").toInteger()>view_->snapshot().value("internalRevision").toInteger())
+        view_->updateNewTabState(view_->snapshot().value("internalInstance").toString(),newTabState_);
+    }
+    if(event.value("type")==QLatin1String("internal-action") &&
+       event.value("documentId").toString()==view_->documentId() &&
+       event.value("instance")==view_->snapshot().value("internalInstance") && engineActive_ && activationConfirmed_)
+      emit internalAction(event);
+  });
   setStatus({});
   connect(view, &GeckoSessionView::urlChanged, this, [this](const QUrl &url) {
-    if (isWebUrl(url)) emit urlChanged(url);
+    if (isWebUrl(url) || (url == QUrl(QStringLiteral("dalinira://newtab/")) && view_->snapshot().value("internalPage") == QLatin1String("newtab"))) emit urlChanged(url);
   });
   connect(view, &GeckoSessionView::titleChanged, this, &EngineView::titleChanged);
   connect(view, &GeckoSessionView::loadStarted, this, &EngineView::loadStarted);
@@ -125,6 +139,7 @@ void GeckoEngineView::bind(GeckoSessionView *view) {
   if (!view->title().isEmpty()) emit titleChanged(view->title());
   if (engineActive_) present();
   flush();
+  publishNewTab();
 }
 
 void GeckoEngineView::run(Command command) {
@@ -137,8 +152,9 @@ void GeckoEngineView::flush() {
 }
 
 QUrl GeckoEngineView::url() const {
-  if (view_ && isWebUrl(view_->url())) return view_->url();
-  return requestedUrl_;
+  if (view_ && (isWebUrl(view_->url()) || view_->snapshot().value("internalPage") == QLatin1String("newtab"))) return view_->url();
+  // A pending named load is not evidence of an internal document.
+  return requestedUrl_.scheme() == QLatin1String("dalinira") ? QUrl{} : requestedUrl_;
 }
 
 QString GeckoEngineView::title() const { return view_ ? view_->title() : QString(); }
@@ -149,10 +165,13 @@ bool GeckoEngineView::isAudible() const { return view_ && view_->isAudible(); }
 qint64 GeckoEngineView::contentProcessId() const { return view_ ? view_->contentProcessId() : 0; }
 
 void GeckoEngineView::load(const QUrl &url) {
+  ++presentationEpoch_;  // Pending grants cannot outlive a navigation intent.
   requestedUrl_ = url;
+  if (url.scheme() == QLatin1String("dalinira") && url.host() == QLatin1String("newtab") && (url.path().isEmpty() || url.path() == QLatin1String("/")) && url.query().isEmpty() && url.fragment().isEmpty() && url.userName().isEmpty() && url.password().isEmpty() && url.port(-1)==-1) { emit newTabRequested(); return; }
+  pendingNewTab_.clear();
   if (!isWebUrl(url)) {
-    // DaliNira's own pages (New Tab) are an empty Gecko tab for now; other
-    // schemes are not opened by the Gecko host at all.
+    // Only the exact New Tab route above has an internal-page implementation.
+    // Other schemes are never forwarded to the Gecko host.
     if (url.scheme() != QLatin1String("dalinira")) {
       qCWarning(lcGeckoView) << "Gecko opens http and https pages only:" << url.scheme();
       emit loadFinished(false);
@@ -176,7 +195,31 @@ void GeckoEngineView::load(const QUrl &url) {
   });
 }
 
+void GeckoEngineView::prepareNewTab(const QByteArray &markup,const QJsonObject &state){pendingNewTab_=markup;newTabState_=state;publishNewTab();}
+void GeckoEngineView::publishNewTab(){
+  if(pendingNewTab_.isEmpty()||newTabLoading_||!view_||view_->documentId().isEmpty()||!backend_)return;
+  if(!backend_->session()->supportsInternalDocuments()){setStatus(QStringLiteral("This host does not support DaliNira New Tab."));return;}
+  QString error;const QString bundle=backend_->session()->publishNewTab(pendingNewTab_,&error);
+  if(bundle.isEmpty()){setStatus(error);pendingNewTab_.clear();emit loadFinished(false);return;}
+  pendingNewTab_.clear();newTabLoading_=true;
+  auto *request=view_->loadNewTab(bundle,newTabState_);
+  connect(request,&GeckoRequest::finished,this,[this](const QString &status,const QJsonObject &result){newTabLoading_=false;if(status!=QLatin1String("completed")){setStatus(QStringLiteral("New Tab failed: ")+result.value("code").toString());emit loadFinished(false);}publishNewTab();});
+}
+void GeckoEngineView::updateNewTabState(const QJsonObject &state){
+ newTabState_=state;
+ if(view_&&view_->snapshot().value("internalPage")==QLatin1String("newtab"))view_->updateNewTabState(view_->snapshot().value("internalInstance").toString(),state);
+}
+void GeckoEngineView::commitNewTabAction(const QJsonObject &event,const QJsonObject &effect,std::function<void()> committed){
+ if(!view_||!backend_||!engineActive_||!activationConfirmed_||!isVisible()||event.value("documentId").toString()!=view_->documentId()||event.value("instance")!=view_->snapshot().value("internalInstance"))return;
+ const quint64 generation=backend_->session()->generation(), presentation=presentationEpoch_;
+ auto *request=view_->commitNewTabAction(event,effect);
+ connect(request,&GeckoRequest::finished,this,[this,generation,presentation,event,effect,committed](const QString &status,const QJsonObject &result){
+  if(status!=QLatin1String("completed")||!backend_||backend_->session()->generation()!=generation||presentationEpoch_!=presentation||!view_||result.value("documentId")!=event.value("documentId")||result.value("instance")!=event.value("instance")||result.value("actionId")!=event.value("actionId")||result.value("revision")!=event.value("revision"))return;
+  if(effect.value("kind")==QLatin1String("preference")&&engineActive_&&isVisible()&&view_->documentId()==event.value("documentId").toString()&&view_->snapshot().value("internalInstance")==event.value("instance")&&activationConfirmed_&&committed)committed();
+ });
+}
 void GeckoEngineView::reload() {
+  ++presentationEpoch_;  // Pending grants cannot outlive a navigation intent.
   run([](GeckoSessionView *view) {
     // Reload after a content process crash is the explicit recovery.
     return view->lifecycleState() == GeckoSessionView::State::Crashed ? view->recoverDocument() : view->reload();
@@ -184,18 +227,22 @@ void GeckoEngineView::reload() {
 }
 
 void GeckoEngineView::stop() {
+  ++presentationEpoch_;  // Pending grants cannot outlive a navigation intent.
   if (view_) view_->stop();
 }
 
 void GeckoEngineView::back() {
+  ++presentationEpoch_;  // Pending grants cannot outlive a navigation intent.
   run([](GeckoSessionView *view) { return view->back(); });
 }
 
 void GeckoEngineView::forward() {
+  ++presentationEpoch_;  // Pending grants cannot outlive a navigation intent.
   run([](GeckoSessionView *view) { return view->forward(); });
 }
 
 void GeckoEngineView::setEngineActive(bool active) {
+  if (engineActive_ != active) { ++presentationEpoch_; activationConfirmed_ = false; }
   engineActive_ = active;
   if (active) present();
   update();
@@ -207,7 +254,16 @@ void GeckoEngineView::present() {
   // Qt's focus may have reached this view before it showed the page (a tab
   // switch hides the old view first).
   if (hasFocus()) backend_->surface()->focusPage(this);
-  if (view_ && view_->lifecycleState() != GeckoSessionView::State::Active) view_->setEngineActive(true);
+  if (view_ && (!activationConfirmed_ || view_->lifecycleState() != GeckoSessionView::State::Active) && !activationRequest_) {
+    const quint64 epoch = presentationEpoch_;
+    auto *request = view_->setEngineActive(true);
+    activationRequest_ = request;
+    connect(request, &GeckoRequest::finished, this, [this, epoch, request](const QString &status, const QJsonObject &) {
+      if (activationRequest_ == request) activationRequest_.clear();
+      if (epoch == presentationEpoch_ && engineActive_ && status == QLatin1String("completed")) activationConfirmed_ = true;
+      if (epoch != presentationEpoch_ && engineActive_) present();
+    });
+  }
 }
 
 void GeckoEngineView::requestClose(std::function<void(bool allowed)> done) {
@@ -245,36 +301,76 @@ void GeckoEngineView::requestClose(std::function<void(bool allowed)> done) {
     });
     QTimer::singleShot(5000, self.data(), [finish] { finish(false); });
   };
-  GeckoRequest *request = target->close(false, document);
-  if (!request) { finish(false); return; }
-  connect(request, &GeckoRequest::finished, this,
-          [self, target, generation, document, finish, awaitClosure](const QString &status, const QJsonObject &result) {
-    if (!self) return;
-    if (!target || self->view_ != target || target->generation() != generation) { finish(false); return; }
-    const bool ceased = target->lifecycleState() == GeckoSessionView::State::Closed ||
-        (self->backend_ && !self->backend_->session()->hostIsRunning() &&
-         target->lifecycleState() == GeckoSessionView::State::Lost);
-    if (ceased) { finish(true); return; }
-    if (status == QLatin1String("completed")) { awaitClosure(); return; }
-    if (status != QLatin1String("rejected") ||
-        result.value(QStringLiteral("code")).toString() != QLatin1String("beforeunload-confirmation-required") ||
-        result.value(QStringLiteral("documentId")).toString() != document || target->documentId() != document ||
-        !self->backend_) { finish(false); return; }
-    // Confirmation may enter a nested loop, navigate, or delete this widget.
-    const bool confirmed = self->backend_->confirmDiscard(self, self->title());
-    if (!self) return;
-    if (!confirmed || !target || self->view_ != target || target->generation() != generation ||
-        target->documentId() != document || target->lifecycleState() == GeckoSessionView::State::Lost) {
-      finish(false); return;
-    }
-    GeckoRequest *discard = target->close(true, document);
-    if (!discard) { finish(false); return; }
-    connect(discard, &GeckoRequest::finished, self.data(),
-            [finish, awaitClosure](const QString &status, const QJsonObject &) {
-      if (status == QLatin1String("completed")) awaitClosure();
-      else finish(false);
+  // The plain close names the document Qt observed. When the host refuses it
+  // as stale because the tab moved on to a document Qt had not observed yet
+  // (the internal New Tab replacing about:blank right after Ctrl+T), it is sent
+  // once more, for the document the host named and only after Qt observed it:
+  // the same guarded close, with the host's beforeunload check, now bound to
+  // that document. Any other document, no observation in time, or a second
+  // refusal denies the close.
+  using Attempt = std::function<void(const QString &document, bool retried)>;
+  auto attempt = std::make_shared<Attempt>();
+  std::weak_ptr<Attempt> again = attempt;
+  *attempt = [self, target, generation, finish, awaitClosure, again](const QString &document, bool retried) {
+    if (!self || !target) { finish(false); return; }
+    GeckoRequest *request = target->close(false, document);
+    if (!request) { finish(false); return; }
+    connect(request, &GeckoRequest::finished, self.data(),
+            [self, target, generation, document, retried, finish, awaitClosure, keep = again.lock()](
+                const QString &status, const QJsonObject &result) {
+      if (!self) return;
+      if (!target || self->view_ != target || target->generation() != generation) { finish(false); return; }
+      const bool ceased = target->lifecycleState() == GeckoSessionView::State::Closed ||
+          (self->backend_ && !self->backend_->session()->hostIsRunning() &&
+           target->lifecycleState() == GeckoSessionView::State::Lost);
+      if (ceased) { finish(true); return; }
+      if (status == QLatin1String("completed")) { awaitClosure(); return; }
+      const QString code = result.value(QStringLiteral("code")).toString();
+      const QString current = result.value(QStringLiteral("documentId")).toString();
+      if (status == QLatin1String("rejected") && code == QLatin1String("stale-document") && !retried && keep &&
+          !current.isEmpty() && current != document && target->lifecycleState() != GeckoSessionView::State::Lost &&
+          (target->documentId() == document || target->documentId() == current)) {
+        auto resolved = std::make_shared<bool>(false);
+        auto watch = std::make_shared<QMetaObject::Connection>();
+        auto settle = [self, target, generation, document, current, finish, keep, resolved, watch] {
+          if (*resolved) return;
+          const bool same = self && target && self->view_ == target && target->generation() == generation &&
+                            target->lifecycleState() != GeckoSessionView::State::Lost;
+          if (same && target->documentId() == document) return;  // not observed yet
+          *resolved = true;
+          QObject::disconnect(*watch);
+          if (same && target->documentId() == current) (*keep)(current, true);
+          else finish(false);
+        };
+        *watch = connect(target, &GeckoSessionView::documentChanged, self.data(), [settle](const QString &) { settle(); });
+        QTimer::singleShot(2000, self.data(), [resolved, watch, finish] {
+          if (*resolved) return;
+          *resolved = true;
+          QObject::disconnect(*watch);
+          finish(false);
+        });
+        settle();
+        return;
+      }
+      if (status != QLatin1String("rejected") || code != QLatin1String("beforeunload-confirmation-required") ||
+          current != document || target->documentId() != document || !self->backend_) { finish(false); return; }
+      // Confirmation may enter a nested loop, navigate, or delete this widget.
+      const bool confirmed = self->backend_->confirmDiscard(self, self->title());
+      if (!self) return;
+      if (!confirmed || !target || self->view_ != target || target->generation() != generation ||
+          target->documentId() != document || target->lifecycleState() == GeckoSessionView::State::Lost) {
+        finish(false); return;
+      }
+      GeckoRequest *discard = target->close(true, document);
+      if (!discard) { finish(false); return; }
+      connect(discard, &GeckoRequest::finished, self.data(),
+              [finish, awaitClosure](const QString &status, const QJsonObject &) {
+        if (status == QLatin1String("completed")) awaitClosure();
+        else finish(false);
+      });
     });
-  });
+  };
+  (*attempt)(document, false);
 }
 
 void GeckoEngineView::paintEvent(QPaintEvent *event) {

@@ -14,20 +14,28 @@
 // process left, the run directory removed, the profile kept.
 
 #include <QApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QLineEdit>
+#include <QJsonDocument>
+#include <QUrlQuery>
+#include <QScreen>
+#include "engine/gecko/gecko_presentation_surface.h"
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
+#include <QTcpServer>
+#include <QTcpSocket>
 
 #include <csignal>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <sys/stat.h>
 
 #include "browser_window.h"
@@ -122,7 +130,10 @@ int indexOfHostTab(BrowserWindow *window, const QString &hostTabId) {
 }  // namespace
 
 int main(int argc, char *argv[]) {
-  qputenv("QT_QPA_PLATFORM", "offscreen");
+  const bool guiNewTab=argc>1&&QString::fromLocal8Bit(argv[1])==QLatin1String("--newtab-x11");
+  if(guiNewTab&&qEnvironmentVariable("DALINIRA_GUI_TESTS")!=QLatin1String("1"))return 77;
+  if(!guiNewTab&&argc>1&&QString::fromLocal8Bit(argv[1])==QLatin1String("--real-newtab")&&qEnvironmentVariable("DALINIRA_GECKO_HOST_TESTS")!=QLatin1String("1"))return 77;
+  if(!guiNewTab)qputenv("QT_QPA_PLATFORM", "offscreen");
   // As main.cpp: only the selected engine runs in the process.
   EngineBackend::setSelectedEngineType(EngineType::Gecko);
   QCoreApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
@@ -137,14 +148,16 @@ int main(int argc, char *argv[]) {
   const QString dataDir = base + QStringLiteral("/data");
   CHECK(QDir().mkpath(dataDir));
   CHECK(QDir().mkpath(base + QStringLiteral("/ipc")) && ::chmod(QFile::encodeName(base + QStringLiteral("/ipc")).constData(), 0700) == 0);
-  std::cout << "=== GECKO IN BROWSERWINDOW (off screen, fake host) ===" << std::endl;
+  std::cout << (guiNewTab ? "=== GECKO NEW TAB IN BROWSERWINDOW (real X11 display, real Gecko) ==="
+                         : "=== GECKO IN BROWSERWINDOW (off screen) ===") << std::endl;
 
   BrowserProfileService profileService(dataDir, nullptr, &app);
   EngineStorageManager storage(dataDir);
   GeckoBackend::Config config;
-  config.runtime = {makeFakeRuntime(base + QStringLiteral("/gre")), QStringLiteral(DALINIRA_GECKO_HOST_APP_DIR)};
+  const bool realNewTab = guiNewTab || app.arguments().contains(QStringLiteral("--real-newtab"));
+  config.runtime = realNewTab ? GeckoRuntime::developmentPaths() : GeckoRuntimePaths{makeFakeRuntime(base + QStringLiteral("/gre")), QStringLiteral(DALINIRA_GECKO_HOST_APP_DIR)};
   config.ipcRoot = base + QStringLiteral("/ipc");
-  config.display = GeckoHostProcess::Display::Headless;
+  config.display = guiNewTab ? GeckoHostProcess::Display::X11 : GeckoHostProcess::Display::Headless;
   config.testInput = true;  // "test_key": keys typed into the fake host's page
   auto ownedBackend = std::make_unique<GeckoBackend>(config, &app);
   GeckoBackend *gecko = ownedBackend.get();
@@ -165,6 +178,265 @@ int main(int argc, char *argv[]) {
         modeOf(geckoData + QStringLiteral("/profile")) == 0700 && modeOf(geckoData + QStringLiteral("/host-output.log")) == 0600);
   CHECK(!gecko->createEphemeralView(nullptr) && gecko->versionString() == QStringLiteral("Gecko 160.0a1"));
   std::cout << "PASS backend started; private Gecko storage" << std::endl;
+
+  if (realNewTab) {
+    CHECK(session->supportsInternalDocuments());
+    const auto result=[&](GeckoRequest *request){CHECK(waitUntil([&]{return request->isFinished();}));if(request->status()!=QLatin1String("completed"))std::cout<<QJsonDocument(request->result()).toJson().constData()<<std::endl;CHECK(request->status()==QLatin1String("completed"));return request->result();};
+    QTcpServer pages;CHECK(pages.listen(QHostAddress::LocalHost,0));
+    QObject::connect(&pages,&QTcpServer::newConnection,&app,[&]{while(auto *socket=pages.nextPendingConnection())QObject::connect(socket,&QTcpSocket::readyRead,socket,[socket]{const QByteArray request=socket->readAll();QByteArray body="<!doctype html><title>Native New Tab Destination</title><h1>native navigation</h1>";if(request.contains("/dirty"))body+="<script>addEventListener('beforeunload',e=>{e.preventDefault();e.returnValue='unsaved';});</script>";if(request.contains("frames=1"))body+="<iframe src=\"/frame\"></iframe><iframe src=\"http://localhost:"+QByteArray::number(socket->localPort())+"/frame\"></iframe>";socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "+QByteArray::number(body.size())+"\r\nConnection: close\r\n\r\n"+body);socket->disconnectFromHost();});});
+    const QString endpoint=QStringLiteral("http://127.0.0.1:%1/").arg(pages.serverPort());
+    CHECK(profileService.saveCustomSearchEngine(QStringLiteral("NativeLocal"),endpoint+QStringLiteral("search?q=%s")));
+    profileService.setSearchEngine(QStringLiteral("NativeLocal"));
+    QSettings settings;settings.setValue(QStringLiteral("ui_gecko/browser/topSitesSource"),QStringLiteral("custom"));
+    settings.setValue(QStringLiteral("ui_gecko/browser/customShortcuts"),QJsonDocument(QJsonArray{QJsonObject{{"name","Local speed dial"},{"url",endpoint+"site"}}}).toJson(QJsonDocument::Compact));
+    BrowserServices services;services.profileService=&profileService;
+    auto *window=new BrowserWindow(services);window->show();window->activateWindow();
+    window->resize(1000,700);
+    int nativeActions=0;QJsonObject lastAction;
+    QObject::connect(session,&GeckoSession::eventReceived,window,[&](const QJsonObject &event){
+      if(event.value("type")==QLatin1String("internal-action")){++nativeActions;lastAction=event;}
+      if(event.value("type")==QLatin1String("error"))std::cout<<"Native rejected command "<<QJsonDocument(event).toJson(QJsonDocument::Compact).constData()<<std::endl;
+    });
+    QJsonObject nativeState;QString nativeBundle;
+    QObject::connect(session,&GeckoSession::requestSent,window,[&](const QString &id){const auto m=GeckoSessionTestAccess::pending(session,id);if(m.value("type")==QLatin1String("load_internal_page"))nativeBundle=m.value("bundleId").toString();if(m.value("type")==QLatin1String("load_internal_page")||m.value("type")==QLatin1String("internal_state"))nativeState=m.value("state").toObject();});
+    const int first=window->addNewTab(QUrl(QStringLiteral("dalinira://newtab/")));
+    CHECK(waitUntil([&]{return geckoView(window,first)&&geckoView(window,first)->url()==QUrl(QStringLiteral("dalinira://newtab/"))&&session->view(geckoView(window,first)->hostTabId())&&!session->view(geckoView(window,first)->hostTabId())->snapshot().value("internalInstance").toString().isEmpty();},30000));
+    auto *view=geckoView(window,first);const QString tab=view->hostTabId();
+    auto operation=[&](const QString &name){return result(session->submit(QStringLiteral("test_newtab"),{{"tabId",tab},{"operation",name}})).value("data").toObject();};
+    const auto facts=operation(QStringLiteral("inspect"));CHECK(facts.value("query").toBool()&&facts.value("items").toInt()==1&&facts.value("images").toInt()>2&&facts.value("content").toBool()&&!facts.value("system").toBool()&&facts.value("Services")==QLatin1String("undefined"));
+    std::cout<<"PASS real shared New Tab DOM/assets and unprivileged content"<<std::endl;
+    CHECK(waitUntil([&]{return !facts.value("title").toString().isEmpty()&&facts.value("title").toString()==view->title();}));
+    if(!guiNewTab){const auto image=operation(QStringLiteral("render"));CHECK(image.value("width").toInt()>0&&image.value("height").toInt()>0);const QString evidence=qEnvironmentVariable("DALINIRA_GECKO_EVIDENCE_ROOT");if(!evidence.isEmpty())CHECK(QFile::copy(session->runDirectory()+QStringLiteral("/newtab/newtab-render.png"),evidence+QStringLiteral("/newtab-render.png")));std::cout<<"PASS actual headless Gecko raster "<<image.value("width").toInt()<<"x"<<image.value("height").toInt()<<std::endl;}
+    const int initialTabs=window->tabCount();
+    const QString initialDocument=session->view(tab)->documentId();
+    for(const QString &bundle:{QStringLiteral("../profile/prefs"),QString(32,QLatin1Char('f'))}){
+      auto *bad=session->view(tab)->loadNewTab(bundle,nativeState);CHECK(waitUntil([&]{return bad->isFinished();}));CHECK(bad->status()==QLatin1String("rejected")&&session->view(tab)->documentId()==initialDocument);
+    }
+    // Native resolver rejects malformed, oversized, injected and symlinked bundles
+    // before replacing a live document. These fixture files stay in this run.
+    const auto rejectBundle=[&](const QString &id){auto *r=session->view(tab)->loadNewTab(id,nativeState);CHECK(waitUntil([&]{return r->isFinished();}));CHECK(r->status()==QLatin1String("rejected")&&session->view(tab)->documentId()==initialDocument);};
+    const QList<QByteArray> malformed={QByteArray("{"),QByteArray("\xff"),QByteArray("{}"),QByteArray("{\"version\":2,\"html\":\"\",\"sha256\":\"bad\"}")};
+    int fixture=1;
+    for(const auto &bytes:malformed){const QString id=QStringLiteral("%1").arg(fixture++,32,16,QLatin1Char('0'));QFile f(session->runDirectory()+"/newtab/"+id+".json");CHECK(f.open(QIODevice::WriteOnly)&&f.setPermissions(QFile::ReadOwner|QFile::WriteOwner));CHECK(f.write(bytes)==bytes.size());f.close();rejectBundle(id);}
+    for(const QByteArray &html:{QByteArray("<script>bad</script>"),QByteArray("<img onerror='bad' src='data:image/png;base64,AA=='>"),QByteArray("<img src='file:///etc/passwd'>"),QByteArray("<iframe src='https://example.com'>"),QByteArray("<meta http-equiv='refresh' content='0;url=file:///etc/passwd'>")}){
+      const QString id=QStringLiteral("%1").arg(fixture++,32,16,QLatin1Char('0'));QFile f(session->runDirectory()+"/newtab/"+id+".json");CHECK(f.open(QIODevice::WriteOnly)&&f.setPermissions(QFile::ReadOwner|QFile::WriteOwner));const QByteArray bytes=QJsonDocument(QJsonObject{{"version",1},{"html",QString::fromUtf8(html)},{"sha256",QString::fromLatin1(QCryptographicHash::hash(html,QCryptographicHash::Sha256).toHex())}}).toJson();CHECK(f.write(bytes)==bytes.size());f.close();rejectBundle(id);
+    }
+    const QString largeId=QString(32,QLatin1Char('d'));{QFile f(session->runDirectory()+"/newtab/"+largeId+".json");CHECK(f.open(QIODevice::WriteOnly)&&f.setPermissions(QFile::ReadOwner|QFile::WriteOwner)&&f.resize(16*1024*1024+1));}rejectBundle(largeId);
+    const QString linkId=QString(32,QLatin1Char('c'));CHECK(QFile::link(session->runDirectory()+"/newtab/"+nativeBundle+".json",session->runDirectory()+"/newtab/"+linkId+".json"));rejectBundle(linkId);
+    for(const auto &url:{QStringLiteral("about:dalinira-newtab"),QStringLiteral("chrome://global/content/"),QStringLiteral("resource://gre/modules/Services.sys.mjs"),QStringLiteral("file:///etc/passwd"),QStringLiteral("javascript:alert(1)"),QStringLiteral("data:text/html,bad")}){
+      auto *r=session->view(tab)->load(QUrl(url));CHECK(waitUntil([&]{return r->isFinished();}));CHECK(r->status()==QLatin1String("rejected")&&session->view(tab)->documentId()==initialDocument);
+    }
+    auto *stale=session->submit(QStringLiteral("load_internal_page"),{{"tabId",tab},{"documentId","stale"},{"page","newtab"},{"bundleId",QString(32,QLatin1Char('e'))},{"state",nativeState}});
+    CHECK(waitUntil([&]{return stale->isFinished();})&&stale->status()==QLatin1String("rejected"));
+    std::cout<<"PASS malformed/traversal descriptors and stale documents retain the live tab"<<std::endl;
+    if(app.arguments().contains(QStringLiteral("--security-fixture"))){
+      CHECK(waitUntil([&]{return !operation(QStringLiteral("inspect")).value("security").toString().isEmpty();}));
+      const auto report=QJsonDocument::fromJson(operation(QStringLiteral("inspect")).value("security").toString().toUtf8()).object();
+      CHECK(report.value("evalBlocked").toBool()&&report.value("injectionBlocked").toBool()&&report.value("networkBlocked").toBool()&&report.value("fileBlocked").toBool()&&report.value("trustedImmutable").toBool()&&report.value("noPageAPIs").toBool());
+      CHECK(report.value("cspDirectives").toArray().contains(QStringLiteral("connect-src")));
+      std::cout<<"CSP violation directives "<<QJsonDocument(report.value("cspDirectives").toArray()).toJson(QJsonDocument::Compact).constData()<<std::endl;
+      CHECK(nativeActions==0&&session->view(tab)->documentId()==initialDocument&&view->url()==QUrl(QStringLiteral("dalinira://newtab/")));
+      std::cout<<"PASS production actor rejects page synthetic click/key/submit/message requests; CSP blocks injection/eval/network/file"<<std::endl;
+    }
+    if(guiNewTab){
+      CHECK(waitUntil([&]{return gecko->surface()->isPresenting(view)&&gecko->surface()->inspect().value("viewable").toBool();}));
+      // Keyboard focus. The window must be the active one for Qt to give focus.
+      window->activateWindow();
+      if(!waitUntil([&]{return window->isActiveWindow();},5000)){std::cout<<"the test window did not become the active window (window manager focus policy)"<<std::endl;CHECK(window->isActiveWindow());}
+      const auto pageHasKeyboard=[&]{return gecko->surface()->inspect().value("inputFocusOnEmbedded").toBool();};
+      const QString topLevel=QStringLiteral("0x%1").arg(window->winId(),0,16);
+      auto *omnibox=window->findChild<QLineEdit *>(QStringLiteral("omnibox"));CHECK(omnibox);
+      const auto qtHasKeyboard=[&]{return omnibox->hasFocus()&&gecko->surface()->inspect().value("inputFocus").toString()==topLevel;};
+      // Past Qt's 100 ms focus-in delay: the page holding the keyboard must
+      // not deactivate the window (M3-B5 X11 regression).
+      const auto dwell=[]{QElapsedTimer t;t.start();waitUntil([&]{return t.elapsed()>=400;});};
+      CHECK(window->triggerBrowserAction(QStringLiteral("navigation.focus_address")));CHECK(waitUntil(qtHasKeyboard,5000));
+      view->setFocus();CHECK(waitUntil(pageHasKeyboard,5000));
+      dwell();CHECK(pageHasKeyboard()&&window->isActiveWindow()&&view->hasFocus());
+      CHECK(window->triggerBrowserAction(QStringLiteral("navigation.focus_address")));
+      CHECK(waitUntil(qtHasKeyboard,5000));
+      view->setFocus();CHECK(waitUntil(pageHasKeyboard,5000));
+      dwell();CHECK(pageHasKeyboard()&&window->isActiveWindow());
+      // Ctrl+L typed into the page: the address bar takes the keyboard.
+      CHECK(waitUntil([&]{return !gecko->shortcutRouter()->hostShortcuts().isEmpty();}));
+      result(session->submit(QStringLiteral("test_key"),{{"tabId",tab},{"key","l"},{"code","KeyL"},{"modifiers",QJsonArray{"Control"}}}));
+      CHECK(waitUntil(qtHasKeyboard,5000));
+      view->setFocus();CHECK(waitUntil(pageHasKeyboard,5000));
+      std::cout<<"PASS the page and the address bar take the X11 keyboard in turn, also after the page held it"<<std::endl;
+      const QString evidence=qEnvironmentVariable("DALINIRA_GECKO_GUI_ROOT");CHECK(!evidence.isEmpty());
+      CHECK(window->screen()->grabWindow(window->winId()).save(evidence+QStringLiteral("/newtab.png")));
+      const auto security=operation(QStringLiteral("security"));QFile facts(evidence+QStringLiteral("/runtime.json"));CHECK(facts.open(QIODevice::WriteOnly));facts.write(QJsonDocument(security).toJson());facts.close();
+      CHECK(security.value("runtime").toObject().value("sandbox").toObject().value("effectiveContentSandboxLevel").toInt()==6);
+      CHECK(security.value("runtime").toObject().value("app").toObject().value("fissionAutostart").toBool());
+      CHECK(security.value("runtime").toObject().value("graphics").toObject().value("windowLayerManagerType")==QLatin1String("WebRender"));
+      CHECK(security.value("graphics").toObject().value("features").toObject().value("hwCompositing").toObject().value("status")==QLatin1String("available"));
+    }
+    CHECK(operation(QStringLiteral("focus-search")).value("focused").toBool());
+    const auto key=[&](const QString &text,const QString &code){return result(session->submit(QStringLiteral("test_key"),{{"tabId",tab},{"key",text},{"code",code},{"modifiers",QJsonArray{}}}));};
+    key(QStringLiteral("a"),QStringLiteral("KeyA"));key(QStringLiteral("&"),QStringLiteral("Digit7"));key(QStringLiteral("b"),QStringLiteral("KeyB"));key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+    CHECK(waitUntil([&]{return view->url().toString().startsWith(endpoint+QStringLiteral("search?"));},10000));
+    CHECK(QUrlQuery(view->url()).queryItemValue(QStringLiteral("q"))==QStringLiteral("a&b"));
+    std::cout<<"PASS native search uses configured custom provider with encoding"<<std::endl;
+    view->back();CHECK(waitUntil([&]{return session->view(tab)->snapshot().value("internalPage")==QLatin1String("newtab");}));
+    CHECK(operation(QStringLiteral("focus-first-site")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+    CHECK(waitUntil([&]{return view->url()==QUrl(endpoint+QStringLiteral("site"));}));
+    CHECK(window->tabCount()==initialTabs&&view->hostTabId()==tab);
+    std::cout<<"PASS speed dial navigates the source tab; native history returns New Tab"<<std::endl;
+    view->back();CHECK(waitUntil([&]{return session->view(tab)->snapshot().value("internalPage")==QLatin1String("newtab");}));
+    view->forward();CHECK(waitUntil([&]{return view->url()==QUrl(endpoint+QStringLiteral("site"));}));
+    view->back();CHECK(waitUntil([&]{return session->view(tab)->snapshot().value("internalPage")==QLatin1String("newtab");}));
+    const QString beforeStop=session->view(tab)->documentId();result(session->view(tab)->stop());
+    CHECK(session->view(tab)->documentId()==beforeStop&&operation(QStringLiteral("inspect")).value("queryValue")==QLatin1String("a&b"));
+    std::cout<<"PASS real forward/back/stop preserve internal document state and draft"<<std::endl;
+    const QString beforeReload=session->view(tab)->documentId();view->reload();
+    CHECK(waitUntil([&]{return session->view(tab)->documentId()!=beforeReload&&session->view(tab)->snapshot().value("internalPage")==QLatin1String("newtab");}));
+    CHECK(operation(QStringLiteral("inspect")).value("queryValue")==QLatin1String("a&b"));
+    CHECK(operation(QStringLiteral("focus-customize")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+    CHECK(operation(QStringLiteral("focus-theme")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+    CHECK(waitUntil([&]{QSettings s;return s.value(QStringLiteral("ui_gecko/browser/geckoNewTab/theme")).toString()==QLatin1String("flow");}));
+    CHECK(operation(QStringLiteral("inspect")).value("queryValue")==QLatin1String("a&b"));
+    CHECK(operation(QStringLiteral("focus-close-customize")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+    std::cout<<"PASS revisioned appearance commit preserves the query draft; real reload creates a new document"<<std::endl;
+    if(!guiNewTab){
+      const auto type=[&](const QString &text){for(const QChar c:text){QString code;if(c.isLetter())code=QStringLiteral("Key")+c.toUpper();else if(c.isDigit())code=QStringLiteral("Digit")+c;key(QString(c),code);}};
+      const auto count=[&]{return QJsonDocument::fromJson(QSettings().value(QStringLiteral("ui_gecko/browser/customShortcuts")).toByteArray()).array().size();};
+      CHECK(operation(QStringLiteral("focus-add")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+      CHECK(operation(QStringLiteral("focus-shortcut-name")).value("focused").toBool());type(QStringLiteral("Extra"));
+      CHECK(operation(QStringLiteral("focus-shortcut-url")).value("focused").toBool());type(endpoint+QStringLiteral("extra"));key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+      CHECK(waitUntil([&]{return count()==2&&operation(QStringLiteral("inspect")).value("items").toInt()==2;}));
+      CHECK(operation(QStringLiteral("focus-last-more")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+      CHECK(operation(QStringLiteral("focus-shortcut-edit")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+      CHECK(operation(QStringLiteral("focus-shortcut-name")).value("focused").toBool());result(session->submit(QStringLiteral("test_key"),{{"tabId",tab},{"key","a"},{"code","KeyA"},{"modifiers",QJsonArray{"Control"}}}));type(QStringLiteral("Edited"));QElapsedTimer editCooldown;editCooldown.start();CHECK(waitUntil([&]{return editCooldown.elapsed()>=100;}));key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+      CHECK(waitUntil([&]{const auto entries=QJsonDocument::fromJson(QSettings().value(QStringLiteral("ui_gecko/browser/customShortcuts")).toByteArray()).array();return entries.size()==2&&entries.last().toObject().value("name")==QLatin1String("Edited");}));
+      CHECK(operation(QStringLiteral("focus-last-more")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+      QElapsedTimer cooldown;cooldown.start();CHECK(waitUntil([&]{return cooldown.elapsed()>=100;}));
+      CHECK(operation(QStringLiteral("focus-shortcut-remove")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+      CHECK(waitUntil([&]{return count()==1&&operation(QStringLiteral("inspect")).value("items").toInt()==1;}));
+      CHECK(operation(QStringLiteral("inspect")).value("queryValue")==QLatin1String("a&b"));
+      std::cout<<"PASS native shortcut add/edit/remove persists only Gecko UI data and preserves search draft"<<std::endl;
+    }
+    for(const auto &provider:{QStringLiteral("Bing"),QStringLiteral("Brave Search"),QStringLiteral("UnknownProvider")}){
+      QSettings persisted(dataDir+QStringLiteral("/browser-preferences.ini"),QSettings::IniFormat);persisted.setValue(QStringLiteral("browser/searchEngine"),provider);persisted.sync();
+      CHECK(waitUntil([&]{return nativeState.value("providerId")==provider&&session->view(tab)->snapshot().value("internalRevision")==nativeState.value("revision");}));
+      const int before=nativeActions;CHECK(operation(QStringLiteral("focus-search")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+      CHECK(waitUntil([&]{return nativeActions>before;}));CHECK(view->url()==QUrl(QStringLiteral("dalinira://newtab/"))&&profileService.configuredSearchEngineId()==provider);
+    }
+    profileService.setSearchEngine(QStringLiteral("NativeLocal"));CHECK(waitUntil([&]{return nativeState.value("providerId")==QLatin1String("NativeLocal")&&session->view(tab)->snapshot().value("internalRevision")==nativeState.value("revision");}));
+    std::cout<<"PASS unsupported Bing/Brave/unknown configuration rejects search without provider substitution"<<std::endl;
+    const QString stable=session->view(tab)->documentId();
+    const int second=window->addNewTab(QUrl(QStringLiteral("dalinira://newtab/")));
+    CHECK(waitUntil([&]{auto *v=geckoView(window,second);return v&&session->view(v->hostTabId())&&session->view(v->hostTabId())->snapshot().value("internalPage")==QLatin1String("newtab")&&session->activeTabId()==v->hostTabId()&&v->isHostSelectionConfirmed();}));
+    const QString secondTab=geckoView(window,second)->hostTabId(),secondDoc=session->view(secondTab)->documentId();
+    for(int i=0;i<(guiNewTab?2:8);i++) { window->switchTab(i%2?second:first); }
+    window->switchTab(first);
+    CHECK(waitUntil([&]{return session->activeTabId()==tab&&view->isHostSelectionConfirmed();}));
+    CHECK(session->view(tab)->documentId()==stable&&session->view(secondTab)->documentId()==secondDoc&&operation(QStringLiteral("inspect")).value("queryValue")==QLatin1String("a&b"));
+    std::cout<<"PASS normal New Tab activation and rapid last-click switching retain both documents"<<std::endl;
+    if(!guiNewTab){
+      // The collector observes real native input, but the hidden Qt window must
+      // not commit it. A later selection invalidates that exact proposal.
+      window->hide();const int before=nativeActions;
+      CHECK(operation(QStringLiteral("focus-search")).value("focused").toBool());key(QStringLiteral("Enter"),QStringLiteral("Enter"));
+      CHECK(waitUntil([&]{return nativeActions>before;}));const auto proposal=lastAction;
+      window->show();window->activateWindow();window->switchTab(second);
+      CHECK(waitUntil([&]{return session->activeTabId()==secondTab&&geckoView(window,second)->isHostSelectionConfirmed();}));
+      auto *staleCommit=session->view(tab)->commitNewTabAction(proposal,{{"kind","navigate"},{"url",endpoint+QStringLiteral("should-not-load")}});
+      CHECK(waitUntil([&]{return staleCommit->isFinished();}));CHECK(staleCommit->status()==QLatin1String("rejected")&&session->view(tab)->documentId()==stable);
+      window->switchTab(first);CHECK(waitUntil([&]{return session->activeTabId()==tab&&view->isHostSelectionConfirmed();}));
+      std::cout<<"PASS hidden Qt source rejects native action and selection cancels its delayed commit"<<std::endl;
+    }
+    if(!guiNewTab&&!app.arguments().contains(QStringLiteral("--security-fixture"))){
+      // Ctrl+T from a live New Tab, then Ctrl+W: exactly that tab closes, both
+      // once its New Tab document is bound and as soon as it is the active host
+      // tab (its document may still be replacing about:blank).
+      QStringList closeReplies;
+      auto closeWatch=QObject::connect(session,&GeckoSession::requestFinished,window,[&](const QString &,const QString &status,const QJsonObject &reply){if(reply.value("command")==QLatin1String("close_tab"))closeReplies<<status+QLatin1Char(' ')+QString::fromUtf8(QJsonDocument(reply).toJson(QJsonDocument::Compact));});
+      const auto shortcut=[&](const QString &tabId,const QString &k,const QString &code){result(session->submit(QStringLiteral("test_key"),{{"tabId",tabId},{"key",k},{"code",code},{"modifiers",QJsonArray{"Control"}}}));};
+      CHECK(waitUntil([&]{return !gecko->shortcutRouter()->hostShortcuts().isEmpty();}));
+      for(const bool waitForDocument:{true,false,false,false}){
+        const int before=window->tabCount();closeReplies.clear();
+        shortcut(tab,QStringLiteral("t"),QStringLiteral("KeyT"));
+        CHECK(waitUntil([&]{return window->tabCount()==before+1;}));
+        auto *created=qobject_cast<GeckoEngineView *>(window->currentEngineView());CHECK(created&&created!=view);
+        CHECK(waitUntil([&]{return !created->hostTabId().isEmpty()&&session->activeTabId()==created->hostTabId()&&(!waitForDocument||(session->view(created->hostTabId())->snapshot().value("internalPage")==QLatin1String("newtab")&&created->isHostSelectionConfirmed()));},30000));
+        shortcut(created->hostTabId(),QStringLiteral("w"),QStringLiteral("KeyW"));
+        if(!waitUntil([&]{return window->tabCount()==before;}))std::cout<<"Ctrl+W left the tab open; close_tab replies: "<<closeReplies.join(QStringLiteral("; ")).toStdString()<<std::endl;
+        CHECK(window->tabCount()==before&&geckoView(window,first)==view&&session->view(tab)->documentId()==stable);
+        window->switchTab(first);CHECK(waitUntil([&]{return session->activeTabId()==tab&&view->isHostSelectionConfirmed();}));
+      }
+      QObject::disconnect(closeWatch);
+      std::cout<<"PASS Ctrl+T then Ctrl+W from a Gecko New Tab closes exactly that tab, bound or still loading"<<std::endl;
+    }
+    if(app.arguments().contains(QStringLiteral("--security-fixture"))){
+      const auto native=operation(QStringLiteral("fixture-security"));
+      std::cout<<"Native security facts "<<QJsonDocument(native).toJson(QJsonDocument::Compact).constData()<<std::endl;
+      for(const auto &name:{"nativePrincipal","nativeBinding","replayRejected","crossTabRejected","staleInstanceRejected","staleActivationRejected","staleRevisionRejected","remoteRejected","framesRejected","staleWindowGlobalRejected","latePresentedRejected","reloadedBound"})CHECK(native.value(QLatin1String(name)).toBool());
+      CHECK(waitUntil([&]{return session->view(tab)->documentId()==native.value("documentId").toString();}));
+      std::cout<<"PASS actual native sender/principal/top-level binding, foreign and stale actor rejection"<<std::endl;
+      auto *background=session->view(secondTab);
+      auto *older=background->loadNewTab(nativeBundle,nativeState);auto *newer=background->load(QUrl(endpoint+QStringLiteral("race-winner")));
+      result(newer);CHECK(waitUntil([&]{return older->isFinished()&&background->url()==QUrl(endpoint+QStringLiteral("race-winner"));}));
+      CHECK(older->status()==QLatin1String("rejected"));
+      const QString raceDocument=background->documentId();
+      auto *cancelled=background->loadNewTab(nativeBundle,nativeState);
+      auto cancelSent=QObject::connect(session,&GeckoSession::requestSent,window,[&](const QString &id){if(id==cancelled->id())cancelled->cancel();});
+      CHECK(waitUntil([&]{return cancelled->isFinished();}));QObject::disconnect(cancelSent);
+      CHECK(cancelled->status()==QLatin1String("cancelled")&&operation(QStringLiteral("fixture-idle")).value("idle").toBool());
+      CHECK(background->documentId()==raceDocument&&background->url()==QUrl(endpoint+QStringLiteral("race-winner")));
+      std::cout<<"PASS delayed native bundle reads cannot replace newer navigation or a cancelled document"<<std::endl;
+
+    }
+    if(guiNewTab){const QString evidence=qEnvironmentVariable("DALINIRA_GECKO_GUI_ROOT");CHECK(window->screen()->grabWindow(window->winId()).save(evidence+QStringLiteral("/two-tabs.png")));}
+    auto *secondView=geckoView(window,second);secondView->load(QUrl(endpoint+QStringLiteral("dirty")));
+    CHECK(waitUntil([&]{return session->view(secondTab)->hasBeforeUnload();}));
+    const QString dirtyDocument=session->view(secondTab)->documentId();
+    auto *blocked=session->view(secondTab)->loadNewTab(nativeBundle,nativeState);CHECK(waitUntil([&]{return blocked->isFinished();}));
+    CHECK(blocked->status()==QLatin1String("rejected")&&blocked->result().value("code")==QLatin1String("beforeunload-navigation-blocked")&&session->view(secondTab)->documentId()==dirtyDocument);
+    const int beforeAsk=asked;window->closeTab(second);CHECK(waitUntil([&]{return asked>beforeAsk;}));
+    CHECK(session->view(secondTab)&&session->view(secondTab)->documentId()==dirtyDocument&&session->hostIsRunning());
+    discard=true;window->closeTab(second);CHECK(waitUntil([&]{return session->view(secondTab)==nullptr;}));discard=false;
+    std::cout<<"PASS named internal load cannot bypass native beforeunload; denied close retains document, confirmed close is exact"<<std::endl;
+
+    CHECK(session->hostIsRunning()&&(app.arguments().contains(QStringLiteral("--security-fixture"))||session->view(tab)->documentId()==stable));
+    // Deliberate content SIGKILL targets only a verified descendant of this host.
+    // Recovery is explicit, with the original logical tab ID and a new document.
+    if(!guiNewTab){
+      const qint64 content=view->contentProcessId(),parent=session->hostPid();bool owned=false;
+      for(const auto &process:session->hostProcesses())if(process.pid==content)owned=true;
+      CHECK(owned&&content>0&&content!=parent);const QString lost=session->view(tab)->documentId();
+      CHECK(::kill(static_cast<pid_t>(content),SIGKILL)==0);CHECK(waitUntil([&]{return view->isCrashed();}));
+      bool recovered=false;auto recoveredEvent=QObject::connect(session,&GeckoSession::eventReceived,window,[&](const QJsonObject &event){if(event.value("type")==QLatin1String("recovered")&&event.value("tabId").toString()==tab)recovered=true;});
+      view->reload();CHECK(waitUntil([&]{return recovered&&!view->isCrashed()&&session->view(tab)->documentId()!=lost&&session->view(tab)->snapshot().value("internalPage")==QLatin1String("newtab");},30000));
+      QObject::disconnect(recoveredEvent);CHECK(view->url()==QUrl(QStringLiteral("dalinira://newtab/")));
+      CHECK(session->hostPid()==parent&&view->hostTabId()==tab&&operation(QStringLiteral("inspect")).value("content").toBool());
+      std::cout<<"PASS explicit internal-document content recovery retains tab ID and host parent"<<std::endl;
+    }
+    // M3-B4.1 window close: the window stays until the host acknowledged the
+    // guarded shutdown (Stopping); the host then exits with its processes.
+    QPointer<BrowserWindow> closingWindow(window);QList<qint64> closingTree{session->hostPid()};for(const auto &process:session->hostProcesses())closingTree.append(process.pid);
+    window->close();CHECK(closingWindow&&closingWindow->isVisible());
+    CHECK(waitUntil([&]{return !closingWindow||!closingWindow->isVisible();},10000));
+    CHECK(session->state()==GeckoSession::State::Stopping||!session->hostIsRunning());
+    CHECK(waitUntil([&]{return !session->hostIsRunning();},10000));for(const qint64 pid:closingTree)CHECK(waitUntil([&]{return !alive(pid);},15000));
+    std::cout<<"PASS window close waits for the acknowledged guarded host shutdown; every host process exits"<<std::endl;
+    if(closingWindow)delete closingWindow.data();
+    if(!guiNewTab){
+      CHECK(gecko->initialize(storage));CHECK(waitUntil([&]{return session->state()==GeckoSession::State::Ready;}));
+      auto *restartWindow=new BrowserWindow(services);restartWindow->show();restartWindow->activateWindow();
+      const int index=restartWindow->addNewTab(QUrl(QStringLiteral("dalinira://newtab/")));
+      CHECK(waitUntil([&]{auto *v=geckoView(restartWindow,index);return v&&session->view(v->hostTabId())&&session->view(v->hostTabId())->snapshot().value("internalPage")==QLatin1String("newtab");},30000));
+      auto *old=session->view(geckoView(restartWindow,index)->hostTabId());const quint64 generation=session->generation();const qint64 ownedParent=session->hostPid();
+      CHECK(ownedParent>0&&session->hostIsRunning()&&::kill(static_cast<pid_t>(ownedParent),SIGKILL)==0);
+      CHECK(waitUntil([&]{return !session->hostIsRunning()&&old->lifecycleState()==GeckoSessionView::State::Lost;}));
+      CHECK(gecko->initialize(storage));CHECK(waitUntil([&]{return session->state()==GeckoSession::State::Ready&&session->view(session->activeTabId())&&!session->view(session->activeTabId())->documentId().isEmpty();}));
+      CHECK(session->generation()>generation&&session->views().size()==1&&session->views().first()->snapshot().value("internalPage").isUndefined());
+      auto *oldClose=old->close();CHECK(waitUntil([&]{return oldClose->isFinished();}));CHECK(oldClose->status()==QLatin1String("rejected"));
+      result(session->shutdown());CHECK(waitUntil([&]{return !session->hostIsRunning();}));delete restartWindow;
+      std::cout<<"PASS real native parent crash/restart loses session explicitly; stale view cannot close replacement"<<std::endl;
+    }
+    EngineBackend::shutdown();
+    std::cout<<"PASS native New Tab guarded window shutdown"<<std::endl;return 0;
+  }
 
   // The host's names of DaliNira's shortcuts; every default binding has one.
   using Router = GeckoShortcutRouter;
@@ -208,11 +480,13 @@ int main(int argc, char *argv[]) {
   CHECK(a);
   CHECK(waitUntil([&] { return !a->hostTabId().isEmpty() && a->url() == QUrl(QStringLiteral("http://fake.test/a")); }));
   CHECK(session->views().size() == 1);
-  // DaliNira's New Tab page: an empty Gecko tab; the address stays DaliNira's.
+  // A legacy host without internal-document-v1 retains an empty tab,
+  // reports unsupported, and never claims a native internal-document binding.
   window->addNewTab(QUrl(QStringLiteral("dalinira://newtab/")));
   GeckoEngineView *b = geckoView(window, 1);
   CHECK(b && waitUntil([&] { return !b->hostTabId().isEmpty(); }));
-  CHECK(b->hostTabId() != a->hostTabId() && b->url() == QUrl(QStringLiteral("dalinira://newtab/")) &&
+  CHECK(waitUntil([&]{return b->status().contains(QStringLiteral("does not support"));}));
+  CHECK(!session->supportsInternalDocuments() && b->hostTabId() != a->hostTabId() && b->url().isEmpty() &&
         session->views().size() == 2);
   // Selecting a tab selects its host tab.
   window->switchTab(0);
@@ -450,6 +724,92 @@ int main(int argc, char *argv[]) {
     window->closeTab(indexOfHostTab(window, id));
     CHECK(waitUntil([&] { return !session->view(id) && indexOfHostTab(window, id) < 0; }));
     std::cout << "PASS fail-closed " << fault.toStdString() << "; retry remains guarded" << std::endl;
+  }
+
+  // M3-B5 X11 Ctrl+W: the host's tab moved on to a document Qt had not yet
+  // observed (the internal New Tab replacing about:blank), so the plain close
+  // is refused as stale. It is sent once more only for the document the host
+  // named, after Qt observed it; any other outcome keeps the tab.
+  {
+    discard = false;
+    const auto staleSetup = [&](const QString &url) {
+      window->addNewTab(QUrl(url));
+      auto *v = current();
+      CHECK(v && waitUntil([&] { return !v->hostTabId().isEmpty() && !session->view(v->hostTabId())->documentId().isEmpty(); }));
+      return v;
+    };
+    const auto observe = [&](GeckoEngineView *v, const QString &documentId) {
+      auto state = session->view(v->hostTabId())->snapshot();
+      state.insert("documentId", documentId);
+      GeckoSessionTestAccess::receive(session, session->generation(), state);
+    };
+    int staleReplies = 0;
+    auto staleWatch = QObject::connect(session, &GeckoSession::requestFinished, &app, [&](const QString &, const QString &status, const QJsonObject &reply) {
+      if (reply.value("command") == QLatin1String("close_tab") && status == QLatin1String("rejected") && reply.value("code") == QLatin1String("stale-document")) ++staleReplies;
+    });
+
+    // The race: the close names the earlier document; Qt then observes the
+    // host's current one, and the retried close closes exactly that tab.
+    auto *raced = staleSetup(QStringLiteral("http://fake.test/stale-retry"));
+    const QString racedId = raced->hostTabId(), racedDocument = session->view(racedId)->documentId();
+    observe(raced, QStringLiteral("observed-earlier"));
+    std::optional<bool> racedAllowed;
+    raced->requestClose([&](bool allowed) { racedAllowed = allowed; });
+    CHECK(waitUntil([&] { return staleReplies == 1; }));
+    CHECK(!racedAllowed && session->view(racedId));
+    observe(raced, racedDocument);
+    CHECK(waitUntil([&] { return racedAllowed.has_value(); }));
+    CHECK(*racedAllowed && !session->view(racedId));
+    window->closeTab(indexOfHostTab(window, racedId));
+    CHECK(waitUntil([&] { return indexOfHostTab(window, racedId) < 0; }));
+
+    // Qt observes yet another document: no retry.
+    auto *third = staleSetup(QStringLiteral("http://fake.test/stale-third"));
+    const QString thirdId = third->hostTabId(), thirdDocument = session->view(thirdId)->documentId();
+    observe(third, QStringLiteral("observed-earlier"));
+    std::optional<bool> thirdAllowed;
+    third->requestClose([&](bool allowed) { thirdAllowed = allowed; });
+    CHECK(waitUntil([&] { return staleReplies == 2; }));
+    observe(third, QStringLiteral("another-document"));
+    CHECK(waitUntil([&] { return thirdAllowed.has_value(); }));
+    CHECK(!*thirdAllowed && session->view(thirdId) && indexOfHostTab(window, thirdId) >= 0);
+    observe(third, thirdDocument);
+
+    // Nothing observed in time: no retry.
+    auto *silent = staleSetup(QStringLiteral("http://fake.test/stale-silent"));
+    const QString silentId = silent->hostTabId(), silentDocument = session->view(silentId)->documentId();
+    observe(silent, QStringLiteral("observed-earlier"));
+    std::optional<bool> silentAllowed;
+    QElapsedTimer silentTimer;
+    silentTimer.start();
+    silent->requestClose([&](bool allowed) { silentAllowed = allowed; });
+    CHECK(waitUntil([&] { return silentAllowed.has_value(); }, 5000));
+    CHECK(!*silentAllowed && silentTimer.elapsed() >= 1900 && session->view(silentId) && staleReplies == 3);
+    observe(silent, silentDocument);
+
+    // The retried close keeps the beforeunload guard: unsaved changes ask, a
+    // refusal keeps the exact document, and only one stale retry is sent.
+    auto *guarded = staleSetup(QStringLiteral("http://fake.test/dirty-stale-retry"));
+    const QString guardedId = guarded->hostTabId();
+    CHECK(waitUntil([&] { return session->view(guardedId)->hasBeforeUnload(); }));
+    const QString guardedDocument = session->view(guardedId)->documentId();
+    observe(guarded, QStringLiteral("observed-earlier"));
+    const int askedBefore = asked;
+    std::optional<bool> guardedAllowed;
+    guarded->requestClose([&](bool allowed) { guardedAllowed = allowed; });
+    CHECK(waitUntil([&] { return staleReplies == 4; }));
+    observe(guarded, guardedDocument);
+    CHECK(waitUntil([&] { return guardedAllowed.has_value(); }));
+    CHECK(!*guardedAllowed && asked == askedBefore + 1 && staleReplies == 4 && session->view(guardedId) &&
+          session->view(guardedId)->documentId() == guardedDocument);
+    QObject::disconnect(staleWatch);
+    for (const QString &id : {thirdId, silentId, guardedId}) {
+      discard = true;
+      window->closeTab(indexOfHostTab(window, id));
+      CHECK(waitUntil([&] { return !session->view(id) && indexOfHostTab(window, id) < 0; }));
+    }
+    discard = false;
+    std::cout << "PASS a stale plain close is retried once for the observed current document; otherwise the tab stays" << std::endl;
   }
 
   // Confirmation binds to the requesting document, not a later one.

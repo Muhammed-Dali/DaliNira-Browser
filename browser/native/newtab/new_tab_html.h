@@ -7,6 +7,8 @@
 
 QString searchEnginePlaceholder(const QString &engine);
 
+enum class NewTabTransport { Legacy, GeckoDocument };
+
 QString newTabHtml(const QString &defaultEngine,
                    const QJsonArray &frequentSites = {},
                    const QJsonArray &bookmarks = {},
@@ -16,7 +18,8 @@ QString newTabHtml(const QString &defaultEngine,
                    bool showDownloadsCard = false,
                    bool showBlockedCard = false,
                    const QString &blockedCounterMode = QStringLiteral("session"),
-                   const QString &managedBackgroundCapability = QString{});
+                   const QString &managedBackgroundCapability = QString{},
+                   NewTabTransport transport = NewTabTransport::Legacy);
 QString incognitoNewTabHtml(const QString &defaultEngine);
 QString newTabTopSitesUpdateScript(const QJsonArray &frequentSites,
                                    const QJsonArray &bookmarks);
