@@ -8,13 +8,15 @@
 // X server owner, not managed by the window manager, size of the page area),
 // follows the selected tab, is unmapped while a DaliNira page (Settings) is
 // selected, cross-site pages run in separate sandboxed content processes, no
-// host process opens an NVIDIA device, closing the window keeps the host's
-// window alive until the host is shut down, and nothing is left afterwards.
+// host process opens an NVIDIA device, closing the window first shuts the
+// host down (guarded, M3-B4.1), and nothing is left afterwards.
 //
 // Keyboard focus (X11 input focus, read back from the X server): the page has
 // it while its view has Qt's focus, the address bar (Ctrl+L) takes it back,
-// a tab switch keeps it with the page, Settings takes it from the page, and
-// browser shortcuts typed into the focused page run the window's actions.
+// a tab switch keeps it with the page, Settings takes it from the page, the
+// window stays active while the page holds it, browser shortcuts typed into
+// the focused page (Ctrl+Tab, Ctrl+L, Ctrl+T, Ctrl+W) run the window's
+// actions and other keys (Escape) stay the page's.
 // Keys are typed into the host's page only, through Gecko's own input path
 // (the host's test-only "test_key"); nothing is sent to the desktop.
 //
@@ -161,7 +163,8 @@ int main(int argc, char *argv[]) {
     std::cout << "SKIP (BLOCKED): Gecko runtime not usable: " << problems.join(QStringLiteral("; ")).toStdString() << std::endl;
     return 77;
   }
-  QTemporaryDir root;
+  // Short: the IPC socket under it must fit GeckoIpcServer::kMaxSocketPath.
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/gx-XXXXXX"));
   CHECK(root.isValid());
   const QString base = QFileInfo(root.path()).canonicalFilePath();
   QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, base + QStringLiteral("/settings"));
@@ -239,8 +242,17 @@ int main(int argc, char *argv[]) {
   const auto pageHasKeyboard = [&] { return gecko->surface()->inspect().value("inputFocusOnEmbedded").toBool(); };
   const QString topLevel = QStringLiteral("0x%1").arg(window->winId(), 0, 16);
   const auto qtHasKeyboard = [&] { return gecko->surface()->inspect().value("inputFocus").toString() == topLevel; };
+  // Past Qt's 100 ms focus-in delay: the page holding the X11 keyboard must
+  // not deactivate the window, or Qt's setFocus() moves no keyboard (M3-B5).
+  const auto dwell = [] {
+    QElapsedTimer elapsed;
+    elapsed.start();
+    waitUntil([&] { return elapsed.elapsed() >= 400; });
+  };
   alpha->setFocus();
   CHECK(waitUntil(pageHasKeyboard, 5000));
+  dwell();
+  CHECK(pageHasKeyboard() && window->isActiveWindow() && alpha->hasFocus());
   CHECK(window->triggerBrowserAction(QStringLiteral("navigation.focus_address")));
   CHECK(waitUntil(qtHasKeyboard, 5000));
   alpha->setFocus();
@@ -259,6 +271,8 @@ int main(int argc, char *argv[]) {
   type(QStringLiteral("Tab"), QStringLiteral("Tab"), {QStringLiteral("Control")});
   CHECK(waitUntil([&] { return gecko->surface()->isPresenting(beta) && session->activeTabId() == beta->hostTabId(); }));
   CHECK(waitUntil(pageHasKeyboard, 5000));
+  dwell();
+  CHECK(pageHasKeyboard() && window->isActiveWindow());
   // Ctrl+L from the page: the address bar.
   type(QStringLiteral("l"), QStringLiteral("KeyL"), {QStringLiteral("Control")});
   auto *omnibox = window->findChild<QLineEdit *>(QStringLiteral("omnibox"));
@@ -279,12 +293,36 @@ int main(int argc, char *argv[]) {
   CHECK(window->tabCount() == tabs + 1);
   auto *opened = qobject_cast<GeckoEngineView *>(window->currentEngineView());
   CHECK(opened && opened != alpha && opened != beta);
-  int openedIndex = -1;
-  for (int i = 0; i < window->tabCount(); ++i) {
-    if (geckoView(window, i) == opened) openedIndex = i;
+  // Ctrl+W from the new tab's page closes it, and only it. On failure the
+  // phases, the host's shortcut reports and its close_tab replies are printed.
+  QElapsedTimer phase;
+  phase.start();
+  QStringList trace;
+  auto traceShortcuts = QObject::connect(session, &GeckoSession::shortcutPressed, &app,
+                                         [&](const QString &tabId, const QString &name, bool) {
+    trace << QStringLiteral("%1ms shortcut %2 from %3 (active %4)").arg(phase.elapsed()).arg(name, tabId, session->activeTabId());
+  });
+  auto traceCloses = QObject::connect(session, &GeckoSession::requestFinished, &app,
+                                      [&](const QString &, const QString &status, const QJsonObject &reply) {
+    if (reply.value(QStringLiteral("command")) == QLatin1String("close_tab"))
+      trace << QStringLiteral("%1ms close_tab %2 %3").arg(phase.elapsed()).arg(status, QString::fromUtf8(QJsonDocument(reply).toJson(QJsonDocument::Compact)));
+  });
+  CHECK(waitUntil([&] { return !opened->hostTabId().isEmpty() && session->activeTabId() == opened->hostTabId(); }));
+  trace << QStringLiteral("%1ms new tab active, document %2, internal page '%3'")
+               .arg(phase.elapsed())
+               .arg(session->view(opened->hostTabId())->documentId(),
+                    session->view(opened->hostTabId())->snapshot().value(QStringLiteral("internalPage")).toString());
+  type(QStringLiteral("w"), QStringLiteral("KeyW"), {QStringLiteral("Control")});
+  trace << QStringLiteral("%1ms Ctrl+W delivered to the page").arg(phase.elapsed());
+  if (!waitUntil([&] { return window->tabCount() == tabs; })) {
+    for (const QString &line : trace) std::cout << line.toStdString() << std::endl;
+    CHECK(window->tabCount() == tabs);
   }
-  window->closeTab(openedIndex);
-  CHECK(waitUntil([&] { return window->tabCount() == tabs; }));
+  QObject::disconnect(traceShortcuts);
+  QObject::disconnect(traceCloses);
+  QThread::msleep(300);
+  QCoreApplication::processEvents();
+  CHECK(window->tabCount() == tabs && geckoView(window, 0) == alpha && geckoView(window, 1) == beta);
   window->switchTab(0);
   CHECK(waitUntil([&] { return gecko->surface()->isPresenting(alpha); }));
   std::cout << "PASS shortcuts from the focused page; Settings and tab switches move the keyboard" << std::endl;
@@ -300,7 +338,11 @@ int main(int argc, char *argv[]) {
   type(QStringLiteral("b"), QStringLiteral("KeyB"), {});
   CHECK(waitUntil([&] { return alpha->title() == QStringLiteral("keys:a,C-c,b|ab"); }));
   CHECK(pageHasKeyboard() && window->tabCount() == tabs);
-  std::cout << "PASS typing and Ctrl+C reach the focused page" << std::endl;
+  // Escape is the page's: no browser action, the page keeps the keyboard.
+  type(QStringLiteral("Escape"), QStringLiteral("Escape"), {});
+  CHECK(waitUntil([&] { return alpha->title() == QStringLiteral("keys:a,C-c,b,Escape|ab"); }));
+  CHECK(pageHasKeyboard() && window->tabCount() == tabs && window->isActiveWindow());
+  std::cout << "PASS typing, Ctrl+C and Escape reach the focused page" << std::endl;
 
   QList<qint64> tree{session->hostPid()};
   for (const auto &process : session->hostProcesses()) tree.append(process.pid);
@@ -308,18 +350,20 @@ int main(int argc, char *argv[]) {
   if (!nvidia.isEmpty()) std::cout << "NVIDIA devices open: " << nvidia.join(QLatin1Char(' ')).toStdString() << std::endl;
   CHECK(nvidia.isEmpty());
 
-  // Closing the window keeps the host's window; the host then shuts down.
-  window->close();
-  CHECK(waitUntil([&] { return !window->isVisible(); }));
-  QThread::msleep(200);
-  QCoreApplication::processEvents();
-  CHECK(session->state() == GeckoSession::State::Ready && alive(session->hostPid()));
-  CHECK(gecko->shutdownHost(10000));
+  // Closing the window (M3-B4.1): the host shuts down first, guarded (no
+  // page here has unsaved changes), and only then does the window close.
   for (const auto &process : session->hostProcesses()) tree.append(process.pid);
+  window->close();
+  CHECK(window->isVisible());
+  CHECK(waitUntil([&] { return !window->isVisible(); }, 15000));
+  // Closed once the host acknowledged the guarded shutdown (Stopping); the
+  // host then quits on its own, with every content process.
+  CHECK(session->state() == GeckoSession::State::Stopping || !session->hostIsRunning());
+  CHECK(waitUntil([&] { return !session->hostIsRunning(); }, 15000));
   for (const qint64 pid : tree) CHECK(waitUntil([&] { return !alive(pid); }, 15000));
   delete window;
   EngineBackend::shutdown();
-  std::cout << "PASS window close, then host shutdown: no process left" << std::endl;
+  std::cout << "PASS window close shuts the host down first, then closes: no process left" << std::endl;
   std::cout << "=== ALL GECKO X11 EMBEDDING TESTS PASSED ===" << std::endl;
   return 0;
 }

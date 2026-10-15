@@ -93,7 +93,9 @@ void GeckoPresentationSurface::viewResized(GeckoEngineView *view) {
 }
 
 void GeckoPresentationSurface::focusPage(GeckoEngineView *view) {
-  if (isPresenting(view)) embedder_->focusEmbedded();
+  // Only for the view holding Qt's focus now: a late call (a delayed host
+  // activation reply) never takes the keyboard from a newer focus widget.
+  if (isPresenting(view) && view->hasFocus()) embedder_->focusEmbedded();
 }
 
 void GeckoPresentationSurface::viewHidden(GeckoEngineView *view) {

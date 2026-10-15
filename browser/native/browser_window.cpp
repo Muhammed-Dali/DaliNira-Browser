@@ -28,6 +28,7 @@
 #include "engine/gecko/gecko_backend.h"
 #include "engine/gecko/gecko_session.h"
 #include "engine/gecko/gecko_engine_view.h"
+#include "newtab/gecko_new_tab_controller.h"
 #endif
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
@@ -2635,6 +2636,7 @@ void BrowserWindow::wireEngineViewSignals(dalinira::engine::EngineView *engineVi
 #endif
 #if defined(DALINIRA_BUILD_GECKO)
   if (auto *gecko = qobject_cast<dalinira::engine::GeckoEngineView *>(engineView)) {
+    new GeckoNewTabController(gecko, this, services_.profileService);
     // A page opened a tab (target=_blank, window.open): the Gecko host made
     // it, with its opener; this window shows it as a new tab.
     connect(gecko, &dalinira::engine::GeckoEngineView::contentTabOpened, this, [this](const QString &hostTabId) {

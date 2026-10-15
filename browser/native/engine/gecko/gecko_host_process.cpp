@@ -168,6 +168,7 @@ QProcessEnvironment GeckoHostProcess::environmentFor(const QProcessEnvironment &
   // A crashing development build exits instead of waiting for a debugger.
   env.insert(QStringLiteral("MOZ_GDB_SLEEP"), QStringLiteral("0"));
   env.insert(QStringLiteral("DNG_START_URL"), QStringLiteral("about:blank"));
+  env.insert(QStringLiteral("DNG_NEW_TAB_ROOT"), config.runDirectory + QStringLiteral("/newtab"));
   env.insert(QStringLiteral("DNG_IPC_SOCKET"), config.socketPath);
   env.insert(QStringLiteral("DNG_IPC_TOKEN_FILE"), config.tokenFile);
   if (config.testInput) env.insert(QStringLiteral("DNG_TEST_INPUT"), QStringLiteral("1"));

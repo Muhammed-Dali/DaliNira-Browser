@@ -214,6 +214,10 @@ class BrowserProfileService final : public QObject, public dalinira::core::IBrow
   // Engine-independent: WebKit private profiles have no QWebEngineProfile.
   bool isPrivate() const { return privateMode_; }
   QString searchEngine() const override;
+#if defined(DALINIRA_BUILD_GECKO)
+  // Exact stored identifier; Gecko must reject unsupported legacy aliases.
+  QString configuredSearchEngineId() const;
+#endif
   quint64 totalBlockedCount() const override;
   quint64 sessionBlockedCount() const override;
   void setSearchEngine(const QString &engine);

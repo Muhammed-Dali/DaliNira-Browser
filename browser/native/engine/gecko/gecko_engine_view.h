@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QList>
+#include <QJsonObject>
 #include <QPointer>
 #include <QUrl>
 #include <functional>
@@ -19,8 +20,8 @@ class GeckoSessionView;
 //
 // The host tab is asynchronous: until it exists, commands wait in order (the
 // first http(s) URL goes with the tab's creation). Gecko pages are http(s)
-// only; a DaliNira page (dalinira://newtab) is an empty Gecko tab, and the
-// address stays DaliNira's. A crashed page is recovered by reload(); a page
+// only in ordinary URL commands; the named DaliNira New Tab document uses
+// a separate feature-negotiated, identity-bound internal-page API. A crashed page is recovered by reload(); a page
 // with unsaved changes closes only after the user confirmed (requestClose).
 class GeckoEngineView : public EngineView {
   Q_OBJECT
@@ -48,12 +49,18 @@ class GeckoEngineView : public EngineView {
   bool isAudible() const override;
   qint64 contentProcessId() const override;
 
+  void prepareNewTab(const QByteArray &markup, const QJsonObject &state);
+  void updateNewTabState(const QJsonObject &state);
+  void commitNewTabAction(const QJsonObject &event, const QJsonObject &effect, std::function<void()> committed);
+  bool isHostSelectionConfirmed() const { return engineActive_ && activationConfirmed_ && activationRequest_.isNull(); }
   QString hostTabId() const;
   bool isCrashed() const;
   // Why the page is not shown (no host tab yet, Gecko stopped, another window).
   QString status() const { return status_; }
 
  signals:
+  void newTabRequested();
+  void internalAction(const QJsonObject &event);
   // A page of this tab opened a tab of its own (target=_blank, window.open)
   // in the host: the browser shows it as a new tab (GeckoBackend::adoptHostTab).
   void contentTabOpened(const QString &hostTabId);
@@ -85,6 +92,13 @@ class GeckoEngineView : public EngineView {
   bool engineActive_ = false;
   bool creating_ = false;
   bool closing_ = false;
+  QByteArray pendingNewTab_;
+  QJsonObject newTabState_;
+  bool newTabLoading_ = false;
+  quint64 presentationEpoch_ = 0;
+  bool activationConfirmed_ = false;
+  QPointer<GeckoRequest> activationRequest_;
+  void publishNewTab();
 };
 
 }  // namespace dalinira::engine

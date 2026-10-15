@@ -1914,6 +1914,12 @@ std::optional<ClosedTabEntry> BrowserProfileService::takeClosedTab(int index) {
   return entry;
 }
 
+#if defined(DALINIRA_BUILD_GECKO)
+QString BrowserProfileService::configuredSearchEngineId() const {
+  return preferences_.value(QStringLiteral("browser/searchEngine"), QStringLiteral("DuckDuckGo")).toString();
+}
+#endif
+
 QString BrowserProfileService::searchEngine() const {
   const QString stored = preferences_.value(QStringLiteral("browser/searchEngine"), QStringLiteral("DuckDuckGo")).toString();
   if (stored.compare(QLatin1String("Brave Search"), Qt::CaseInsensitive) == 0 ||

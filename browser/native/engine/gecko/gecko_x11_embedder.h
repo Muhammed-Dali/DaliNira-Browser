@@ -3,6 +3,7 @@
 #include <QAbstractNativeEventFilter>
 #include <QJsonObject>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <optional>
 
@@ -53,6 +54,16 @@ class GeckoX11Embedder : public QObject, public QAbstractNativeEventFilter {
   bool focusEmbedded();
   void focusQt(QWidget *topLevel);
 
+  // Whether a FocusOut only reports X input focus moving from Qt's top-level
+  // into the embedded window inside it. Qt never sees the embedded window's
+  // FocusIn (a foreign window has no xcb event listener), so it would take
+  // this FocusOut for the window losing the keyboard and deactivate it 100 ms
+  // later; Qt's setFocus() (the address bar on Ctrl+L) then only records the
+  // focus child, no focus change follows and the page keeps the keyboard.
+  // Such a FocusOut is kept from Qt.
+  static bool isFocusMoveIntoEmbedded(const xcb_focus_out_event_t &event, xcb_window_t topLevel,
+                                      xcb_window_t embedded, xcb_window_t focus);
+
   bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
 
  signals:
@@ -66,10 +77,14 @@ class GeckoX11Embedder : public QObject, public QAbstractNativeEventFilter {
   QList<xcb_window_t> clientList() const;
   QList<xcb_window_t> topLevelCandidates() const;
   bool hasWindowManager() const;
+  // The embedded window when X input focus is on it or inside it, else the
+  // focus window itself.
+  xcb_window_t focusWithinEmbedded() const;
 
   xcb_connection_t *conn_ = nullptr;
   xcb_window_t root_ = 0;
   xcb_window_t window_ = 0;
+  QPointer<QWidget> topLevel_;  // the Qt window the embedded window is in
   bool clickFocus_ = true;
   bool grabbed_ = false;
 };

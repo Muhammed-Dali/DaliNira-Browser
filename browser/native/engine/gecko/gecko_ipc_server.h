@@ -50,6 +50,7 @@ class GeckoIpcServer : public QObject {
   void setExpectedPeerPid(qint64 pid) { expectedPid_ = pid; }
   void setHelloTimeout(int milliseconds) { helloTimeoutMs_ = milliseconds; }
   QString sessionId() const { return sessionId_; }
+  bool supportsInternalDocuments() const { return internalDocuments_; }
   int protocol() const { return authenticated_ ? kProtocol : 0; }
   bool isAuthenticated() const { return authenticated_; }
 
@@ -96,6 +97,7 @@ class GeckoIpcServer : public QObject {
   qint64 eventSequence_ = 0;
   qint64 commandSequence_ = 0;
   int helloTimeoutMs_ = 10000;
+  bool internalDocuments_ = false;
   bool authenticated_ = false;
 };
 
