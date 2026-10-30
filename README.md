@@ -508,13 +508,10 @@ record is in
 
 ## AI-Assisted Development
 
-DaliNira was started approximately three years ago, before AI tools became
-part of its development workflow. In more recent development, AI tools have
-been used extensively for code generation, debugging, refactoring and
-technical problem-solving, and have played a significant role in the project's
-progress. AI-generated code is reviewed and tested by the developer before it
-is accepted into the project.
-
+DaliNira Browser was started approximately three years ago, before AI tools became part of its development workflow.
+In recent development, AI tools have played a significant role in code generation, debugging, refactoring, security analysis, automated testing, and solving complex technical problems.
+AI-generated code is not blindly accepted. Code changes are reviewed by the developer, test results are examined, and changes are evaluated before integration.
+AI serves as a development assistant, while responsibility for technical decisions, code review, testing, and project maintenance remains with the developer.
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — subsystems, startup sequence, ownership
