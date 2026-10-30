@@ -8,11 +8,13 @@
 #include <QJsonArray>
 #include <QLoggingCategory>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QTimer>
 
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "i18n/i18n.h"
 #include "engine/engine_storage_manager.h"
 #include "engine/gecko/gecko_engine_view.h"
 #include "engine/gecko/gecko_presentation_surface.h"
@@ -191,10 +193,12 @@ void GeckoBackend::onViewCreated(GeckoSessionView *view, const QString &source) 
 
 bool GeckoBackend::confirmDiscard(QWidget *parent, const QString &title) const {
   if (confirmation_) return confirmation_(parent, title);
-  QMessageBox box(QMessageBox::Warning, QStringLiteral("Leave page?"),
-                  QStringLiteral("\"%1\" has changes that may not be saved.")
-                      .arg(title.isEmpty() ? QStringLiteral("This page") : title.left(120)),
+  QMessageBox box(QMessageBox::Warning, I18n::text(QStringLiteral("navigation.leave_page_title")),
+                  I18n::text(QStringLiteral("navigation.leave_page_message"))
+                      .arg(title.isEmpty() ? I18n::text(QStringLiteral("navigation.this_page")) : title.left(120)),
                   QMessageBox::Discard | QMessageBox::Cancel, parent);
+  box.button(QMessageBox::Discard)->setText(I18n::text(QStringLiteral("navigation.discard_changes")));
+  box.button(QMessageBox::Cancel)->setText(I18n::text(QStringLiteral("common.cancel")));
   box.setDefaultButton(QMessageBox::Cancel);
   return box.exec() == QMessageBox::Discard;
 }

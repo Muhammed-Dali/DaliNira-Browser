@@ -2126,5 +2126,9 @@
   "sidepanel.tab_sleeping": "في وضع السكون",
   "sidepanel.close_tab": "إغلاق %1",
   "sidepanel.pin": "إبقاء علامات التبويب الجانبية مفتوحة",
-  "sidepanel.unpin": "إخفاء علامات التبويب الجانبية تلقائيًا"
+  "sidepanel.unpin": "إخفاء علامات التبويب الجانبية تلقائيًا",
+  "navigation.leave_page_title": "هل تريد مغادرة الصفحة؟",
+  "navigation.leave_page_message": "قد تحتوي «%1» على تغييرات لم يتم حفظها.",
+  "navigation.this_page": "هذه الصفحة",
+  "navigation.discard_changes": "تجاهل التغييرات"
 }

@@ -2126,5 +2126,9 @@
   "sidepanel.tab_sleeping": "en veille",
   "sidepanel.close_tab": "Fermer %1",
   "sidepanel.pin": "Garder les onglets latéraux ouverts",
-  "sidepanel.unpin": "Masquer automatiquement les onglets latéraux"
+  "sidepanel.unpin": "Masquer automatiquement les onglets latéraux",
+  "navigation.leave_page_title": "Quitter la page ?",
+  "navigation.leave_page_message": "« %1 » contient des modifications qui pourraient ne pas être enregistrées.",
+  "navigation.this_page": "Cette page",
+  "navigation.discard_changes": "Abandonner les modifications"
 }

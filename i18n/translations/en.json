@@ -2126,5 +2126,9 @@
   "sidepanel.tab_sleeping": "sleeping",
   "sidepanel.close_tab": "Close %1",
   "sidepanel.pin": "Keep side tabs open",
-  "sidepanel.unpin": "Hide side tabs automatically"
+  "sidepanel.unpin": "Hide side tabs automatically",
+  "navigation.leave_page_title": "Leave page?",
+  "navigation.leave_page_message": "\"%1\" has changes that may not be saved.",
+  "navigation.this_page": "This page",
+  "navigation.discard_changes": "Discard changes"
 }

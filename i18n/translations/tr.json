@@ -2126,5 +2126,9 @@
   "sidepanel.tab_sleeping": "uyuyor",
   "sidepanel.close_tab": "%1 sekmesini kapat",
   "sidepanel.pin": "Yan sekmeleri açık tut",
-  "sidepanel.unpin": "Yan sekmeleri otomatik gizle"
+  "sidepanel.unpin": "Yan sekmeleri otomatik gizle",
+  "navigation.leave_page_title": "Sayfadan ayrılınsın mı?",
+  "navigation.leave_page_message": "\"%1\" sayfasında kaydedilmemiş değişiklikler olabilir.",
+  "navigation.this_page": "Bu sayfa",
+  "navigation.discard_changes": "Değişiklikleri sil"
 }
